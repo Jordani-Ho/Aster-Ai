@@ -5,9 +5,10 @@
   "upstreamModel": "deepseek-chat",
   "upstreamApiKeyEnv": "UPSTREAM_API_KEY",
   "membersFile": "./members.json",
+  "maxBodyBytes": 1048576,
+  "upstreamTimeoutMs": 120000,
   "rateLimit": {
     "windowMs": 60000,
     "maxPerWindow": 20
-  },
-  "logFile": "./gateway.log"
+  }
 }
