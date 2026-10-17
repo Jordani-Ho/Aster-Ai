@@ -1,3 +1,5 @@
+import { PilotSettings } from './PilotSettings'
+import { createLlmClient } from './core/llm'
 import { LedgerSettings } from './LedgerSettings'
 import { BackupSettings } from './BackupSettings'
 import './homework.css'
@@ -35,6 +37,7 @@ export function App() {
   const [intakePage, setIntakePage] = useState(false)
   const [recordsPage, setRecordsPage] = useState(false)
   const [inboxPage, setInboxPage] = useState(false)
+  const [stackRevision, setStackRevision] = useState(0)
   const [role, setRole] = useState<Role | null>(null)
   const [stackStatus, setStackStatus] = useState<LinkStatus>('offline')
   const [language, setLanguage] = useState<Language>('simplified')
@@ -76,7 +79,7 @@ export function App() {
       if (saved?.role === 'student' || saved?.role === 'teacher') setRole(saved.role)
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [identity])
+  }, [identity, stackRevision])
 
   // M1-15a：一个 transport + 收件分发 + 账本同步；有中继配置才启动。
   useEffect(() => {
@@ -90,6 +93,7 @@ export function App() {
       if (cancelled || relays.length === 0) return
       const stack = createWiring({
         identity, store, relays,
+        onChange: () => window.dispatchEvent(new Event('aster:data-changed')),
         onStatus: status => { if (!cancelled) setStackStatus(status as LinkStatus) },
         onError: () => { if (!cancelled) setStackStatus('offline') },
         notifier: async pubkey => {
@@ -109,7 +113,20 @@ export function App() {
       stackRef.current = null
       if (stack) void stack.close()
     }
-  }, [identity])
+  }, [identity, stackRevision])
+
+  useEffect(() => {
+    const pause = (event: Event) => {
+      const active = stackRef.current; stackRef.current = null
+      if (active) (event as CustomEvent<{ pending: Promise<void>[] }>).detail.pending.push(active.close())
+      setStackStatus('offline')
+    }
+    const restart = () => setStackRevision(value => value + 1)
+    window.addEventListener('aster:store-restoring', pause)
+    window.addEventListener('aster:store-restored', restart)
+    window.addEventListener('aster:relays-changed', restart)
+    return () => { window.removeEventListener('aster:store-restoring', pause); window.removeEventListener('aster:store-restored', restart); window.removeEventListener('aster:relays-changed', restart) }
+  }, [])
 
   const reset = () => {
     stackRef.current?.close(); stackRef.current = null
@@ -137,13 +154,14 @@ export function App() {
 
   const store = storeRef.current
   const stack = stackRef.current
-  if (homeworkPage && store && identity) return <><div hidden><BackupSettings identity={identity} store={store} /><LedgerSettings identity={identity} store={store} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={store} onBack={() => setHomeworkPage(false)} /></Suspense></>
-  if (intakePage && store && identity) return <><div hidden><BackupSettings identity={identity} store={store} /><LedgerSettings identity={identity} store={store} /></div><Suspense fallback={<p>正在打开采集页…</p>}><IntakePage store={store} identity={identity} sendConsult={stack?.sendConsult} onBack={() => setIntakePage(false)} /></Suspense></>
+  const llm = identity && env.VITE_MODEL_GATEWAY_URL ? createLlmClient({ kind: 'gateway', baseUrl: env.VITE_MODEL_GATEWAY_URL, secretKey: identity.privateKey }) : null
+  if (homeworkPage && store && identity) return <><div hidden><BackupSettings identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={store} onBack={() => setHomeworkPage(false)} /></Suspense></>
+  if (intakePage && store && identity) return <><div hidden><BackupSettings identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开采集页…</p>}><IntakePage store={store} identity={identity} sendConsult={stack?.sendConsult} onBack={() => setIntakePage(false)} /></Suspense></>
   if (recordsPage && store && identity) return <Suspense fallback={<p>正在打开病历…</p>}><StudentRecordsPage identity={identity} store={store} onBack={() => setRecordsPage(false)} /></Suspense>
   if (inboxPage && store && identity) {
     return <Suspense fallback={<p>正在打开问诊箱…</p>}>
       {stack
-        ? <TeacherInboxPage identity={identity} store={store} send={stack.send} ledger={stack.ledger} onBack={() => setInboxPage(false)} />
+        ? <TeacherInboxPage llm={llm} identity={identity} store={store} send={stack.send} ledger={stack.ledger} onBack={() => setInboxPage(false)} />
         : <main style={{ padding: 24 }}>
           <h1>问诊箱</h1>
           <p role="alert">还没有配置社区中继，暂时收不到问诊。请先在“设置 → 社区备份中继”里填写中继地址。</p>
@@ -204,8 +222,9 @@ export function App() {
           <h3>身份角色</h3>
           <p><button type="button" disabled={role === 'student'} onClick={() => void chooseRole('student')}>我是学生</button>{' '}<button type="button" disabled={role === 'teacher'} onClick={() => void chooseRole('teacher')}>我是老师</button></p>
           {store && <TeacherListSettings store={store} />}
+          {role === 'teacher' && store && <PilotSettings store={store} />}
           <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p><p>持久化存储不能替代备份。</p>
-          {store && <><BackupSettings identity={identity} store={store} /><LedgerSettings identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></>}
+          {store && <><BackupSettings identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></>}
         </details>
         <PushSettings identity={identity} />
         <p>词表：{languageLabels[identity.language]} · 账户：{identity.account}（本人）</p>

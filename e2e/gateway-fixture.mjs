@@ -7,7 +7,7 @@ import { createGateway } from '../gateway/server.js'
 export const SYNTHETIC_DRAFT = Object.freeze({
   fourExams: { ask: { value: 'SYNTHETIC_EXAM' } },
   judgment: { symptomSummary: { value: 'SYNTHETIC_SUMMARY' }, pattern: { value: 'SYNTHETIC_PATTERN' } },
-  plan: { advice: { value: 'SYNTHETIC_ADVICE' }, homework: [{ title: 'SYNTHETIC_HOMEWORK', detail: 'SYNTHETIC_ONLY', schedule: { kind: 'daily', time: '20:00' }, durationDays: 7 }] },
+  plan: { prescription: { value: { items: [{ herb: 'SYNTHETIC_HERB', dose: 'SYNTHETIC_DOSE' }] } }, advice: { value: 'SYNTHETIC_ADVICE' }, homework: [{ title: 'SYNTHETIC_HOMEWORK', detail: 'SYNTHETIC_ONLY', schedule: { kind: 'daily', time: '20:00' }, durationDays: 7 }] },
 })
 export async function listen(server, port = 0) {
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', () => { server.off('error', reject); resolve() }) })

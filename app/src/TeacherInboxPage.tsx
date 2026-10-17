@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { calculateMetric, saveMetric, rateMetric } from './core/pilot'
+import { useEffect, useRef, useState } from 'react'
 import template from '../../domain/tcm/templates/default.json'
 import type { TeacherTemplate } from '../../domain/tcm/templates/types'
 import { draftEncounter } from './core/drafting'
@@ -50,6 +51,9 @@ export interface TeacherInboxPageProps {
 // 老师端问诊箱：列出收到的问诊包；照片到齐才能起草，缺照片时显示“照片还在路上”。
 // 起草复用 M1-10，审改签字与交还复用 M1-11，扣费走 M1-14b 的账本记录。
 export function TeacherInboxPage({ identity, store, onBack, send, ledger, llm = null }: TeacherInboxPageProps) {
+  const startedAt = useRef(0), signedAt = useRef<number | null>(null), metricKey = useRef('')
+  const [ratingKey, setRatingKey] = useState<string | null>(null)
+  const [ratingBusy, setRatingBusy] = useState(false)
   const [consults, setConsults] = useState<StoredConsult[]>([])
   const [readiness, setReadiness] = useState<Record<string, ConsultReadiness>>({})
   const [selected, setSelected] = useState<StoredConsult | null>(null)
@@ -74,11 +78,14 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, llm = 
     let cancelled = false
     void refresh().catch(() => { if (!cancelled) setError('无法读取本机问诊箱，请稍后重试。') })
       .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
+    const changed = () => { void refresh().catch(() => {}) }
+    window.addEventListener('aster:data-changed', changed)
+    return () => { cancelled = true; window.removeEventListener('aster:data-changed', changed) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store])
 
   const startDraft = async (consult: StoredConsult) => {
+    startedAt.current = Date.now(); signedAt.current = null; metricKey.current = crypto.randomUUID(); setRatingKey(null)
     setBusy(true); setError(''); setStatus('')
     try {
       const ready = await assertConsultReady(store, consult.encounter.id)
@@ -104,15 +111,22 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, llm = 
     const amount = charge.trim() === '' ? undefined : Number(charge)
     setError(''); setStatus('')
     try {
+      if (amount !== undefined && (!Number.isSafeInteger(amount) || amount <= 0)) throw Error('扣费金额必须是正整数')
+      signedAt.current ??= Date.now()
+      const metric = calculateMetric(draft ?? final, final, startedAt.current, signedAt.current)
       const result = pendingEventId
         ? await retryConsultHandover({ store, eventId: pendingEventId, send, ledger, charge: amount, teacher: identity.publicKey, student: selected.sender })
         : await completeConsultSigning({ identity, store, consult: selected, draft: draft ?? final, final, send, ledger, charge: amount })
       setPendingEventId(null)
       if (result.chargeError) setStatus('病历已交还；扣费没有记上：' + result.chargeError)
       else setStatus('已签字交还，原始资料已从老师端删除。')
+      try { await saveMetric(store, metricKey.current, metric); setRatingKey(metricKey.current) }
+      catch { setStatus(previous => previous + ' 试点指标未能保存，不影响已交还病历。') }
+      setSelected(null); setDraft(null)
       setDone(true)
     } catch (cause) {
       if (cause instanceof ConsultUndeliveredError) setPendingEventId(cause.eventId)
+      else if (!pendingEventId) signedAt.current = null
       throw cause
     }
   }
@@ -120,6 +134,14 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, llm = 
   if (done) {
     return <main className="inbox-page">
       <header className="inbox-head"><h1>已签字交还</h1></header>
+      {ratingKey && <section role="dialog" aria-label="像不像我评分" className="inbox-card">
+        <h2>这份草案像不像我？</h2><p>1～5分，可跳过；只记录分数。</p>
+        {[1,2,3,4,5].map(score => <button key={score} disabled={ratingBusy} onClick={() => {
+          setRatingBusy(true)
+          void rateMetric(store, ratingKey, score).then(() => setRatingKey(null)).catch(() => setError('评分未保存，请重试或跳过。')).finally(() => setRatingBusy(false))
+        }}>{score}分</button>)}<button disabled={ratingBusy} onClick={() => setRatingKey(null)}>跳过评分</button>
+        {error && <p role="alert">{error}</p>}
+      </section>}
       <section className="inbox-card">
         <p>学生已收到这份签名病历；作业会自动进入学生的“今日作业”。</p>
         <p className="inbox-note">按诊毕即还：问诊包与照片已从老师端删除，本地只留索引、去标识医案与修改记录。</p>

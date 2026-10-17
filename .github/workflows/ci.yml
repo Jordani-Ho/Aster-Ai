@@ -43,7 +43,7 @@ jobs:
       - run: npm test
 
   e2e:
-    name: e2e (environment smoke; full flow awaits M1-15a)
+    name: e2e (consultation and local pilot metrics)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -80,6 +80,7 @@ jobs:
       - run: npm ci --prefix gateway
       - name: Install matching Chromium and system libraries
         run: npx playwright install --with-deps chromium
+      - run: npm run typecheck:e2e
       - run: npm run test:e2e-env
       - name: Build patched relay
         run: npm run e2e:build-relay
@@ -93,15 +94,5 @@ jobs:
             .cache/e2e/cargo/git
             .cache/e2e/tools/protoc-31.1
           key: ${{ runner.os }}-relay-rust190-${{ hashFiles('relay/Dockerfile', 'relay/*.patch', 'e2e/build-relay.mjs') }}
-      - name: Run browser environment smoke using the verified cached relay
+      - name: Run consultation and pilot acceptance using the verified cached relay
         run: npm run e2e
-      - name: Retain synthetic-only browser failure evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-environment-report
-          path: |
-            playwright-report/
-            test-results/
-          if-no-files-found: ignore
-          retention-days: 7

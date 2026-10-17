@@ -152,3 +152,5 @@ M1-14b 集合登记：
 
 每本账的变更和待发记录在同一次 put 中保存，成功后才发网络；索引创建在账本记录之后。
 M1 仅支持同一身份一个账本控制器；多个标签页同时写同一本账不提供业务级合并或锁。
+
+M1-15b集合：`pilot-metrics` 使用随机UUID键，值仅为 `{idPrefix, durationMs, modificationRate, missingRate, resemblance}`（8位病历前缀与数值/null），AES-GCM本机保存。中继备份显式排除此集合，本机加密文件可包含；无病历原文、完整id、身份或照片。公式见 ../pilot/README.md。

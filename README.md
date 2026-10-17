@@ -41,4 +41,4 @@ npm run build    # 构建
 
 施工智能体（Codex、DeepSeek 等）请先读 [`AGENTS.md`](AGENTS.md)。
 
-M1-15b 环境阶段：根目录 `npm run e2e` 编译带双策略补丁的真实中继，启动真实网关与本地模型/推送替身，运行 Chromium 双上下文冒烟；完整问诊与试点指标待 M1-15a 合并后接。前提、缓存和验证边界见 [e2e/README.md](e2e/README.md)。
+M1-15b：根目录 `npm run e2e` 编译/复用双补丁真实中继，通过真实网关与本地模型/推送替身，运行375px双身份完整问诊、四条硬验收及本机CSV。环境、耗时和边界见 [e2e/README.md](e2e/README.md)。

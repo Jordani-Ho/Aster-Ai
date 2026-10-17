@@ -5,7 +5,7 @@ if (!process.env.E2E_RUNTIME_FILE) throw Error('Use npm run e2e; direct Playwrig
 const runtime = JSON.parse(readFileSync(process.env.E2E_RUNTIME_FILE, 'utf8'))
 export default defineConfig({
   testDir: '.', testMatch: '**/*.spec.ts', fullyParallel: false, workers: 1, retries: 0, forbidOnly: !!process.env.CI,
-  timeout: 60000, expect: { timeout: 15000 },
+  timeout: 90000, expect: { timeout: 15000 },
   reporter: [['list'], ['html', { outputFolder: path.resolve('playwright-report'), open: 'never' }]],
   outputDir: path.resolve('test-results'),
   use: { baseURL: runtime.baseURL, browserName: 'chromium', channel: 'chromium', viewport: { width: 375, height: 812 },

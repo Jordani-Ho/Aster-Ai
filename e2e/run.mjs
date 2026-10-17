@@ -24,7 +24,7 @@ try {
   if (interrupted) throw Error('E2E interrupted')
   const { startEnvironment } = await import('./environment.mjs')
   environment = await startEnvironment(build)
-  console.log('Environment ready: real relay + real gateway + local model/push stubs; complete consultation awaits M1-15a.')
+  console.log('Environment ready: real relay + real gateway + local model/push stubs; running consultation and pilot acceptance.')
   tests = spawn(process.execPath, [path.join(root, 'node_modules/@playwright/test/cli.js'), 'test', '--config=e2e/playwright.config.ts', ...process.argv.slice(2)], {
     cwd: root, env: { ...process.env, E2E_RUNTIME_FILE: environment.runtimeFile }, windowsHide: true, stdio: 'inherit',
   })
