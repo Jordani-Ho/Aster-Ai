@@ -17,8 +17,7 @@ export function createPushClient(config: PushConfig) {
   if (base.protocol !== 'https:' && !(['localhost', '127.0.0.1'].includes(base.hostname) && base.protocol === 'http:')) throw new Error('推送服务需要 HTTPS')
   async function post(path: string, value: object) {
     const url = new URL(path, base).href
-    // main 的 NIP-98 helper 尚无 nonce：随机请求标识使同秒重试的 body/id 独立。
-    const body = JSON.stringify({ ...value, requestId: crypto.randomUUID() })
+    const body = JSON.stringify(value)
     const authorization = await nip98Authorization(config.secretKey, url, 'POST', body)
     const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', authorization }, body })
     if (!response.ok) throw new Error('提醒服务暂不可用（' + response.status + '）')

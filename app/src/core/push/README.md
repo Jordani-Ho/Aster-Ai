@@ -2,7 +2,7 @@
 
 `createPushClient(config)`提供 subscribe、unsubscribe、notifyRecipient(pubkey)。订阅必须由用户点击触发；使用标准 SW、PushManager 和 VAPID 公钥。
 App 的提醒设置提供开启/关闭按钮和 iOS未安装/不支持环境的主屏幕提示。配置地址和公钥只保留在当前界面内存；私钥从本地已解锁身份传入，不上传。
-每次请求含随机requestId，使当前main尚未含nonce的NIP-98 helper生成不同事件；网关忽略该字段，不当作消息内容。
+每个请求的 NIP-98 事件带随机 nonce（main 的签名 helper 已实现），同一秒内的重复请求也会得到不同事件 id；网关不需要额外字段。
 
 `syncWhenOpen(sync)`供中继模块传入同步函数：打开、恢复前台及恢复网络时触发，避免并发同步，卸载移除监听。此分支起点的M1-05尚未合并，因此没有伪造消息收发；真实发送后通知和打开自动中继同步均待该模块接入。其接口可单独测试。
 SW的推送事件完全忽略载荷，只显示“知衡：有新消息”，点击聚焦同源页面并发 aster:sync-requested 消息，或打开首页。

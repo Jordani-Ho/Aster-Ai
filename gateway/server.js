@@ -136,6 +136,7 @@ export function createGateway(config) {
   return createServer(async (req, res) => {
     const started = Date.now()
     let status = 500
+    let logStatus = null
     let pubkey = ''
     const reject = (code, message) => {
       req.on('error', () => {})
@@ -178,6 +179,7 @@ export function createGateway(config) {
             try { body = JSON.parse(read.body) } catch { status = 400; reply(res, 400, 'invalid json'); return }
             const result = await push.handle(req.url, pubkey, body)
             status = result.status
+            logStatus = result.logStatus ?? null
             res.writeHead(status, { 'content-type': 'application/json' })
             res.end(JSON.stringify({ ok: status < 400 }))
           }
@@ -188,7 +190,7 @@ export function createGateway(config) {
       if (!res.headersSent) reply(res, 502, 'gateway error')
       else res.end()
     } finally {
-      log({ time: new Date().toISOString(), pubkey: pubkey.slice(0, 8), durationMs: Date.now() - started, status })
+      log({ time: new Date().toISOString(), pubkey: pubkey.slice(0, 8), durationMs: Date.now() - started, status: logStatus ?? status })
     }
   })
 }

@@ -110,3 +110,27 @@ it('NIP-98：同内容请求带不同 nonce 都通过，原样重放仍然 401',
   assert.equal((await send(first)).status, 401)
  } finally { server.closeAllConnections(); await new Promise(resolve=>server.close(resolve)) }
 })
+
+it('投递失败也返回 202，网关日志只记状态 502', async () => {
+ const path=file(), dir=join(path,'..'), membersFile=join(dir,'members.json'), logFile=join(dir,'push-fail.log')
+ const key=generateSecretKey(), pubkey=getPublicKey(key)
+ writeFileSync(membersFile, JSON.stringify([pubkey]))
+ const failingSend = async () => { const error = new Error('synthetic delivery failure'); error.statusCode = 500; throw error }
+ const server=createGateway({ membersFile, logFile, maxBodyBytes:1024, rateLimit:{windowMs:60000,maxPerWindow:20}, push:{subscriptionsFile:path,send:failingSend} })
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
+ const base='http://127.0.0.1:'+server.address().port
+ const post = async (route, value) => {
+  const body=JSON.stringify(value), url=base+route
+  const event=finalizeEvent({kind:27235,created_at:Math.floor(Date.now()/1000),tags:[['u',url],['method','POST'],['payload',createHash('sha256').update(body).digest('hex')],['nonce',randomUUID()]],content:''},key)
+  return fetch(url,{method:'POST',headers:{authorization:'Nostr '+Buffer.from(JSON.stringify(event)).toString('base64'),'content-type':'application/json'},body})
+ }
+ try {
+  assert.equal((await post('/push/subscribe',{subscription})).status,200)
+  assert.equal((await post('/push/notify',{pubkey})).status,202)
+  const raw=readFileSync(logFile,'utf8')
+  const lines=raw.trim().split('\n').map(line=>JSON.parse(line))
+  assert.equal(lines[lines.length-1].status,502)
+  assert.deepEqual(Object.keys(lines[lines.length-1]).sort(),['durationMs','pubkey','status','time'])
+  assert.ok(!raw.includes(subscription.endpoint))
+ } finally { server.closeAllConnections(); await new Promise(resolve=>server.close(resolve)) }
+})

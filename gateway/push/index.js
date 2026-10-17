@@ -86,7 +86,7 @@ export function createPushService({ file, send, endpointHosts = DEFAULT_HOSTS, n
           if (error.statusCode === 404 || error.statusCode === 410) {
             // 若发送过程中用户重订阅，不删除新订阅。
             if (store.get(body.pubkey) === subscription) store.set(body.pubkey, null)
-          } else return { status: 502 }
+          } else return { status: 202, logStatus: 502 }
         }
       }
       // 不披露收件人是否订阅；不返回端点或令牌。
