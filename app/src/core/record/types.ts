@@ -63,6 +63,8 @@ export interface Homework {
     | { kind: 'jieqi'; jieqi: string }                 // 某个节气当天
     | { kind: 'once'; date: string; time?: string }    // 某一天
   durationDays?: number            // 持续多少天；省略表示直到下次复诊
+  source: 'teacher' | 'ai_draft'   // 2026-10-16 补：作业也要有来源标签
+  note?: string                    // 老师接受 AI 草稿时写 'ai_accepted'
 }
 
 export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: string; bytes: number }
