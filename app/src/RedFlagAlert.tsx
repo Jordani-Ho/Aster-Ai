@@ -1,4 +1,4 @@
-import { getContact } from './core/redflags'
+import { contactsForAlert } from './core/redflags'
 import type { RedFlagResult } from './core/redflags'
 
 interface RedFlagAlertProps {
@@ -10,10 +10,13 @@ interface RedFlagAlertProps {
 }
 
 // 全屏急症提示。只说“请就医”，不给诊断或分诊结论。
+// 同时命中急症与自伤时，急救电话在前、心理援助热线在后，两个都显示。
 export function RedFlagAlert({ result, region, status, onNotifyTeacher, onDismiss }: RedFlagAlertProps) {
-  const crisis = result.category?.action === 'crisis'
-  const contact = getContact(region, crisis ? 'crisis' : 'emergency')
-  const fallback = crisis ? '请拨打当地心理援助热线，或让可信任的人陪着你' : '请拨打当地急救电话'
+  const contacts = contactsForAlert(result, region)
+  const emergency = contacts.find(item => item.action === 'emergency')
+  const crisis = contacts.find(item => item.action === 'crisis')
+  const showEmergency = result.actions.includes('emergency')
+  const showCrisis = result.actions.includes('crisis')
   return (
     <div
       role="alertdialog"
@@ -23,12 +26,23 @@ export function RedFlagAlert({ result, region, status, onNotifyTeacher, onDismis
     >
       <p style={{ margin: 0, fontWeight: 700, letterSpacing: 2 }}>急症提示</p>
       <h1 style={{ margin: 0, fontSize: 32, lineHeight: 1.2 }}>请立即就医</h1>
-      {crisis && <p style={{ margin: 0 }}>你并不孤单。如果现在就处于危险中，请立即联系专业援助。</p>}
-      <p style={{ margin: 0, fontSize: 28 }}>
-        {contact
-          ? <><strong>{contact.number}</strong>{contact.name ? ' · ' + contact.name : ''}</>
-          : fallback}
-      </p>
+      {showCrisis && <p style={{ margin: 0 }}>你并不孤单。如果现在就处于危险中，请立即联系专业援助。</p>}
+      {showEmergency && (
+        <p style={{ margin: 0, fontSize: 28 }}>
+          <span style={{ fontSize: 14, color: '#555', marginRight: 8 }}>急救</span>
+          {emergency
+            ? <><strong>{emergency.contact.number}</strong>{emergency.contact.name ? ' · ' + emergency.contact.name : ''}</>
+            : '请拨打当地急救电话'}
+        </p>
+      )}
+      {showCrisis && (
+        <p style={{ margin: 0, fontSize: 28 }}>
+          <span style={{ fontSize: 14, color: '#555', marginRight: 8 }}>心理援助</span>
+          {crisis
+            ? <><strong>{crisis.contact.number}</strong>{crisis.contact.name ? ' · ' + crisis.contact.name : ''}</>
+            : '请拨打当地心理援助热线，或让可信任的人陪着你'}
+        </p>
+      )}
       <p style={{ margin: 0, color: '#555' }}>这是本地筛查，不是诊断；如有紧急情况，请立即前往医院或拨打急救电话。</p>
       {result.matched.length > 0 && <p style={{ margin: 0, color: '#555' }}>检测到：{result.matched.join('、')}</p>}
       {result.source === 'model' && <p style={{ margin: 0, color: '#555' }}>由模型复核补充</p>}

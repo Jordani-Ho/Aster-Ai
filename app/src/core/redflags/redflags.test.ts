@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import redFlagDocument from '../../../../domain/tcm/red-flags.json'
-import { check, checkWithModel, detectRegion, getContact, redFlagCategories } from './index'
+import { check, checkWithModel, contactsForAlert, detectRegion, getContact, redFlagCategories, validateDocument } from './index'
 
 interface Samples { hit: string[]; miss: string[] }
 
@@ -200,6 +200,59 @@ describe('M1-04 急症红线引擎', () => {
     expect(detectRegion('en-SG')).toBe('SG')
     expect(detectRegion('en-GB')).toBeNull()
     expect(detectRegion(undefined)).toBeNull()
+  })
+
+
+  it('繁体输入先转简体再匹配，空白不影响匹配', () => {
+    const traditional: [string, string][] = [
+      ['頭痛欲裂', 'RF-04'],
+      ['說話不清楚，嘴歪了', 'RF-02'],
+      ['活著沒意思', 'RF-06'],
+    ]
+    for (const [sentence, categoryId] of traditional) {
+      expect(check(sentence).category?.id, sentence).toBe(categoryId)
+    }
+    expect(check('胸 口 悶，還 冒 冷 汗').category?.id).toBe('RF-01')
+  })
+
+  it('durationWords：出现持续类说法时按 15 分钟以上处理', () => {
+    const document = validateDocument({
+      version: 1,
+      categories: [{
+        id: 'RF-01',
+        name: '测试类别',
+        action: 'emergency',
+        keywords: ['胸口闷'],
+        aggravators: ['冷汗'],
+        durationWords: ['好一会儿', '一直'],
+        rule: 'keyword AND (aggravator OR duration>=15min OR durationWord)',
+      }],
+      contacts: {},
+    })
+    expect(check('胸口闷，好一会儿了', document).category?.id).toBe('RF-01')
+    expect(check('胸口闷，一直不舒服', document).category?.id).toBe('RF-01')
+    expect(check('胸口闷', document).hit).toBe(false)
+  })
+
+  it('同时命中急救与自伤时两个号码都显示，急救在前', () => {
+    const result = check('胸口痛，还冒冷汗，真的不想活了')
+    expect(result.actions).toEqual(['emergency', 'crisis'])
+    const contacts = contactsForAlert(result, 'CN')
+    expect(contacts.map(item => item.action)).toEqual(['emergency', 'crisis'])
+    expect(contacts.map(item => item.contact.number)).toEqual(['120', '12356'])
+  })
+
+  it('只命中自伤时只显示心理援助热线', () => {
+    const result = check('我真的不想活了')
+    expect(result.actions).toEqual(['crisis'])
+    const contacts = contactsForAlert(result, 'CN')
+    expect(contacts.map(item => item.contact.number)).toEqual(['12356'])
+  })
+
+  it('地区未知时不编造号码', () => {
+    const result = check('我真的不想活了')
+    expect(contactsForAlert(result, null)).toEqual([])
+    expect(contactsForAlert(result, 'ZZ')).toEqual([])
   })
 
   it('清单里出现未实现的规则时直接报错，不静默放过', async () => {

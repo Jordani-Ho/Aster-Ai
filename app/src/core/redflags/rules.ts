@@ -8,6 +8,7 @@ export interface RedFlagCategory {
   action: RedFlagAction
   keywords: string[]
   aggravators?: string[]
+  durationWords?: string[]
   rule: string
 }
 
@@ -27,14 +28,17 @@ export interface RegionContacts {
 export interface RedFlagDocument {
   version: number
   policy?: string
+  normalization?: string
   categories: RedFlagCategory[]
   contacts: Record<string, RegionContacts>
 }
 
-// 引擎只实现清单里实际出现的两种规则。新增规则必须先改代码并过测试，不允许静默忽略。
-export const SUPPORTED_RULES = ['any keyword', 'keyword AND (aggravator OR duration>=15min)'] as const
 const RULE_ANY = 'any keyword'
 const RULE_COMBINATION = 'keyword AND (aggravator OR duration>=15min)'
+const RULE_COMBINATION_DURATION_WORDS = 'keyword AND (aggravator OR duration>=15min OR durationWord)'
+
+// 引擎只实现清单里实际出现的规则。新增规则必须先改代码并过测试，不允许静默忽略。
+export const SUPPORTED_RULES = [RULE_ANY, RULE_COMBINATION, RULE_COMBINATION_DURATION_WORDS] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -43,6 +47,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function requiredText(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.trim() === '') throw new Error('红线清单字段无效：' + label)
   return value
+}
+
+function stringList(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error('红线清单字段无效：' + label)
+  return value.map((item, position) => requiredText(item, label + '[' + position + ']'))
 }
 
 function parseContact(value: unknown, label: string): EmergencyContact {
@@ -77,15 +86,17 @@ export function validateDocument(input: unknown): RedFlagDocument {
     if (ids.has(id)) throw new Error('红线类别 id 重复：' + id)
     ids.add(id)
     if (entry.action !== 'emergency' && entry.action !== 'crisis') throw new Error('红线类别 action 无效：' + id)
-    if (!Array.isArray(entry.keywords) || entry.keywords.length === 0) throw new Error('红线类别没有关键词：' + id)
-    const keywords = entry.keywords.map((word, position) => requiredText(word, id + '.keywords[' + position + ']'))
     const rule = requiredText(entry.rule, id + '.rule')
     if (!(SUPPORTED_RULES as readonly string[]).includes(rule)) throw new Error('红线类别规则未实现：' + id + ' -> ' + rule)
-    const category: RedFlagCategory = { id, name: requiredText(entry.name, id + '.name'), action: entry.action, keywords, rule }
-    if (entry.aggravators !== undefined) {
-      if (!Array.isArray(entry.aggravators) || entry.aggravators.length === 0) throw new Error('红线类别加重因素无效：' + id)
-      category.aggravators = entry.aggravators.map((word, position) => requiredText(word, id + '.aggravators[' + position + ']'))
+    const category: RedFlagCategory = {
+      id,
+      name: requiredText(entry.name, id + '.name'),
+      action: entry.action,
+      keywords: stringList(entry.keywords, id + '.keywords'),
+      rule,
     }
+    if (entry.aggravators !== undefined) category.aggravators = stringList(entry.aggravators, id + '.aggravators')
+    if (entry.durationWords !== undefined) category.durationWords = stringList(entry.durationWords, id + '.durationWords')
     return category
   })
   const contacts: Record<string, RegionContacts> = {}
@@ -99,7 +110,13 @@ export function validateDocument(input: unknown): RedFlagDocument {
     }
     contacts[region] = entry
   }
-  return { version: input.version, ...(typeof input.policy === 'string' ? { policy: input.policy } : {}), categories, contacts }
+  return {
+    version: input.version,
+    ...(typeof input.policy === 'string' ? { policy: input.policy } : {}),
+    ...(typeof input.normalization === 'string' ? { normalization: input.normalization } : {}),
+    categories,
+    contacts,
+  }
 }
 
 export function matchedWords(input: string, words: string[] | undefined): string[] {
@@ -144,11 +161,12 @@ export function matchCategory(category: RedFlagCategory, input: string): string[
   const keywords = matchedWords(input, category.keywords)
   if (keywords.length === 0) return null
   if (category.rule === RULE_ANY) return keywords
-  if (category.rule === RULE_COMBINATION) {
+  if (category.rule === RULE_COMBINATION || category.rule === RULE_COMBINATION_DURATION_WORDS) {
     const aggravators = matchedWords(input, category.aggravators)
     const minutes = durationMinutes(input)
-    if (aggravators.length === 0 && (minutes === null || minutes < 15)) return null
-    return [...keywords, ...aggravators]
+    const durationWords = category.rule === RULE_COMBINATION_DURATION_WORDS ? matchedWords(input, category.durationWords) : []
+    if (aggravators.length === 0 && (minutes === null || minutes < 15) && durationWords.length === 0) return null
+    return [...keywords, ...aggravators, ...durationWords]
   }
   throw new Error('未实现的规则：' + category.rule)
 }
