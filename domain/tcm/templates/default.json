@@ -1,0 +1,7 @@
+{
+  "id": "tcm-default-v1",
+  "name": "十问歌默认模板",
+  "recordOrder": ["intake.chiefComplaint", "intake.presentIllness", "fourExams.ask", "fourExams.look", "fourExams.listenSmell", "fourExams.pulse", "intake.history", "intake.medsAllergies", "judgment.symptomSummary", "judgment.pattern", "judgment.mechanism", "judgment.rationale", "plan.principle", "plan.prescription", "plan.homework", "plan.advice"],
+  "focus": ["一问寒热", "二问汗", "三问头身", "四问便", "五问饮食", "六问胸腹", "七问聋", "八问渴", "九问旧病", "十问因", "服药", "经期（适用时）"],
+  "notes": "按 focus 的十问歌顺序整理问诊信息，未采集的内容保持未知。所有输出只供老师审改。"
+}
