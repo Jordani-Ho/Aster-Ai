@@ -47,6 +47,8 @@ const session = await resumeStore() // { identity, store }；全新数据库返�
 | `pending-handover` | 交还学生失败时暂存的待发签名病历 | 键为签名事件 id，值为 `{ event, encounter, draft, attachmentIds }` | 送达并写完后立即删除；正常流程下应短暂存在 |
 | `case-book` | 去标识医案与“草案→定稿”修改记录 | `sourceEventId`、`deidentified`（性别、年龄段、判断、处理、结果）、`modifications` | 不含学生公钥、称呼、intake 原文、附件 |
 | `record-log` | 诊毕即还的本地日志 | `at`（ISO 时间）、`encounterId` | 只记时间和病历 id，**不含内容** |
+| `in-person-draft` | 老师端进行中的面诊草稿（M1-12） | 键为病历 id，值为整份 `Encounter`（含老师代录的 intake 原文与附件索引） | 签字交还成功后立即删除；中途中止需由老师手动清除 |
+| `record-outbox` | 中继设置接好前的待发签名病历（M1-12） | 键为签名事件 id，值为 `{ type, payload }` | 当前只暂存在本机，中继发送接通后应删除 |
 键名使用 `crypto.getRandomValues` 生成的随机十六进制 ID，不含个人信息。
 ## 加密格式
 

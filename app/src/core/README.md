@@ -5,7 +5,7 @@ store/：IndexedDB 加密记录、设备密钥包裹身份、加密导入导出�
 llm/：与领域无关的模型客户端，支持社区网关（NIP-98 签名）、自有 API Key、本地模型地址三种来源。
 redflags/：急症红线的本地确定性匹配引擎，规则从 domain/tcm/red-flags.json 读取；第二层模型复核只留接口。
 ledger/：康币账本纯逻辑：只由老师写的记账链、学生签名的独立异议列表、余额与欠费、L2 退款校验。
-record/：共用病历和问诊包类型。
+record/：共用病历和问诊包类型，签字与交还（M1-11）、面诊记录（M1-12，老师代录 intake）。
 drafting/：按模板和只读医案起草、校验模型回复、过滤档位；提示词和领域模板在仓库对应目录。
 homework/：本机作业排程、加密打卡和近 7 天完成统计，领域历法由 domain/tcm/calendar 提供。
 push/：标准网页推送（Web Push + VAPID）的 Service Worker 注册、订阅/注销与提醒客户端。
