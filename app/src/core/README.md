@@ -11,3 +11,6 @@ intake/：学生采集：照片压缩与去 EXIF、十问追问（模型整理�
 homework/：本机作业排程、加密打卡和近 7 天完成统计，领域历法由 domain/tcm/calendar 提供。
 push/：标准网页推送（Web Push + VAPID）的 Service Worker 注册、订阅/注销与提醒客户端。
 不包含中医逻辑或中继通信。
+
+transport/：社区中继NIP-42连接、NIP-17/44/59私信、过期及会话内重连去重。
+backup/：NIP-78三槽加密备份、本地文件导入导出、每日检查与恢复，独立备份中继适配器。

@@ -47,6 +47,12 @@ const session = await resumeStore() // { identity, store }；全新数据库返�
 | `profile` | 学生本机常驻档案：称呼、性别、年龄、八字、居住城市 | 键 `self`，值为 `Encounter['profile']` 的五个 Field | 随问诊包给老师；**只在本机** |
 | `student-records` | 学生收到的签名病历（历史病历来源，M1-11/M1-05 写入） | `id`、`teacher`（老师公钥）、`createdAt`、`eventJson`（签名事件 JSON 字符串） | 确认页默认附带同一位老师近 3 次；**只在本机** |
 
+| `consult-package` | 老师端临时收到的问诊包（主诉等原文） | 键为病历 id，值为整份问诊包 | 交还学生成功后立即删除；**不得长期保留** |
+| `attachments` | 问诊包里的照片/语音附件 | 键为附件 id，值为字节 | 交还学生成功后立即删除 |
+| `signed-encounters` | 老师端保存的签名病历索引（不含病历内容） | 键为 `病历id-v版本`，值为 `{ eventId, encounterId, version, student, createdAt }` | 只留索引，**不留 content**；旧版本索引不覆盖 |
+| `pending-handover` | 交还学生失败时暂存的待发签名病历 | 键为签名事件 id，值为 `{ event, encounter, draft, attachmentIds }` | 送达并写完后立即删除；正常流程下应短暂存在 |
+| `case-book` | 去标识医案与“草案→定稿”修改记录 | `sourceEventId`、`deidentified`（性别、年龄段、判断、处理、结果）、`modifications` | 不含学生公钥、称呼、intake 原文、附件 |
+| `record-log` | 诊毕即还的本地日志 | `at`（ISO 时间）、`encounterId` | 只记时间和病历 id，**不含内容** |
 键名使用 `crypto.getRandomValues` 生成的随机十六进制 ID，不含个人信息。
 ## 加密格式
 
@@ -130,3 +136,5 @@ store.test.ts 在 fake-indexeddb 中覆盖全部 12 项验收，另覆盖未知�
 CI 的现有 npm test 会自动执行这些用例，不需要浏览器或额外服务。
 
 M1-13集合登记：`homework`保存`{homework, startsOn}`（共用Homework及生效日期）；`checkins`保存`{homeworkId, at, note?}`。两个集合均使用随机ID键、AES-GCM加密，只保存在本人手机，不上传或同步。
+
+M1-06集合：backup-status保存result、lastAttempt、lastSuccess、lastFile、lastRestore和固定error；backup-config保存relays。均为随机UUID键及加密JSON，仅必要配置随加密备份恢复。

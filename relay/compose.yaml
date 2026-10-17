@@ -1,0 +1,15 @@
+services:
+  relay:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./config.local.toml:/etc/relay/config.toml:ro
+      - relay-data:/data
+    environment:
+      RUST_LOG: "off"
+    logging:
+      driver: "none"
+    restart: unless-stopped
+volumes:
+  relay-data:

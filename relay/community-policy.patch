@@ -1,0 +1,82 @@
+diff --git a/src/db.rs b/src/db.rs
+index 05dadf9..c794df2 100644
+--- a/src/db.rs
++++ b/src/db.rs
+@@ -206,7 +206,7 @@ pub async fn db_writer(
+             if let Some(allowed_addrs) = whitelist {
+                 // TODO: incorporate delegated pubkeys
+                 // if the event address is not in allowed_addrs.
+-                if !allowed_addrs.contains(&event.pubkey) {
++                if !subm_event.auth_pubkey.as_ref().map(|key| hex::encode(key)).map_or(false, |key| allowed_addrs.contains(&key)) {
+                     debug!(
+                         "rejecting event: {}, unauthorized author",
+                         event.get_event_id_prefix()
+diff --git a/src/server.rs b/src/server.rs
+index f2d9aa3..b84a04a 100644
+--- a/src/server.rs
++++ b/src/server.rs
+@@ -1056,15 +1056,25 @@ fn make_notice_message(notice: &Notice) -> Message {
+     Message::text(json.to_string())
+ }
+ 
++// Community policy: whitelist applies to the authenticated connection, never an ephemeral wrap author.
++fn community_member(conn: &conn::ClientConn, settings: &Settings) -> bool {
++    match (conn.auth_pubkey(), &settings.authorization.pubkey_whitelist) {
++        (Some(key), Some(members)) => members.contains(key),
++        _ => false,
++    }
++}
++
+ fn allowed_to_send(event_str: &str, conn: &conn::ClientConn, settings: &Settings) -> bool {
++    if !community_member(conn, settings) { return false; }
+     // TODO: pass in kind so that we can avoid deserialization for most events
+     if settings.authorization.nip42_dms {
+         match serde_json::from_str::<Event>(event_str) {
+             Ok(event) => {
++                if event.is_expired() { return false; }
+                 if event.kind == 4 || event.kind == 44 || event.kind == 1059 {
+                     match (conn.auth_pubkey(), event.tag_values_by_name("p").first()) {
+                         (Some(auth_pubkey), Some(recipient_pubkey)) => {
+-                            recipient_pubkey == auth_pubkey || &event.pubkey == auth_pubkey
++                            recipient_pubkey == auth_pubkey
+                         }
+                         (_, _) => false,
+                     }
+@@ -1322,6 +1332,15 @@ async fn nostr_server(
+                         let parsed : Result<EventWrapper> = Result::<EventWrapper>::from(ec);
+                         match parsed {
+                             Ok(WrappedEvent(e)) => {
++                                if !community_member(&conn, &settings) {
++                                    ws_stream.send(make_notice_message(&Notice::restricted(e.id, "auth-required: member authentication required"))).await.ok();
++                                    continue;
++                                }
++                                // Only expiring gift wraps in M1; backup policy extends this separately.
++                                if e.kind != 1059 || e.expiration().is_none() {
++                                    ws_stream.send(make_notice_message(&Notice::invalid(e.id, "expiring gift wrap required"))).await.ok();
++                                    continue;
++                                }
+                                 metrics.cmd_event.inc();
+                                 let id_prefix:String = e.id.chars().take(8).collect();
+                                 debug!("successfully parsed/validated event: {:?} (cid: {}, kind: {})", id_prefix, cid, e.kind);
+@@ -1361,6 +1380,10 @@ async fn nostr_server(
+                                 }
+                             },
+                             Ok(WrappedAuth(event)) => {
++                                if !settings.authorization.pubkey_whitelist.as_ref().map_or(false, |members| members.contains(&event.pubkey)) {
++                                    ws_stream.send(make_notice_message(&Notice::restricted(event.id, "restricted: not a community member"))).await.ok();
++                                    continue;
++                                }
+                                 metrics.cmd_auth.inc();
+                                 if settings.authorization.nip42_auth {
+                                     let id_prefix:String = event.id.chars().take(8).collect();
+@@ -1417,6 +1440,10 @@ async fn nostr_server(
+                         }
+                     },
+                     Ok(NostrMessage::SubMsg(s)) => {
++                        if !community_member(&conn, &settings) {
++                            ws_stream.send(Message::Text(json!(["CLOSED", s.id, "auth-required: member authentication required"]).to_string())).await.ok();
++                            continue;
++                        }
+                         debug!("subscription requested (cid: {}, sub: {:?})", cid, s.id);
+                         // subscription handling consists of:
+                         // * check for rate limits
