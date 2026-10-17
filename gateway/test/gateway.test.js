@@ -51,9 +51,10 @@ async function startGateway(overrides = {}) {
   const port = await listen(server)
   return { server, port, baseUrl: 'http://127.0.0.1:' + port }
 }
-function authHeader(key, url, method, body) {
+function authHeader(key, url, method, body, nonce) {
   const tags = [['u', url], ['method', method]]
   if (body !== undefined) tags.push(['payload', createHash('sha256').update(body).digest('hex')])
+  if (nonce !== undefined) tags.push(['nonce', nonce])
   const event = finalizeEvent({ kind: 27235, created_at: Math.floor(Date.now() / 1000), tags, content: '' }, key)
   return 'Nostr ' + Buffer.from(JSON.stringify(event)).toString('base64')
 }
@@ -245,6 +246,17 @@ describe('M1-07 模型网关验收', () => {
     assert.equal((await send()).status, 401)
   })
 
+  it('3d 同内容请求带不同 nonce 不算重放，原样重放仍然 401', async () => {
+    const body = JSON.stringify({ stream: false, messages: [{ role: 'user', content: 'SYNTHETIC_NONCE' }] })
+    const url = gateway.baseUrl + ROUTE
+    const first = authHeader(secretKey, url, 'POST', body, 'a'.repeat(32))
+    const second = authHeader(secretKey, url, 'POST', body, 'b'.repeat(32))
+    const send = authorization => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', authorization }, body })
+    assert.equal((await send(first)).status, 200)
+    assert.equal((await send(second)).status, 200)
+    assert.equal((await send(first)).status, 401)
+  })
+
   it('4a 上游超时返回 504', async () => {
     const slow = await startGateway({ upstreamTimeoutMs: 100 })
     try {
@@ -317,7 +329,7 @@ describe('M1-07 模型网关验收', () => {
     assert.ok(lines.some(line => JSON.parse(line).pubkey === memberPubkey.slice(0, 8)))
     const forbidden = [
       SYNTHETIC_PROMPT, SYNTHETIC_REPLY, 'SYNTHETIC_CHUNK_ONE', 'SYNTHETIC_CHUNK_TWO',
-      'SYNTHETIC_REPLAY', 'SYNTHETIC_SLOW', 'SYNTHETIC_HANG', 'SYNTHETIC_PATH_PROBE', 'SYNTHETIC_BIG',
+      'SYNTHETIC_REPLAY', 'SYNTHETIC_SLOW', 'SYNTHETIC_HANG', 'SYNTHETIC_PATH_PROBE', 'SYNTHETIC_BIG', 'SYNTHETIC_NONCE',
       memberPubkey, Buffer.from(secretKey).toString('hex'), 'synthetic-upstream-key',
     ]
     for (const text of forbidden) {

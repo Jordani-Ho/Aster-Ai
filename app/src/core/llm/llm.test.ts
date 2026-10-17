@@ -10,11 +10,11 @@ afterEach(() => {
 
 const messages: ChatMessage[] = [{ role: 'user', content: 'SYNTHETIC_PROMPT' }]
 
-function stubFetch(response: Response) {
+function stubFetch(response: Response | (() => Response)) {
   const calls: { url: string; init: RequestInit }[] = []
   vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(url), init: init ?? {} })
-    return response
+    return typeof response === 'function' ? response() : response.clone()
   }))
   return calls
 }
@@ -112,6 +112,26 @@ describe('模型客户端', () => {
     }
     expect(message).toContain('HTTP 401')
     expect(message).not.toContain('SYNTHETIC_UPSTREAM_BODY')
+  })
+
+  it('NIP-98 事件带随机 nonce，同一秒的相同请求不会撞成同一个事件 id', async () => {
+    const secretKey = generateSecretKey()
+    const calls = stubFetch(() => jsonReply('SYNTHETIC_REPLY'))
+    const client = createLlmClient({ kind: 'gateway', baseUrl: 'https://gateway.example/v1', secretKey })
+    await client.complete(messages)
+    await client.complete(messages)
+    expect(calls).toHaveLength(2)
+    const events = calls.map(call => {
+      const headers = call.init.headers as Record<string, string>
+      return JSON.parse(Buffer.from(headers.authorization.slice('Nostr '.length), 'base64').toString('utf8'))
+    })
+    for (const event of events) {
+      const nonce = event.tags.find((tag: string[]) => tag[0] === 'nonce')?.[1]
+      expect(nonce).toMatch(/^[0-9a-f]{32}$/)
+      expect(verifyEvent(event)).toBe(true)
+    }
+    expect(String(calls[0].init.body)).toBe(String(calls[1].init.body))
+    expect(events[0].id).not.toBe(events[1].id)
   })
 
   it('拒绝空地址、空 API Key 和空模型名', () => {
