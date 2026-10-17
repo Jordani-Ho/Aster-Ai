@@ -1,0 +1,7 @@
+# 部署脚本与配置必须在容器/WSL 里保持 LF，否则 /bin/sh 会因 CRLF 报错。
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.mjs text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+deploy/home/** text eol=lf

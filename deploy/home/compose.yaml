@@ -1,0 +1,101 @@
+# 知衡内测部署：中继 + 模型网关（含推送）+ 手机网页应用 + Cloudflare Tunnel。
+# 不开任何路由器端口，也不在宿主机发布任何端口：所有对外流量只经 cloudflared 主动连出。
+# 访问日志全部关闭：relay/gateway/web 的 Docker 日志驱动为 none；网关自己的指标日志写到 /dev/null。
+name: aster-home
+
+services:
+  relay:
+    build:
+      context: ../../relay
+    restart: unless-stopped
+    volumes:
+      # 数据只在这台电脑上：deploy/home/data/ 已加入 .gitignore。
+      - ./data/relay:/data
+      - ./data/relay-config.toml:/etc/relay/config.toml:ro
+    environment:
+      RUST_LOG: "off"
+    logging:
+      driver: none
+    networks: [internal]
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: deploy/home/gateway/Dockerfile
+    restart: unless-stopped
+    environment:
+      UPSTREAM_API_KEY: ${UPSTREAM_API_KEY:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:change-me@example.com}
+    volumes:
+      - ./data/gateway:/app/data
+      - ./data/gateway-config.json:/app/config.json:ro
+      - ./data/gateway-members.json:/app/members.json:ro
+    logging:
+      driver: none
+    networks: [internal]
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/home/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      # 页面里的中继与网关地址是构建时 VITE_ 常量：容器每次启动时按下面这些值重新构建 app。
+      # 无域名（trycloudflare）时由 quick-start.sh 把临时域名写进 .env，再重建本容器。
+      PORT: "8080"
+      VITE_COMMUNITY_RELAYS: wss://${RELAY_DOMAIN:-placeholder.invalid}
+      VITE_PUSH_GATEWAY_URL: https://${APP_DOMAIN:-placeholder.invalid}
+      VITE_PUSH_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+    depends_on: [gateway]
+    logging:
+      driver: none
+    networks: [internal]
+
+  # ---- 域名模式：一条 token 隧道，三条 Public Hostname 在 Cloudflare Zero Trust 里配置 ----
+  cloudflared:
+    # cloudflared 固定到 2026.9.3（发布于 2026-09-24，Apache-2.0）；升级见 README 6.7。
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
+    profiles: ["domain"]
+    command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN:-}
+    restart: unless-stopped
+    depends_on: [web, relay, gateway]
+    logging:
+      driver: none
+    networks: [internal]
+
+  # ---- 无域名模式：两条 trycloudflare 临时隧道（app 与 relay），仅自测 ----
+  # 网关不单独暴露：页面同源经 web 的 /push 与 /v1 反代访问它（与 M1-08 的同源要求一致）。
+  # 云朵临时隧道地址由云朵进程日志打印，所以这两个服务保留 stdout 日志（只有隧道地址与连接状态，
+  # 没有请求内容）；拿到地址后 quick-start.sh 会重建 relay/gateway/web，不需要再读日志。
+  cloudflared-app:
+    # cloudflared 固定到 2026.9.3（发布于 2026-09-24，Apache-2.0）；升级见 README 6.7。
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
+    profiles: ["quick"]
+    command: tunnel --no-autoupdate --loglevel info --url http://web:8080
+    restart: unless-stopped
+    depends_on: [web]
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "1"
+    networks: [internal]
+
+  cloudflared-relay:
+    # cloudflared 固定到 2026.9.3（发布于 2026-09-24，Apache-2.0）；升级见 README 6.7。
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
+    profiles: ["quick"]
+    command: tunnel --no-autoupdate --loglevel info --url http://relay:8080
+    restart: unless-stopped
+    depends_on: [relay]
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "1"
+    networks: [internal]
+
+networks:
+  internal:
