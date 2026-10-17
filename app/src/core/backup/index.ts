@@ -52,11 +52,23 @@ export function createBackupManager({identity,store,relay}:{identity:Identity;st
  }
  async function restore(events:Event[],replace:boolean){
   if(!events.length)throw Error('未找到可用的中继备份')
-  const event=events[0],archive=decode(event.content,who)
-  if(archive.includesBinary||archive.records.some(record=>record.bin))throw Error('中继备份不允许包含照片等二进制资料')
-  active();await store.importEncrypted(archive,{replace});active()
-  const prior=await status();await save({...prior,result:'restored',lastRestore:new Date().toISOString(),lastSuccess:new Date(event.created_at*1000).toISOString(),error:undefined})
+  // 覆盖授权属于本地操作条件，不能误当作快照损坏而回退。
+  if(!replace&&(await store.exportEncrypted({includeBinary:true})).records.length)throw Error('已有本地数据，必须显式传入 replace: true')
+  for(const event of events){
+   active()
+   try{
+    const archive=decode(event.content,who)
+    if(archive.includesBinary||archive.records.some(record=>record.bin))throw Error('中继备份不允许包含照片等二进制资料')
+    active();await store.importEncrypted(archive,{replace})
+   }catch{active();continue}
+   active()
+   const prior=await status()
+   await save({...prior,result:'restored',lastRestore:new Date().toISOString(),lastSuccess:new Date(event.created_at*1000).toISOString(),error:undefined})
+   return
+  }
+  throw Error('所有中继备份均无法恢复，本地数据未更改')
  }
+
  return {
   status,
   backupNow:(now=new Date())=>exclusive(()=>backup(now)),

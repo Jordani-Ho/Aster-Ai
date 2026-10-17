@@ -1,8 +1,8 @@
 # M1-06 备份中继策略扩展
 
-本卡从最新main独立分支，不包含未合并PR #16的传输实现。浏览器备份有独立NIP-01/42适配器；服务端部署需先应用PR #16（固定上游b5c1f642）的community-policy.patch，再应用本目录backup-policy.patch。
+本卡已rebase到包含PR #16的main。浏览器备份使用独立NIP-01/42适配器；relay/Dockerfile自动按顺序应用community-policy.patch与backup-policy.patch。
 
-构建步骤：在#16 Dockerfile的cargo build之前增加COPY backup-policy.patch /backup.patch和`git apply --check /backup.patch && git apply /backup.patch`；生成配置中的event_kind_allowlist改成`[1059, 30078]`。这些是#16基础上的部署扩展，不要只用原版公开中继或只开启nip42_auth。
+启动：运行 `node relay/configure.mjs <成员公钥> ...` 生成包含 `[1059, 30078]` 的配置，再运行 `docker compose -f relay/compose.yaml up --build -d`。无需手工修改Dockerfile或配置白名单；已有配置需要重新生成。
 
 扩展只允许AUTH成员发布本人签名的kind30078，并仅允许d为aster.backup.0/1/2三个槽位；历史和实时读取都限于AUTH本人作者。保留#16的消息收件隔离。三个地址事件由成熟中继按NIP-01替换旧版本，备份不附30天expiration，避免长期没打开应用后备份全部过期。
 
