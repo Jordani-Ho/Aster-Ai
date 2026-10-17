@@ -21,13 +21,13 @@
 | 项目 | 现状 |
 | :-- | :-- |
 | 系统 | WSL2 · Ubuntu 24.04（systemd 已启用） |
-| WSL 用户 | `jordamodell`（下面命令都以这个普通用户运行，**不要用 root**） |
-| 内存 / 磁盘 | 3.7 GiB / 940 GB 可用 |
+| WSL 用户 | `dell@Jordamo`（下面命令都以这个普通用户运行，**不要用 root**） |
+| 内存 / 磁盘 | 3.7 GiB / 940 GB 可用（已有 1 GiB swap，构建时实测未用满、未 OOM） |
 | Node.js | 已装 v22.22.2（本仓库开发也需要） |
-| Docker | **还没装**（第 1 步装） |
-| 到 trycloudflare.com 的网络 | 通 |
+| Docker | 已装：Docker 29.1.3 / Docker Compose v2.40.3（2026-10-17） |
+| 到 trycloudflare.com 的网络 | 通（已用临时隧道实测） |
 
-> 施工者（AI）按约定**没有执行任何 sudo、没有安装 Docker**。第 1 步需要你本人输入 WSL 密码。
+> 第一次安装 Docker 的第 1 步需要 sudo 密码；后续启动/重启都不需要 sudo。
 
 ---
 
@@ -224,6 +224,7 @@ cd /mnt/d/projects/Aster-Ai/deploy/home
 - 每次 `wsl --shutdown`/重启后，**临时地址会变**，必须重跑 `./quick-start.sh`；这时旧链接失效，需要重新发链接。
 - 这种模式只暴露「应用」和「中继」两个临时地址；网关不单独暴露，页面通过 `app/push`、`app/v1` 同源访问（M1-08 要求应用与网关同源）。
 - 自测模式下 Cloudflare 隧道容器保留少量日志（只有临时地址与连接状态），用来读取地址；拿到地址并重建容器后日志不再增长。
+- **WSL 闲时会被 Windows 回收**：如果最后一个 WSL 会话退出、一段时间没人用，WSL2 会停掉，容器和临时隧道随之停止；下次启动 WSL 后临时地址会变，必须重新跑 `./quick-start.sh`。做自测时保持一个 WSL 终端开着（或 `wsl -d Ubuntu -- bash -lc "sleep 7200"` 这种保活）。域名模式不受影响：hostname 固定，容器重启后按同一个 token 重连。
 
 ### 从自测模式切到域名模式
 
@@ -320,15 +321,30 @@ docker compose exec gateway node -e "fetch('http://localhost:8787/v1/chat/comple
 ## 8. 已知限制（内测版）
 
 1. 一条命令部署只覆盖**单机、单实例**；没有监控告警、没有自动备份（按 6.3 手动备份）。
-2. 无域名模式（trycloudflare）地址每次重启都会变，只适合自测；真实内测用域名模式。
+2. 无域名模式（trycloudflare）地址每次重启都会变，只适合自测；cloudflared 进程一旦重启也会换地址（`quick-start.sh` 已带重试循环）。真实内测用域名模式。
 3. 应用目前能连中继、能经同源 `/push` 调用网关；模型整理/起草的客户端在 App 里还没有设置界面（M1-15a 的遗留边界），所以「调网关」验收用的是推送路由的成员鉴权请求（`/push/notify` 202），不消耗模型额度。
-4. 中继首次构建要编译 Rust，3.7 GiB 内存下可能较慢；OOM 时按第 1 步末尾加 swap。
+4. 中继首次构建要编译 Rust，3.7 GiB 内存下约 16 分钟；OOM 时按第 1 步末尾加 swap。
 5. `data/relay` 目录给了 777 权限（中继容器以 uid 10001 运行）；内测机单用户可接受，正式部署再收紧。
+6. 无域名模式 cloudflared 的日志（仅用于读临时地址）会记录它自己的边缘 IP 和内部容器地址，以及失败的 URL 路径；**不记录客户端 IP、请求正文或完整公钥**，且不在 `verify.sh` 的日志扫描范围内。域名模式该服务日志驱动是 `none`。
 
 ---
 
-## 9. 施工者说明（交给你时还没跑的部分）
+## 9. 本次真实验收记录（2026-10-17，WSL2 / 无域名 quick 模式）
 
-- 施工环境里 **WSL 没有 Docker、sudo 需要密码**，按约定我没有安装、没有执行 sudo。
-- 因此**容器构建、compose 起服务、隧道、手机访问、日志扫描、WSL 重启持久化这五项验收都还没真跑**；已完成的验证是：脚本语法（`bash -n`）、Node 脚本语法与生成器实跑、compose YAML 结构（无发布端口）、应用在容器等价流程下的 `npm ci && npm run build` 与 VITE 注入（见 PR 说明）。
-- 你装好 Docker 后，按第 3.2–3.4 节跑一遍，把 `./setup.sh`、`./start.sh`、`./verify.sh` 的输出贴回 PR，我再接着修问题。
+Docker 装好后，在本机跑完了除“域名模式 + 真实模型 Key”以外的验收：
+
+| 项目 | 结果 |
+| :-- | :-- |
+| 镜像构建 | relay/gateway/web 三个镜像都构建成功（relay 161 MB、gateway 348 MB、web 594 MB）；relay 首次编译 Rust 约 16 分钟，峰值内存约 1.6 GiB used / 3.1 GiB available，未 OOM，1 GiB swap 未被使用 |
+| 起服务 | `./quick-start.sh` 生成两条 trycloudflare 临时地址；web 容器启动时用临时地址重新构建 app，`dist` 里能搜到 `wss://<relay 临时地址>` 与 `https://<app 临时地址>` |
+| 端口 | `docker ps` 无任何宿主机端口发布；relay/gateway/web 只在 compose 内部网络 |
+| `./verify.sh` | 应用 200、网关无凭据 401、非成员 403、成员推送 202、中继拒绝非成员 AUTH、中继接受成员 AUTH，全部 PASS；日志扫描（无请求正文标记/完整公钥/IP）PASS |
+| 手机模拟（Playwright，390×844 移动端） | 经临时隧道打开应用、恢复合成成员身份后页面显示“中继：已连接”；页面上下文同源请求 `/v1` 401、`/push` 成员鉴权 202；手机宽度无横向溢出 |
+| 日志 | relay/gateway/web 的日志驱动是 `none`，`docker compose logs` 连读取都返回“logging driver does not support reading”；cloudflared 临时隧道日志只含隧道地址、连接状态、自身边缘 IP 与失败 URL 路径 |
+| WSL 重启持久化 | `wsl --shutdown` 后重新启动：`data/relay/nostr.db` 的 sha256 完全一致（118784 字节、event 表仍有数据），重新 `./quick-start.sh` + `./verify.sh` 全部 PASS（整机重启未做，用 WSL 重启代替） |
+
+**没有覆盖的**：
+- 域名模式（需要真实域名 + Cloudflare Zero Trust 隧道 token，当前 `.env` 没有）。
+- 真实上游模型调用（`UPSTREAM_API_KEY` 为空；网关功能用推送路由 202 验证，不消耗额度）。
+- 真实手机（用 Playwright 移动端模拟代替）。
+- 施工环境里没有 sudo，按约定没有改任何系统配置；Docker 由用户自己安装。
