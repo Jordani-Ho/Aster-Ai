@@ -10,6 +10,7 @@ import type { BackupChallenge } from './core/identity/backup'
 import { openStore, resumeStore, type LocalStore } from './core/store'
 import { persistenceLabels, requestPersistence, type PersistenceStatus } from './core/store/persistence'
 import { createWiring, type Wiring } from './core/wiring'
+import { createPushClient } from './core/push'
 
 const HomeworkPage = lazy(() => import('./HomeworkPage').then(module => ({ default: module.HomeworkPage })))
 const IntakePage = lazy(() => import('./IntakePage').then(module => ({ default: module.IntakePage })))
@@ -18,8 +19,11 @@ const TeacherInboxPage = lazy(() => import('./TeacherInboxPage').then(module => 
 
 type Role = 'student' | 'teacher'
 type LinkStatus = 'offline' | 'connecting' | 'ready' | 'rejected' | 'invalid-message'
-const defaultRelays = ((import.meta as ImportMeta & { env: Record<string, string | undefined> }).env.VITE_COMMUNITY_RELAYS ?? '')
-  .split(',').map(value => value.trim()).filter(Boolean)
+const env = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env
+const defaultRelays = (env.VITE_COMMUNITY_RELAYS ?? '').split(',').map(value => value.trim()).filter(Boolean)
+// 部署时配置这两个变量，发送成功后才会调用 M1-08 的 notifyRecipient；没配置就不提醒，不影响发送。
+const pushGatewayUrl = env.VITE_PUSH_GATEWAY_URL ?? ''
+const pushVapidPublicKey = env.VITE_PUSH_VAPID_PUBLIC_KEY ?? ''
 
 function errorMessage(cause: unknown, fallback: string): string {
   return cause instanceof Error && cause.message ? cause.message : fallback
@@ -87,6 +91,11 @@ export function App() {
         identity, store, relays,
         onStatus: status => { if (!cancelled) setStackStatus(status as LinkStatus) },
         onError: () => { if (!cancelled) setStackStatus('offline') },
+        notifier: async pubkey => {
+          if (!pushGatewayUrl || !pushVapidPublicKey) return
+          const client = createPushClient({ gatewayUrl: pushGatewayUrl, vapidPublicKey: pushVapidPublicKey, secretKey: identity.privateKey })
+          await client.notifyRecipient(pubkey)
+        },
       })
       stackRef.current = stack
       stack.start()

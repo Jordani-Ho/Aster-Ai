@@ -20,4 +20,4 @@ M1-06：身份就绪后的“备份状态”默认检查每日备份；部署用
 
 M1-14b：设置中登记师生公钥、查看康币账本和对账码；打开/前台恢复/推送后同步。规则与已知边界见 src/core/ledger/README.md。复用备份中继设置，双方需各自登记账本。本卡没有记账操作页和真实支付。
 
-M1-15a：首页按“学生 / 老师”角色（设置里手动选）显示入口。src/StudentRecordsPage.tsx 是学生病历页（只显示有效签名，旧版折叠）；src/TeacherInboxPage.tsx 是老师问诊箱（照片到齐才能起草、签字交还、可选扣费）；src/core/inbox/ 负责收件分发与照片校验，src/core/wiring/ 把一条 transport、收件分发与账本同步接起来。截图 docs/screenshots/student-records-375.png、docs/screenshots/teacher-inbox-375.png。
+M1-15a：首页按“学生 / 老师”角色（设置里手动选）显示入口。src/StudentRecordsPage.tsx 是学生病历页（只显示有效签名，旧版折叠）；src/TeacherInboxPage.tsx 是老师问诊箱（照片到齐才能起草、签字交还、可选扣费）；src/core/inbox/ 负责收件分发与照片校验，src/core/wiring/ 把一条 transport、收件分发与账本同步接起来。发送成功后提醒收件人：部署时配置 `VITE_PUSH_GATEWAY_URL`、`VITE_PUSH_VAPID_PUBLIC_KEY` 即调用 M1-08 的 `notifyRecipient`（未配置则不提醒、不影响发送）。截图 docs/screenshots/student-records-375.png、docs/screenshots/teacher-inbox-375.png。
