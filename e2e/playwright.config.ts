@@ -8,6 +8,6 @@ export default defineConfig({
   timeout: 60000, expect: { timeout: 15000 },
   reporter: [['list'], ['html', { outputFolder: path.resolve('playwright-report'), open: 'never' }]],
   outputDir: path.resolve('test-results'),
-  use: { baseURL: runtime.baseURL, browserName: 'chromium', viewport: { width: 375, height: 812 },
+  use: { baseURL: runtime.baseURL, browserName: 'chromium', channel: 'chromium', viewport: { width: 375, height: 812 },
     trace: 'retain-on-failure', screenshot: 'only-on-failure', video: 'off' },
 })

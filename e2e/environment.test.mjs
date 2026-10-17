@@ -64,3 +64,13 @@ test('cleanup closes gateway and upstream listeners', async () => {
   await assert.rejects(fetch(service.url + '/v1/chat/completions', { method: 'POST' }))
   await assert.rejects(fetch(service.upstreamUrl + '/v1/chat/completions', { method: 'POST' }))
 })
+
+test('same-origin Vite proxy preserves the signed URL Host for NIP-98', async () => {
+  const service = await fixture()
+  const { startWebApp } = await import('./environment.mjs')
+  const app = await startWebApp({ gatewayUrl: service.url, relayUrl: 'ws://127.0.0.1:1/' })
+  cleanups.push(() => app.close())
+  const response = await post({ url: app.url }, actors.teacher, '/v1/chat/completions', { messages: [] })
+  assert.equal(response.status, 200)
+  assert.deepEqual(JSON.parse((await response.json()).choices[0].message.content), SYNTHETIC_DRAFT)
+})

@@ -51,19 +51,24 @@ export async function startEnvironment(build) {
     await ready(`http://127.0.0.1:${relayPort}/`, relay)
     const gateway = await startGatewayFixture({ directory, members: [actors.teacher.pubkey, actors.student.pubkey] })
     closers.push(() => gateway.close())
-    const requireApp = createRequire(new URL('../app/package.json', import.meta.url))
-    const { createServer: createVite } = await import(pathToFileURL(requireApp.resolve('vite')).href)
-    const { default: react } = await import(pathToFileURL(requireApp.resolve('@vitejs/plugin-react')).href)
-    const app = await createVite({ configFile: false, root: path.join(root, 'app'), plugins: [react()],
-      define: { 'import.meta.env.VITE_COMMUNITY_RELAYS': JSON.stringify(relayUrl) },
-      resolve: { dedupe: ['lunar-typescript', 'timezonecomplete', 'tzdata'] },
-      server: { host: '127.0.0.1', port: await port(), strictPort: true, fs: { allow: [root] }, proxy: { '/v1': { target: gateway.url, changeOrigin: false }, '/push': { target: gateway.url, changeOrigin: false } } },
-    })
+    const app = await startWebApp({ gatewayUrl: gateway.url, relayUrl })
     closers.push(() => app.close())
-    await app.listen()
-    const baseURL = `http://127.0.0.1:${app.httpServer.address().port}`
+    const baseURL = app.url
     const runtime = { baseURL, relayUrl, gatewayUrl: gateway.url, build: { cached: build.cached, elapsedMs: build.elapsedMs, key: build.key }, phase: 'environment-only' }
     const runtimeFile = path.join(directory, 'runtime.json'); await writeFile(runtimeFile, JSON.stringify(runtime))
     return { ...runtime, runtimeFile, close }
   } catch (error) { await close(); throw error }
+}
+
+export async function startWebApp({ gatewayUrl, relayUrl }) {
+  const requireApp = createRequire(new URL('../app/package.json', import.meta.url))
+  const { createServer: createVite } = await import(pathToFileURL(requireApp.resolve('vite')).href)
+  const { default: react } = await import(pathToFileURL(requireApp.resolve('@vitejs/plugin-react')).href)
+  const app = await createVite({ configFile: false, root: path.join(root, 'app'), plugins: [react()],
+    define: { 'import.meta.env.VITE_COMMUNITY_RELAYS': JSON.stringify(relayUrl) },
+    resolve: { dedupe: ['lunar-typescript', 'timezonecomplete', 'tzdata'] },
+    server: { host: '127.0.0.1', port: await port(), strictPort: true, fs: { allow: [root] }, proxy: { '/v1': { target: gatewayUrl, changeOrigin: false }, '/push': { target: gatewayUrl, changeOrigin: false } } },
+  })
+  try { await app.listen() } catch (error) { await app.close(); throw error }
+  return { url: `http://127.0.0.1:${app.httpServer.address().port}`, close: () => app.close() }
 }

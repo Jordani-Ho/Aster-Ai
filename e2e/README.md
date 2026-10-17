@@ -46,6 +46,7 @@ macOS 原生构建不在本轮验证范围，可在 Linux/CI 运行。
 `npm run test:e2e-env`：真实 gateway 的鉴权、成员限制、固定模型 JSON/SSE、推送注入与监听器清理。
 `npm run e2e`：375px 的老师/学生独立浏览器上下文，合成助记词恢复及持久化隔离，
 实际 NIP-42/NIP-17 加密往返，非成员拒绝，30078 本人备份/跨成员隔离，以及浏览器经同源代理访问真实网关。
+环境合同测试还覆盖真实 Vite 同源代理保留 NIP-98 的签名 Host。
 这些是基础设施探针，**不是完整问诊流程测试**。用的是应用现有模块和真实 WebSocket/HTTP，未给生产界面加测试后门。
 网关仍用 gateway/server.js；模型在 loopback 固定返回合成起草字段，不回显输入、不调用真实模型，
 不需要任何 API Key。推送通过已有 config.push.send 注入，不请求 FCM/APNs/任何云端。
