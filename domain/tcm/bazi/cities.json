@@ -1,0 +1,1910 @@
+[
+  {
+    "nameZh": "芝加哥",
+    "nameEn": "Chicago",
+    "longitude": -87.65005,
+    "timeZone": "America/Chicago"
+  },
+  {
+    "nameZh": "休斯敦",
+    "nameEn": "Houston",
+    "longitude": -95.36327,
+    "timeZone": "America/Chicago"
+  },
+  {
+    "nameZh": "卡尔加里",
+    "nameEn": "Calgary",
+    "longitude": -114.08529,
+    "timeZone": "America/Edmonton"
+  },
+  {
+    "nameZh": "洛杉矶",
+    "nameEn": "Los Angeles",
+    "longitude": -118.24368,
+    "timeZone": "America/Los_Angeles"
+  },
+  {
+    "nameZh": "旧金山",
+    "nameEn": "San Francisco",
+    "longitude": -122.41942,
+    "timeZone": "America/Los_Angeles"
+  },
+  {
+    "nameZh": "圣何塞",
+    "nameEn": "San Jose",
+    "longitude": -121.89496,
+    "timeZone": "America/Los_Angeles"
+  },
+  {
+    "nameZh": "西雅图",
+    "nameEn": "Seattle",
+    "longitude": -122.33207,
+    "timeZone": "America/Los_Angeles"
+  },
+  {
+    "nameZh": "纽约",
+    "nameEn": "New York City",
+    "longitude": -74.00597,
+    "timeZone": "America/New_York"
+  },
+  {
+    "nameZh": "圣保罗",
+    "nameEn": "Sao Paulo",
+    "longitude": -46.63611,
+    "timeZone": "America/Sao_Paulo"
+  },
+  {
+    "nameZh": "蒙特利尔",
+    "nameEn": "Montreal",
+    "longitude": -73.58781,
+    "timeZone": "America/Toronto"
+  },
+  {
+    "nameZh": "多伦多",
+    "nameEn": "Toronto",
+    "longitude": -79.39864,
+    "timeZone": "America/Toronto"
+  },
+  {
+    "nameZh": "温哥华",
+    "nameEn": "Vancouver",
+    "longitude": -123.11934,
+    "timeZone": "America/Vancouver"
+  },
+  {
+    "nameZh": "曼谷",
+    "nameEn": "Bangkok",
+    "longitude": 100.50144,
+    "timeZone": "Asia/Bangkok"
+  },
+  {
+    "nameZh": "迪拜",
+    "nameEn": "Dubai",
+    "longitude": 55.30927,
+    "timeZone": "Asia/Dubai"
+  },
+  {
+    "nameZh": "胡志明市",
+    "nameEn": "Ho Chi Minh City",
+    "longitude": 106.62965,
+    "timeZone": "Asia/Ho_Chi_Minh"
+  },
+  {
+    "nameZh": "香港",
+    "nameEn": "Hong Kong",
+    "longitude": 114.17469,
+    "timeZone": "Asia/Hong_Kong"
+  },
+  {
+    "nameZh": "雅加达",
+    "nameEn": "Jakarta",
+    "longitude": 106.84513,
+    "timeZone": "Asia/Jakarta"
+  },
+  {
+    "nameZh": "乔治市",
+    "nameEn": "George Town",
+    "longitude": 100.33543,
+    "timeZone": "Asia/Kuala_Lumpur"
+  },
+  {
+    "nameZh": "柔佛新山",
+    "nameEn": "Johor Bahru",
+    "longitude": 103.7578,
+    "timeZone": "Asia/Kuala_Lumpur"
+  },
+  {
+    "nameZh": "吉隆坡",
+    "nameEn": "Kuala Lumpur",
+    "longitude": 101.68653,
+    "timeZone": "Asia/Kuala_Lumpur"
+  },
+  {
+    "nameZh": "马六甲",
+    "nameEn": "Malacca",
+    "longitude": 102.2405,
+    "timeZone": "Asia/Kuala_Lumpur"
+  },
+  {
+    "nameZh": "澳门",
+    "nameEn": "Macau",
+    "longitude": 113.54611,
+    "timeZone": "Asia/Macau"
+  },
+  {
+    "nameZh": "望德堂区",
+    "nameEn": "Sao Lazaro",
+    "longitude": 113.54895,
+    "timeZone": "Asia/Macau"
+  },
+  {
+    "nameZh": "風順堂區",
+    "nameEn": "Sao Lourenco",
+    "longitude": 113.53488,
+    "timeZone": "Asia/Macau"
+  },
+  {
+    "nameZh": "马尼拉",
+    "nameEn": "Manila",
+    "longitude": 120.9822,
+    "timeZone": "Asia/Manila"
+  },
+  {
+    "nameZh": "首尔",
+    "nameEn": "Seoul",
+    "longitude": 126.9784,
+    "timeZone": "Asia/Seoul"
+  },
+  {
+    "nameZh": "安康市",
+    "nameEn": "Ankang",
+    "longitude": 109.01722,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "安庆市",
+    "nameEn": "Anqing",
+    "longitude": 117.04723,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "安順市",
+    "nameEn": "Anshun",
+    "longitude": 105.93333,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "安阳市",
+    "nameEn": "Anyang",
+    "longitude": 114.38278,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "白城市",
+    "nameEn": "Baicheng",
+    "longitude": 122.83302,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "百色市",
+    "nameEn": "Baise",
+    "longitude": 106.62684,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "白山市",
+    "nameEn": "Baishan",
+    "longitude": 126.41965,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "白銀市",
+    "nameEn": "Baiyin",
+    "longitude": 104.17023,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "保定市",
+    "nameEn": "Baoding",
+    "longitude": 115.46246,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "宝鶏市",
+    "nameEn": "Baoji",
+    "longitude": 107.23705,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "保山市",
+    "nameEn": "Baoshan",
+    "longitude": 99.16366,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "马尔康市",
+    "nameEn": "Barkam",
+    "longitude": 102.22092,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "巴中市",
+    "nameEn": "Bazhong",
+    "longitude": 106.74432,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "北海市",
+    "nameEn": "Beihai",
+    "longitude": 109.11549,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "北京市",
+    "nameEn": "Beijing",
+    "longitude": 116.39723,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "毕节市",
+    "nameEn": "Bijie",
+    "longitude": 105.28627,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "浜州市",
+    "nameEn": "Binzhou",
+    "longitude": 118.01667,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "亳州市",
+    "nameEn": "Bozhou",
+    "longitude": 115.77028,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "沧州市",
+    "nameEn": "Cangzhou",
+    "longitude": 116.85334,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "長春市",
+    "nameEn": "Changchun",
+    "longitude": 125.32278,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "長沙市",
+    "nameEn": "Changsha",
+    "longitude": 112.97087,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "長治市",
+    "nameEn": "Changzhi",
+    "longitude": 113.10528,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "常州市",
+    "nameEn": "Changzhou",
+    "longitude": 119.95401,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "朝阳市",
+    "nameEn": "Chaoyang",
+    "longitude": 120.45861,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "潮州市",
+    "nameEn": "Chaozhou",
+    "longitude": 116.62262,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "成都市",
+    "nameEn": "Chengdu",
+    "longitude": 104.06667,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "郴州",
+    "nameEn": "Chenzhou",
+    "longitude": 113.03333,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "赤峰市",
+    "nameEn": "Chifeng",
+    "longitude": 118.96361,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "池州市",
+    "nameEn": "Chizhou",
+    "longitude": 117.47783,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "重庆市",
+    "nameEn": "Chongqing",
+    "longitude": 106.55771,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "崇左",
+    "nameEn": "Chongzuo",
+    "longitude": 107.3683,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "楚雄市",
+    "nameEn": "Chuxiong",
+    "longitude": 101.54556,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "滁州市",
+    "nameEn": "Chuzhou",
+    "longitude": 118.29778,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "大理市",
+    "nameEn": "Dali",
+    "longitude": 100.21229,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "大庆市",
+    "nameEn": "Daqing",
+    "longitude": 125.0,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "大兴安岭",
+    "nameEn": "Daxing'anling",
+    "longitude": 124.71242,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "达州市",
+    "nameEn": "Dazhou",
+    "longitude": 107.46308,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "徳陽市",
+    "nameEn": "Deyang",
+    "longitude": 104.38198,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "徳州市",
+    "nameEn": "Dezhou",
+    "longitude": 116.36706,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "定西市",
+    "nameEn": "Dingxi",
+    "longitude": 104.62303,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "东莞市",
+    "nameEn": "Dongguan",
+    "longitude": 113.74866,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "东营市",
+    "nameEn": "Dongying",
+    "longitude": 118.49165,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "鄂州市",
+    "nameEn": "E'zhou",
+    "longitude": 114.88655,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "恩施市",
+    "nameEn": "Enshi",
+    "longitude": 109.48333,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "防城港市",
+    "nameEn": "Fangchenggang",
+    "longitude": 108.35661,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "仏山市",
+    "nameEn": "Foshan",
+    "longitude": 113.13148,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "抚顺市",
+    "nameEn": "Fushun",
+    "longitude": 123.94363,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "阜阳市",
+    "nameEn": "Fuyang",
+    "longitude": 115.81667,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "福州市",
+    "nameEn": "Fuzhou",
+    "longitude": 119.29153,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "赣州市",
+    "nameEn": "Ganzhou",
+    "longitude": 114.9326,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "阿里地区",
+    "nameEn": "Gar",
+    "longitude": 80.09758,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "广安市",
+    "nameEn": "Guang'an",
+    "longitude": 106.63696,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "广元市",
+    "nameEn": "Guangyuan",
+    "longitude": 105.823,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "广州市",
+    "nameEn": "Guangzhou",
+    "longitude": 113.25,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "貴港市",
+    "nameEn": "Guigang",
+    "longitude": 109.59472,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "桂林市",
+    "nameEn": "Guilin",
+    "longitude": 110.29639,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "貴陽市",
+    "nameEn": "Guiyang",
+    "longitude": 106.71667,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "固原市",
+    "nameEn": "Guyuan",
+    "longitude": 106.28083,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "海口市",
+    "nameEn": "Haikou",
+    "longitude": 110.34651,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "邯郸市",
+    "nameEn": "Handan",
+    "longitude": 114.48764,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "杭州市",
+    "nameEn": "Hangzhou",
+    "longitude": 120.16142,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "汉中市",
+    "nameEn": "Hanzhong",
+    "longitude": 107.02214,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "哈尔滨市",
+    "nameEn": "Harbin",
+    "longitude": 126.65,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "鶴壁市",
+    "nameEn": "Hebi",
+    "longitude": 114.28616,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "河池市",
+    "nameEn": "Hechi",
+    "longitude": 108.08376,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "合肥市",
+    "nameEn": "Hefei",
+    "longitude": 117.28083,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "鶴崗市",
+    "nameEn": "Hegang",
+    "longitude": 130.29033,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "黑河市",
+    "nameEn": "Heihe",
+    "longitude": 127.49016,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "衡水市",
+    "nameEn": "Hengshui",
+    "longitude": 115.68348,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "益阳市",
+    "nameEn": "Heshan",
+    "longitude": 112.34733,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "河源市",
+    "nameEn": "Heyuan",
+    "longitude": 114.68333,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "菏泽市",
+    "nameEn": "Heze",
+    "longitude": 115.47358,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "賀州市",
+    "nameEn": "Hezhou",
+    "longitude": 111.56675,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "呼和浩特市",
+    "nameEn": "Hohhot",
+    "longitude": 111.65222,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "淮北市",
+    "nameEn": "Huaibei",
+    "longitude": 116.79167,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "怀化市",
+    "nameEn": "Huaihua",
+    "longitude": 110.00404,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "黄冈市",
+    "nameEn": "Huanggang",
+    "longitude": 114.87035,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "黃石市",
+    "nameEn": "Huangshi",
+    "longitude": 115.04814,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "恵州市",
+    "nameEn": "Huizhou",
+    "longitude": 114.41523,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "葫芦岛市",
+    "nameEn": "Huludao",
+    "longitude": 120.83552,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "呼伦贝尔市",
+    "nameEn": "Hulunbuir",
+    "longitude": 119.75582,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "湖州市",
+    "nameEn": "Huzhou",
+    "longitude": 120.0933,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "吉安市",
+    "nameEn": "Ji'an",
+    "longitude": 114.97927,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "佳木斯市",
+    "nameEn": "Jiamusi",
+    "longitude": 130.31118,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "江門市",
+    "nameEn": "Jiangmen",
+    "longitude": 113.08333,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "焦作市",
+    "nameEn": "Jiaozuo",
+    "longitude": 113.23914,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "嘉兴市",
+    "nameEn": "Jiaxing",
+    "longitude": 120.75,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "嘉峪关市",
+    "nameEn": "Jiayuguan",
+    "longitude": 98.28618,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "掲陽市",
+    "nameEn": "Jieyang",
+    "longitude": 116.36581,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "吉林市",
+    "nameEn": "Jilin",
+    "longitude": 126.5608,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "济南市",
+    "nameEn": "Jinan",
+    "longitude": 116.99722,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "金昌市",
+    "nameEn": "Jinchang",
+    "longitude": 102.19379,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "晋城市",
+    "nameEn": "Jincheng",
+    "longitude": 112.83278,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "景德镇市",
+    "nameEn": "Jingdezhen",
+    "longitude": 117.20789,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "荆门市",
+    "nameEn": "Jingmen",
+    "longitude": 112.20472,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "荆州市",
+    "nameEn": "Jingzhou",
+    "longitude": 112.19028,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "金华市",
+    "nameEn": "Jinhua",
+    "longitude": 119.64421,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "晋中市",
+    "nameEn": "Jinzhong",
+    "longitude": 112.75471,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "吉首市",
+    "nameEn": "Jishou",
+    "longitude": 109.73346,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "九江市",
+    "nameEn": "Jiujiang",
+    "longitude": 116.00206,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "酒泉市",
+    "nameEn": "Jiuquan",
+    "longitude": 98.51736,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "鶏西市",
+    "nameEn": "Jixi",
+    "longitude": 130.96217,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "济源市",
+    "nameEn": "Jiyuan",
+    "longitude": 112.58815,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "凯里市",
+    "nameEn": "Kaili",
+    "longitude": 107.97972,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "康定市",
+    "nameEn": "Kangding",
+    "longitude": 101.9569,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "昆明市",
+    "nameEn": "Kunming",
+    "longitude": 102.71833,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "来宾市",
+    "nameEn": "Laibin",
+    "longitude": 109.22222,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "廊坊市",
+    "nameEn": "Langfang",
+    "longitude": 116.71471,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "兰州市",
+    "nameEn": "Lanzhou",
+    "longitude": 103.83987,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "拉萨市",
+    "nameEn": "Lhasa",
+    "longitude": 91.1,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "山南市",
+    "nameEn": "Lhoka",
+    "longitude": 91.77239,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "连云港市",
+    "nameEn": "Lianyungang",
+    "longitude": 119.21556,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "聊城市",
+    "nameEn": "Liaocheng",
+    "longitude": 116.00247,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "丽江市",
+    "nameEn": "Lijiang",
+    "longitude": 100.22072,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "临沧市",
+    "nameEn": "Lincang",
+    "longitude": 100.09455,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "临沂市",
+    "nameEn": "Linyi",
+    "longitude": 118.34278,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "丽水市",
+    "nameEn": "Lishui",
+    "longitude": 119.91029,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "柳州市",
+    "nameEn": "Liuzhou",
+    "longitude": 109.40698,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "陇南市",
+    "nameEn": "Longnan",
+    "longitude": 104.91703,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "辽源市",
+    "nameEn": "Longshan",
+    "longitude": 125.1367,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "竜岩市",
+    "nameEn": "Longyan",
+    "longitude": 117.01775,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "娄底市",
+    "nameEn": "Loudi",
+    "longitude": 111.99444,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "六安市",
+    "nameEn": "Lu'an",
+    "longitude": 116.51688,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "吕梁市",
+    "nameEn": "Lueliang",
+    "longitude": 111.14436,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "漯河市",
+    "nameEn": "Luohe",
+    "longitude": 114.03261,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "洛阳市",
+    "nameEn": "Luoyang",
+    "longitude": 112.43684,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "泸水市",
+    "nameEn": "Lushui",
+    "longitude": 98.85853,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "泸州市",
+    "nameEn": "Luzhou",
+    "longitude": 105.42575,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "马鞍山市",
+    "nameEn": "Ma'anshan",
+    "longitude": 118.51008,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "茂名市",
+    "nameEn": "Maoming",
+    "longitude": 110.91364,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "玛沁县",
+    "nameEn": "Maqin County",
+    "longitude": 100.24496,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "眉山市",
+    "nameEn": "Meishan",
+    "longitude": 103.83696,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "梅州市",
+    "nameEn": "Meizhou",
+    "longitude": 116.11768,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "蒙自市",
+    "nameEn": "Mengzi",
+    "longitude": 103.38212,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "牡丹江市",
+    "nameEn": "Mudanjiang",
+    "longitude": 129.62594,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "那曲市",
+    "nameEn": "Nagqu",
+    "longitude": 92.05729,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "南昌市",
+    "nameEn": "Nanchang",
+    "longitude": 115.85306,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "南充市",
+    "nameEn": "Nanchong",
+    "longitude": 106.08473,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "南京市",
+    "nameEn": "Nanjing",
+    "longitude": 118.77778,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "南宁市",
+    "nameEn": "Nanning",
+    "longitude": 108.31667,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "南平市",
+    "nameEn": "Nanping",
+    "longitude": 118.17361,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "南通市",
+    "nameEn": "Nantong",
+    "longitude": 120.87472,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "南阳市",
+    "nameEn": "Nanyang",
+    "longitude": 112.54659,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "宁波市",
+    "nameEn": "Ningbo",
+    "longitude": 121.54945,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "宁德市",
+    "nameEn": "Ningde",
+    "longitude": 119.52278,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "林芝市",
+    "nameEn": "Nyingchi",
+    "longitude": 94.35509,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "盘锦市",
+    "nameEn": "Panjin",
+    "longitude": 122.0739,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "攀枝花市",
+    "nameEn": "Panzhihua",
+    "longitude": 101.71276,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "平頂山市",
+    "nameEn": "Pingdingshan",
+    "longitude": 113.31554,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "平凉市",
+    "nameEn": "Pingliang",
+    "longitude": 106.68611,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "萍乡市",
+    "nameEn": "Pingxiang",
+    "longitude": 113.85353,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "莆田市",
+    "nameEn": "Putian",
+    "longitude": 119.01028,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "濮阳市",
+    "nameEn": "Puyang",
+    "longitude": 115.04363,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "共和县",
+    "nameEn": "Qabqa",
+    "longitude": 100.61306,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "昌都市",
+    "nameEn": "Qamdo",
+    "longitude": 97.17982,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "青岛市",
+    "nameEn": "Qingdao",
+    "longitude": 120.38042,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "庆阳市",
+    "nameEn": "Qingyang",
+    "longitude": 107.64455,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "清远市",
+    "nameEn": "Qingyuan",
+    "longitude": 113.03333,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "秦皇岛市",
+    "nameEn": "Qinhuangdao",
+    "longitude": 119.58936,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "欽州市",
+    "nameEn": "Qinzhou",
+    "longitude": 108.65061,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "琼海市",
+    "nameEn": "Qionghai",
+    "longitude": 110.46417,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "齊齊哈爾市",
+    "nameEn": "Qiqihar",
+    "longitude": 123.96154,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "七台河市",
+    "nameEn": "Qitaihe",
+    "longitude": 130.9953,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "泉州市",
+    "nameEn": "Quanzhou",
+    "longitude": 118.58583,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "日喀则市",
+    "nameEn": "Rikaze",
+    "longitude": 88.88333,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "日照市",
+    "nameEn": "Rizhao",
+    "longitude": 119.52908,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "三門峡市",
+    "nameEn": "Sanmenxia",
+    "longitude": 111.19287,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "三明市",
+    "nameEn": "Sanming",
+    "longitude": 117.61861,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "三沙市",
+    "nameEn": "Sansha",
+    "longitude": 112.34064,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "三亚市",
+    "nameEn": "Sanya",
+    "longitude": 109.50947,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "上海市",
+    "nameEn": "Shanghai",
+    "longitude": 121.45806,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "商洛市",
+    "nameEn": "Shangluo",
+    "longitude": 109.93056,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "商丘市",
+    "nameEn": "Shangqiu",
+    "longitude": 115.65613,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "上饒市",
+    "nameEn": "Shangrao",
+    "longitude": 117.94287,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "香格里拉市",
+    "nameEn": "Shangri-La",
+    "longitude": 99.70779,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "汕头市",
+    "nameEn": "Shantou",
+    "longitude": 116.67876,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "汕尾市",
+    "nameEn": "Shanwei",
+    "longitude": 115.3475,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "韶关市",
+    "nameEn": "Shaoguan",
+    "longitude": 113.58333,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "邵阳市",
+    "nameEn": "Shaoyang",
+    "longitude": 111.46214,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "沈阳市",
+    "nameEn": "Shenyang",
+    "longitude": 123.43278,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "深圳市",
+    "nameEn": "Shenzhen",
+    "longitude": 114.0683,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "石家庄市",
+    "nameEn": "Shijiazhuang",
+    "longitude": 114.47861,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "十堰市",
+    "nameEn": "Shiyan",
+    "longitude": 110.77806,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "石嘴山市",
+    "nameEn": "Shizuishan",
+    "longitude": 106.3892,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "双鴨山市",
+    "nameEn": "Shuangyashan",
+    "longitude": 131.13273,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "朔州市",
+    "nameEn": "Shuozhou",
+    "longitude": 112.4225,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "松原市",
+    "nameEn": "Songyuan",
+    "longitude": 124.82769,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "綏化市",
+    "nameEn": "Suihua",
+    "longitude": 126.96656,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "随州市",
+    "nameEn": "Suizhou",
+    "longitude": 113.36306,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "宿迁市",
+    "nameEn": "Suqian",
+    "longitude": 118.29583,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "宿州市",
+    "nameEn": "Suzhou",
+    "longitude": 116.97889,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "泰安市",
+    "nameEn": "Tai'an",
+    "longitude": 117.12,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "太原市",
+    "nameEn": "Taiyuan",
+    "longitude": 112.56028,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "台州市",
+    "nameEn": "Taizhou",
+    "longitude": 121.43312,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "唐山市",
+    "nameEn": "Tangshan",
+    "longitude": 118.18319,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "天津市",
+    "nameEn": "Tianjin",
+    "longitude": 117.17667,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "铜川市",
+    "nameEn": "Tongchuan",
+    "longitude": 108.95056,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "通化市",
+    "nameEn": "Tonghua",
+    "longitude": 125.92639,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "通辽市",
+    "nameEn": "Tongliao",
+    "longitude": 122.26528,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "同仁市",
+    "nameEn": "Tongren",
+    "longitude": 102.016,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "乌兰察布市",
+    "nameEn": "Ulanqab",
+    "longitude": 113.133,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "万宁市",
+    "nameEn": "Wanning",
+    "longitude": 110.3841,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "威海市",
+    "nameEn": "Weihai",
+    "longitude": 122.11356,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "渭南市",
+    "nameEn": "Weinan",
+    "longitude": 109.50891,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "文山市",
+    "nameEn": "Wenshan City",
+    "longitude": 104.25047,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "乌海市",
+    "nameEn": "Wuhai",
+    "longitude": 106.81583,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "武汉市",
+    "nameEn": "Wuhan",
+    "longitude": 114.26667,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "芜湖市",
+    "nameEn": "Wuhu",
+    "longitude": 118.42947,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "武威市",
+    "nameEn": "Wuwei",
+    "longitude": 102.63202,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "无锡市",
+    "nameEn": "Wuxi",
+    "longitude": 120.28857,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "五指山市",
+    "nameEn": "Wuzhishan",
+    "longitude": 109.5013,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "吴忠市",
+    "nameEn": "Wuzhong",
+    "longitude": 106.201,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "梧州市",
+    "nameEn": "Wuzhou",
+    "longitude": 111.28848,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "西安市",
+    "nameEn": "Xi'an",
+    "longitude": 108.92861,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "厦门市",
+    "nameEn": "Xiamen",
+    "longitude": 118.08187,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "湘潭市",
+    "nameEn": "Xiangtan",
+    "longitude": 112.9,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "襄樊市",
+    "nameEn": "Xiangyang",
+    "longitude": 112.14479,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "咸宁市",
+    "nameEn": "Xianning",
+    "longitude": 114.32201,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "孝感市",
+    "nameEn": "Xiaogan",
+    "longitude": 113.92221,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "西昌市",
+    "nameEn": "Xichang",
+    "longitude": 102.26341,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "西海镇",
+    "nameEn": "Xihai Town",
+    "longitude": 100.89951,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "锡林浩特市",
+    "nameEn": "Xilinhot",
+    "longitude": 116.07021,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "邢台市",
+    "nameEn": "Xingtai",
+    "longitude": 114.49272,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "西宁市",
+    "nameEn": "Xining",
+    "longitude": 101.75739,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "新乡市",
+    "nameEn": "Xinxiang",
+    "longitude": 113.80151,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "新余市",
+    "nameEn": "Xinyu",
+    "longitude": 114.93335,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "忻州市",
+    "nameEn": "Xinzhou",
+    "longitude": 112.73333,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "宣城市",
+    "nameEn": "Xuancheng",
+    "longitude": 118.75528,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "许昌市",
+    "nameEn": "Xuchang",
+    "longitude": 113.86299,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "徐州市",
+    "nameEn": "Xuzhou",
+    "longitude": 117.28386,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "雅安市",
+    "nameEn": "Ya'an",
+    "longitude": 102.999,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "延安市",
+    "nameEn": "Yan'an",
+    "longitude": 109.49167,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "塩城市",
+    "nameEn": "Yancheng",
+    "longitude": 120.1573,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "阳江市",
+    "nameEn": "Yangjiang",
+    "longitude": 111.96272,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "阳泉市",
+    "nameEn": "Yangquan",
+    "longitude": 113.56333,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "延吉市",
+    "nameEn": "Yanji",
+    "longitude": 129.50241,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "宜昌市",
+    "nameEn": "Yichang",
+    "longitude": 111.28472,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "宜春市",
+    "nameEn": "Yichun",
+    "longitude": 114.4,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "銀川市",
+    "nameEn": "Yinchuan",
+    "longitude": 106.27306,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "営口市",
+    "nameEn": "Yingkou",
+    "longitude": 122.23176,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "鷹潭市",
+    "nameEn": "Yingtan",
+    "longitude": 117.0,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "永州市",
+    "nameEn": "Yongzhou",
+    "longitude": 111.61306,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "岳阳市",
+    "nameEn": "Yueyang",
+    "longitude": 113.12019,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "玉林",
+    "nameEn": "Yulin",
+    "longitude": 110.17819,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "楡林市",
+    "nameEn": "Yulinshi",
+    "longitude": 109.73753,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "运城市",
+    "nameEn": "Yuncheng",
+    "longitude": 110.99278,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "云浮市",
+    "nameEn": "Yunfu",
+    "longitude": 112.03809,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "玉树市",
+    "nameEn": "Yushu",
+    "longitude": 97.00893,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "张家界市",
+    "nameEn": "Zhangjiajie",
+    "longitude": 110.47833,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "张家口市",
+    "nameEn": "Zhangjiakou",
+    "longitude": 114.87139,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "张掖市",
+    "nameEn": "Zhangye",
+    "longitude": 100.45167,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "漳州市",
+    "nameEn": "Zhangzhou",
+    "longitude": 117.65556,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "湛江市",
+    "nameEn": "Zhanjiang",
+    "longitude": 110.38749,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "肇庆市",
+    "nameEn": "Zhaoqing",
+    "longitude": 112.46091,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "郑州市",
+    "nameEn": "Zhengzhou",
+    "longitude": 113.64861,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "镇江市",
+    "nameEn": "Zhenjiang",
+    "longitude": 119.45508,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "中山市",
+    "nameEn": "Zhongshan",
+    "longitude": 113.37912,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "中卫市",
+    "nameEn": "Zhongwei",
+    "longitude": 105.19067,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "周口市",
+    "nameEn": "Zhoukou",
+    "longitude": 114.63333,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "珠海市",
+    "nameEn": "Zhuhai",
+    "longitude": 113.56778,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "驻马店市",
+    "nameEn": "Zhumadian",
+    "longitude": 114.02586,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "株洲市",
+    "nameEn": "Zhuzhou",
+    "longitude": 113.15,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "资阳市",
+    "nameEn": "Ziyang",
+    "longitude": 104.64811,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "遵义市",
+    "nameEn": "Zunyi",
+    "longitude": 106.90722,
+    "timeZone": "Asia/Shanghai"
+  },
+  {
+    "nameZh": "新加坡",
+    "nameEn": "Singapore",
+    "longitude": 103.85007,
+    "timeZone": "Asia/Singapore"
+  },
+  {
+    "nameZh": "高雄",
+    "nameEn": "Kaohsiung",
+    "longitude": 120.31333,
+    "timeZone": "Asia/Taipei"
+  },
+  {
+    "nameZh": "台中",
+    "nameEn": "Taichung",
+    "longitude": 120.6839,
+    "timeZone": "Asia/Taipei"
+  },
+  {
+    "nameZh": "台南",
+    "nameEn": "Tainan",
+    "longitude": 120.20507,
+    "timeZone": "Asia/Taipei"
+  },
+  {
+    "nameZh": "台北",
+    "nameEn": "Taipei",
+    "longitude": 121.52639,
+    "timeZone": "Asia/Taipei"
+  },
+  {
+    "nameZh": "东京",
+    "nameEn": "Tokyo",
+    "longitude": 139.69171,
+    "timeZone": "Asia/Tokyo"
+  },
+  {
+    "nameZh": "阿克苏市",
+    "nameEn": "Aqsu",
+    "longitude": 80.27921,
+    "timeZone": "Asia/Urumqi"
+  },
+  {
+    "nameZh": "阿图什市",
+    "nameEn": "Artux",
+    "longitude": 76.17971,
+    "timeZone": "Asia/Urumqi"
+  },
+  {
+    "nameZh": "昌吉市",
+    "nameEn": "Changji",
+    "longitude": 87.30461,
+    "timeZone": "Asia/Urumqi"
+  },
+  {
+    "nameZh": "伊宁市",
+    "nameEn": "Ghulja",
+    "longitude": 81.32151,
+    "timeZone": "Asia/Urumqi"
+  },
+  {
+    "nameZh": "克拉玛依市",
+    "nameEn": "Karamay",
+    "longitude": 84.88724,
+    "timeZone": "Asia/Urumqi"
+  },
+  {
+    "nameZh": "喀什市",
+    "nameEn": "Kashgar",
+    "longitude": 75.98675,
+    "timeZone": "Asia/Urumqi"
+  },
+  {
+    "nameZh": "库尔勒市",
+    "nameEn": "Korla",
+    "longitude": 86.15231,
+    "timeZone": "Asia/Urumqi"
+  },
+  {
+    "nameZh": "塔城市",
+    "nameEn": "Tacheng",
+    "longitude": 82.95847,
+    "timeZone": "Asia/Urumqi"
+  },
+  {
+    "nameZh": "图木舒克市",
+    "nameEn": "Tumxuk",
+    "longitude": 79.06118,
+    "timeZone": "Asia/Urumqi"
+  },
+  {
+    "nameZh": "吐鲁番市",
+    "nameEn": "Turpan",
+    "longitude": 89.17886,
+    "timeZone": "Asia/Urumqi"
+  },
+  {
+    "nameZh": "乌鲁木齐市",
+    "nameEn": "UEruemqi",
+    "longitude": 87.60046,
+    "timeZone": "Asia/Urumqi"
+  },
+  {
+    "nameZh": "布里斯班",
+    "nameEn": "Brisbane",
+    "longitude": 153.02809,
+    "timeZone": "Australia/Brisbane"
+  },
+  {
+    "nameZh": "墨尔本",
+    "nameEn": "Melbourne",
+    "longitude": 144.96332,
+    "timeZone": "Australia/Melbourne"
+  },
+  {
+    "nameZh": "珀斯",
+    "nameEn": "Perth",
+    "longitude": 115.8614,
+    "timeZone": "Australia/Perth"
+  },
+  {
+    "nameZh": "悉尼",
+    "nameEn": "Sydney",
+    "longitude": 151.20732,
+    "timeZone": "Australia/Sydney"
+  },
+  {
+    "nameZh": "柏林",
+    "nameEn": "Berlin",
+    "longitude": 13.41053,
+    "timeZone": "Europe/Berlin"
+  },
+  {
+    "nameZh": "法兰克福",
+    "nameEn": "Frankfurt am Main",
+    "longitude": 8.68417,
+    "timeZone": "Europe/Berlin"
+  },
+  {
+    "nameZh": "伦敦",
+    "nameEn": "London",
+    "longitude": -0.12574,
+    "timeZone": "Europe/London"
+  },
+  {
+    "nameZh": "马德里",
+    "nameEn": "Madrid",
+    "longitude": -3.70256,
+    "timeZone": "Europe/Madrid"
+  },
+  {
+    "nameZh": "巴黎",
+    "nameEn": "Paris",
+    "longitude": 2.3488,
+    "timeZone": "Europe/Paris"
+  },
+  {
+    "nameZh": "罗马",
+    "nameEn": "Rome",
+    "longitude": 12.51133,
+    "timeZone": "Europe/Rome"
+  },
+  {
+    "nameZh": "奥克兰",
+    "nameEn": "Auckland",
+    "longitude": 174.76349,
+    "timeZone": "Pacific/Auckland"
+  }
+]

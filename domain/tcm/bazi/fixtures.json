@@ -1,0 +1,1359 @@
+{
+  "provenance": "Per approved task card PR #4: official HKO dates + independent formula oracle. Test clock probes are explicitly derived, not published birth records. Expectations generated only by testing/reference.ts.",
+  "precision": "HKO rounds terms to minutes; boundary probes are +/-2 minutes to avoid rounding ambiguity. Runtime library compares its exact seconds.",
+  "terms": [
+    {
+      "name": "小寒",
+      "hkt": "2024-01-06T04:49:00+08:00",
+      "utc": "2024-01-05T20:49:00.000Z",
+      "longitude": 285,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml"
+    },
+    {
+      "name": "立春",
+      "hkt": "2024-02-04T16:27:00+08:00",
+      "utc": "2024-02-04T08:27:00.000Z",
+      "longitude": 315,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml"
+    },
+    {
+      "name": "惊蛰",
+      "hkt": "2024-03-05T10:23:00+08:00",
+      "utc": "2024-03-05T02:23:00.000Z",
+      "longitude": 345,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml"
+    },
+    {
+      "name": "清明",
+      "hkt": "2024-04-04T15:02:00+08:00",
+      "utc": "2024-04-04T07:02:00.000Z",
+      "longitude": 15,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml"
+    },
+    {
+      "name": "立夏",
+      "hkt": "2024-05-05T08:10:00+08:00",
+      "utc": "2024-05-05T00:10:00.000Z",
+      "longitude": 45,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml"
+    },
+    {
+      "name": "芒种",
+      "hkt": "2024-06-05T12:10:00+08:00",
+      "utc": "2024-06-05T04:10:00.000Z",
+      "longitude": 75,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml"
+    },
+    {
+      "name": "小暑",
+      "hkt": "2024-07-06T22:20:00+08:00",
+      "utc": "2024-07-06T14:20:00.000Z",
+      "longitude": 105,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml"
+    },
+    {
+      "name": "立秋",
+      "hkt": "2024-08-07T08:09:00+08:00",
+      "utc": "2024-08-07T00:09:00.000Z",
+      "longitude": 135,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml"
+    },
+    {
+      "name": "白露",
+      "hkt": "2024-09-07T11:11:00+08:00",
+      "utc": "2024-09-07T03:11:00.000Z",
+      "longitude": 165,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml"
+    },
+    {
+      "name": "寒露",
+      "hkt": "2024-10-08T03:00:00+08:00",
+      "utc": "2024-10-07T19:00:00.000Z",
+      "longitude": 195,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml"
+    },
+    {
+      "name": "立冬",
+      "hkt": "2024-11-07T06:20:00+08:00",
+      "utc": "2024-11-06T22:20:00.000Z",
+      "longitude": 225,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml"
+    },
+    {
+      "name": "大雪",
+      "hkt": "2024-12-06T23:17:00+08:00",
+      "utc": "2024-12-06T15:17:00.000Z",
+      "longitude": 255,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml"
+    }
+  ],
+  "cases": [
+    {
+      "id": "小寒-before",
+      "date": "2024-01-06",
+      "time": "04:47",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-01-05T20:47:00.000Z",
+      "standard": "2024-01-06T04:47",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "小寒: 2024-01-06T04:49:00+08:00; probe -2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "癸卯",
+        "month": "甲子",
+        "day": "己巳",
+        "hour": "丙寅"
+      }
+    },
+    {
+      "id": "小寒-after",
+      "date": "2024-01-06",
+      "time": "04:51",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-01-05T20:51:00.000Z",
+      "standard": "2024-01-06T04:51",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "小寒: 2024-01-06T04:49:00+08:00; probe 2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "癸卯",
+        "month": "乙丑",
+        "day": "己巳",
+        "hour": "丙寅"
+      }
+    },
+    {
+      "id": "立春-before",
+      "date": "2024-02-04",
+      "time": "16:25",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-02-04T08:25:00.000Z",
+      "standard": "2024-02-04T16:25",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "立春: 2024-02-04T16:27:00+08:00; probe -2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "癸卯",
+        "month": "乙丑",
+        "day": "戊戌",
+        "hour": "庚申"
+      }
+    },
+    {
+      "id": "立春-after",
+      "date": "2024-02-04",
+      "time": "16:29",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-02-04T08:29:00.000Z",
+      "standard": "2024-02-04T16:29",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "立春: 2024-02-04T16:27:00+08:00; probe 2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "戊戌",
+        "hour": "庚申"
+      }
+    },
+    {
+      "id": "惊蛰-before",
+      "date": "2024-03-05",
+      "time": "10:21",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-03-05T02:21:00.000Z",
+      "standard": "2024-03-05T10:21",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "惊蛰: 2024-03-05T10:23:00+08:00; probe -2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "戊辰",
+        "hour": "丁巳"
+      }
+    },
+    {
+      "id": "惊蛰-after",
+      "date": "2024-03-05",
+      "time": "10:25",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-03-05T02:25:00.000Z",
+      "standard": "2024-03-05T10:25",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "惊蛰: 2024-03-05T10:23:00+08:00; probe 2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丁卯",
+        "day": "戊辰",
+        "hour": "丁巳"
+      }
+    },
+    {
+      "id": "清明-before",
+      "date": "2024-04-04",
+      "time": "15:00",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-04-04T07:00:00.000Z",
+      "standard": "2024-04-04T15:00",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "清明: 2024-04-04T15:02:00+08:00; probe -2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丁卯",
+        "day": "戊戌",
+        "hour": "庚申"
+      }
+    },
+    {
+      "id": "清明-after",
+      "date": "2024-04-04",
+      "time": "15:04",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-04-04T07:04:00.000Z",
+      "standard": "2024-04-04T15:04",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "清明: 2024-04-04T15:02:00+08:00; probe 2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "戊辰",
+        "day": "戊戌",
+        "hour": "庚申"
+      }
+    },
+    {
+      "id": "立夏-before",
+      "date": "2024-05-05",
+      "time": "08:08",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-05-05T00:08:00.000Z",
+      "standard": "2024-05-05T08:08",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "立夏: 2024-05-05T08:10:00+08:00; probe -2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "戊辰",
+        "day": "己巳",
+        "hour": "戊辰"
+      }
+    },
+    {
+      "id": "立夏-after",
+      "date": "2024-05-05",
+      "time": "08:12",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-05-05T00:12:00.000Z",
+      "standard": "2024-05-05T08:12",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "立夏: 2024-05-05T08:10:00+08:00; probe 2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "己巳",
+        "day": "己巳",
+        "hour": "戊辰"
+      }
+    },
+    {
+      "id": "芒种-before",
+      "date": "2024-06-05",
+      "time": "12:08",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-06-05T04:08:00.000Z",
+      "standard": "2024-06-05T12:08",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "芒种: 2024-06-05T12:10:00+08:00; probe -2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "己巳",
+        "day": "庚子",
+        "hour": "壬午"
+      }
+    },
+    {
+      "id": "芒种-after",
+      "date": "2024-06-05",
+      "time": "12:12",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-06-05T04:12:00.000Z",
+      "standard": "2024-06-05T12:12",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "芒种: 2024-06-05T12:10:00+08:00; probe 2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "庚午",
+        "day": "庚子",
+        "hour": "壬午"
+      }
+    },
+    {
+      "id": "小暑-before",
+      "date": "2024-07-06",
+      "time": "22:18",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-07-06T14:18:00.000Z",
+      "standard": "2024-07-06T22:18",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "小暑: 2024-07-06T22:20:00+08:00; probe -2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "庚午",
+        "day": "辛未",
+        "hour": "己亥"
+      }
+    },
+    {
+      "id": "小暑-after",
+      "date": "2024-07-06",
+      "time": "22:22",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-07-06T14:22:00.000Z",
+      "standard": "2024-07-06T22:22",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "小暑: 2024-07-06T22:20:00+08:00; probe 2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "辛未",
+        "day": "辛未",
+        "hour": "己亥"
+      }
+    },
+    {
+      "id": "立秋-before",
+      "date": "2024-08-07",
+      "time": "08:07",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-08-07T00:07:00.000Z",
+      "standard": "2024-08-07T08:07",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "立秋: 2024-08-07T08:09:00+08:00; probe -2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "辛未",
+        "day": "癸卯",
+        "hour": "丙辰"
+      }
+    },
+    {
+      "id": "立秋-after",
+      "date": "2024-08-07",
+      "time": "08:11",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-08-07T00:11:00.000Z",
+      "standard": "2024-08-07T08:11",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "立秋: 2024-08-07T08:09:00+08:00; probe 2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "壬申",
+        "day": "癸卯",
+        "hour": "丙辰"
+      }
+    },
+    {
+      "id": "白露-before",
+      "date": "2024-09-07",
+      "time": "11:09",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-09-07T03:09:00.000Z",
+      "standard": "2024-09-07T11:09",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "白露: 2024-09-07T11:11:00+08:00; probe -2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "壬申",
+        "day": "甲戌",
+        "hour": "庚午"
+      }
+    },
+    {
+      "id": "白露-after",
+      "date": "2024-09-07",
+      "time": "11:13",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-09-07T03:13:00.000Z",
+      "standard": "2024-09-07T11:13",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "白露: 2024-09-07T11:11:00+08:00; probe 2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "癸酉",
+        "day": "甲戌",
+        "hour": "庚午"
+      }
+    },
+    {
+      "id": "寒露-before",
+      "date": "2024-10-08",
+      "time": "02:58",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-10-07T18:58:00.000Z",
+      "standard": "2024-10-08T02:58",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "寒露: 2024-10-08T03:00:00+08:00; probe -2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "癸酉",
+        "day": "乙巳",
+        "hour": "丁丑"
+      }
+    },
+    {
+      "id": "寒露-after",
+      "date": "2024-10-08",
+      "time": "03:02",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-10-07T19:02:00.000Z",
+      "standard": "2024-10-08T03:02",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "寒露: 2024-10-08T03:00:00+08:00; probe 2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "甲戌",
+        "day": "乙巳",
+        "hour": "戊寅"
+      }
+    },
+    {
+      "id": "立冬-before",
+      "date": "2024-11-07",
+      "time": "06:18",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-11-06T22:18:00.000Z",
+      "standard": "2024-11-07T06:18",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "立冬: 2024-11-07T06:20:00+08:00; probe -2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "甲戌",
+        "day": "乙亥",
+        "hour": "己卯"
+      }
+    },
+    {
+      "id": "立冬-after",
+      "date": "2024-11-07",
+      "time": "06:22",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-11-06T22:22:00.000Z",
+      "standard": "2024-11-07T06:22",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "立冬: 2024-11-07T06:20:00+08:00; probe 2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "乙亥",
+        "day": "乙亥",
+        "hour": "己卯"
+      }
+    },
+    {
+      "id": "大雪-before",
+      "date": "2024-12-06",
+      "time": "23:15",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-12-06T15:15:00.000Z",
+      "standard": "2024-12-06T23:15",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "大雪: 2024-12-06T23:17:00+08:00; probe -2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "乙亥",
+        "day": "乙巳",
+        "hour": "丙子"
+      }
+    },
+    {
+      "id": "大雪-after",
+      "date": "2024-12-06",
+      "time": "23:19",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-12-06T15:19:00.000Z",
+      "standard": "2024-12-06T23:19",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+        "locator": "大雪: 2024-12-06T23:17:00+08:00; probe 2 minutes from published rounded minute",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙子",
+        "day": "乙巳",
+        "hour": "丙子"
+      }
+    },
+    {
+      "id": "spring-day-2024-02-03",
+      "date": "2024-02-03",
+      "time": "12:00",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-02-03T04:00:00.000Z",
+      "standard": "2024-02-03T12:00",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1; clock minute is a synthetic boundary probe, not a real person",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "癸卯",
+        "month": "乙丑",
+        "day": "丁酉",
+        "hour": "丙午"
+      }
+    },
+    {
+      "id": "spring-day-2024-02-05",
+      "date": "2024-02-05",
+      "time": "12:00",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-02-05T04:00:00.000Z",
+      "standard": "2024-02-05T12:00",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1; clock minute is a synthetic boundary probe, not a real person",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "己亥",
+        "hour": "庚午"
+      }
+    },
+    {
+      "id": "zi-22:59-nextDay",
+      "date": "2024-02-10",
+      "time": "22:59",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-02-10T14:59:00.000Z",
+      "standard": "2024-02-10T22:59",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1: 10 February is lunar New Year; time probes derived for zi-rule tests",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "甲辰",
+        "hour": "乙亥"
+      }
+    },
+    {
+      "id": "zi-22:59-sameDay",
+      "date": "2024-02-10",
+      "time": "22:59",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-02-10T14:59:00.000Z",
+      "standard": "2024-02-10T22:59",
+      "ziHourRule": "sameDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1: 10 February is lunar New Year; time probes derived for zi-rule tests",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "甲辰",
+        "hour": "乙亥"
+      }
+    },
+    {
+      "id": "zi-23:00-nextDay",
+      "date": "2024-02-10",
+      "time": "23:00",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-02-10T15:00:00.000Z",
+      "standard": "2024-02-10T23:00",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1: 10 February is lunar New Year; time probes derived for zi-rule tests",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "乙巳",
+        "hour": "丙子"
+      }
+    },
+    {
+      "id": "zi-23:00-sameDay",
+      "date": "2024-02-10",
+      "time": "23:00",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-02-10T15:00:00.000Z",
+      "standard": "2024-02-10T23:00",
+      "ziHourRule": "sameDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1: 10 February is lunar New Year; time probes derived for zi-rule tests",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "甲辰",
+        "hour": "丙子"
+      }
+    },
+    {
+      "id": "zi-23:59-nextDay",
+      "date": "2024-02-10",
+      "time": "23:59",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-02-10T15:59:00.000Z",
+      "standard": "2024-02-10T23:59",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1: 10 February is lunar New Year; time probes derived for zi-rule tests",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "乙巳",
+        "hour": "丙子"
+      }
+    },
+    {
+      "id": "zi-23:59-sameDay",
+      "date": "2024-02-10",
+      "time": "23:59",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-02-10T15:59:00.000Z",
+      "standard": "2024-02-10T23:59",
+      "ziHourRule": "sameDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1: 10 February is lunar New Year; time probes derived for zi-rule tests",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "甲辰",
+        "hour": "丙子"
+      }
+    },
+    {
+      "id": "zi-00:00-nextDay",
+      "date": "2024-02-10",
+      "time": "00:00",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-02-09T16:00:00.000Z",
+      "standard": "2024-02-10T00:00",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1: 10 February is lunar New Year; time probes derived for zi-rule tests",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "甲辰",
+        "hour": "甲子"
+      }
+    },
+    {
+      "id": "zi-00:00-sameDay",
+      "date": "2024-02-10",
+      "time": "00:00",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2024-02-09T16:00:00.000Z",
+      "standard": "2024-02-10T00:00",
+      "ziHourRule": "sameDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1: 10 February is lunar New Year; time probes derived for zi-rule tests",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "甲辰",
+        "hour": "甲子"
+      }
+    },
+    {
+      "id": "leap-second-month",
+      "date": "2023-03-22",
+      "time": "12:00",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "2023-03-22T04:00:00.000Z",
+      "standard": "2023-03-22T12:00",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2023.pdf",
+        "locator": "p1 March 22: leap second month day 1; noon probe, solar-month independent of lunar leap month",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "癸卯",
+        "month": "乙卯",
+        "day": "己卯",
+        "hour": "庚午"
+      }
+    },
+    {
+      "id": "beijing-1988-dst",
+      "date": "1988-07-01",
+      "time": "14:00",
+      "timeZone": "Asia/Shanghai",
+      "longitude": 116.39723,
+      "utc": "1988-07-01T05:00:00.000Z",
+      "standard": "1988-07-01T13:00",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/1988.pdf",
+        "locator": "p1 July 1; synthetic clock 14:00, historical IANA Asia/Shanghai DST UTC+9, standard 13:00",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "戊辰",
+        "month": "戊午",
+        "day": "丁巳",
+        "hour": "丁未"
+      }
+    },
+    {
+      "id": "new-york-spring-03:25",
+      "date": "2024-02-04",
+      "time": "03:25",
+      "timeZone": "America/New_York",
+      "longitude": -74.00597,
+      "utc": "2024-02-04T08:25:00.000Z",
+      "standard": "2024-02-04T03:25",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1; clock minute is a synthetic boundary probe, not a real person",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "癸卯",
+        "month": "乙丑",
+        "day": "戊戌",
+        "hour": "甲寅"
+      }
+    },
+    {
+      "id": "new-york-spring-03:30",
+      "date": "2024-02-04",
+      "time": "03:30",
+      "timeZone": "America/New_York",
+      "longitude": -74.00597,
+      "utc": "2024-02-04T08:30:00.000Z",
+      "standard": "2024-02-04T03:30",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1; clock minute is a synthetic boundary probe, not a real person",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "戊戌",
+        "hour": "甲寅"
+      }
+    },
+    {
+      "id": "new-york-summer",
+      "date": "2024-07-06",
+      "time": "11:00",
+      "timeZone": "America/New_York",
+      "longitude": -74.00597,
+      "utc": "2024-07-06T15:00:00.000Z",
+      "standard": "2024-07-06T10:00",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1; clock minute is a synthetic boundary probe, not a real person",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "辛未",
+        "day": "辛未",
+        "hour": "癸巳"
+      }
+    },
+    {
+      "id": "sydney-summer",
+      "date": "2024-02-10",
+      "time": "00:30",
+      "timeZone": "Australia/Sydney",
+      "longitude": 151.20732,
+      "utc": "2024-02-09T13:30:00.000Z",
+      "standard": "2024-02-09T23:30",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1; clock minute is a synthetic boundary probe, not a real person",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "丙寅",
+        "day": "甲辰",
+        "hour": "甲子"
+      }
+    },
+    {
+      "id": "new-york-fold-earlier",
+      "date": "2024-11-03",
+      "time": "01:30",
+      "timeZone": "America/New_York",
+      "longitude": -74.00597,
+      "utc": "2024-11-03T05:30:00.000Z",
+      "standard": "2024-11-03T00:30",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1; clock minute is a synthetic boundary probe, not a real person",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "甲戌",
+        "day": "辛未",
+        "hour": "戊子"
+      }
+    },
+    {
+      "id": "new-york-fold-later",
+      "date": "2024-11-03",
+      "time": "01:30",
+      "timeZone": "America/New_York",
+      "longitude": -74.00597,
+      "utc": "2024-11-03T06:30:00.000Z",
+      "standard": "2024-11-03T01:30",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+        "locator": "HKO 2024 calendar p1; clock minute is a synthetic boundary probe, not a real person",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "甲辰",
+        "month": "甲戌",
+        "day": "辛未",
+        "hour": "己丑"
+      }
+    }
+  ],
+  "additionalAcceptance": {
+    "unknownSpring": {
+      "date": "2024-02-04",
+      "time": null,
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+      "termHkt": "16:27",
+      "before": {
+        "year": "癸卯",
+        "month": "乙丑"
+      },
+      "after": {
+        "year": "甲辰",
+        "month": "丙寅"
+      },
+      "formulaSources": [
+        "https://aa.usno.navy.mil/faq/JD_formula",
+        "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+        "https://aa.usno.navy.mil/faq/sun_approx"
+      ]
+    },
+    "unknownRanges": {
+      "date": "2024-02-04",
+      "ranges": [
+        [
+          "13:00",
+          "16:00"
+        ],
+        [
+          "13:00",
+          "17:00"
+        ],
+        [
+          "17:00",
+          "19:00"
+        ]
+      ],
+      "source": "https://www.hko.gov.hk/tc/gts/astronomy/data/files/24SolarTerms_2024.xml",
+      "independent": [
+        "https://aa.usno.navy.mil/faq/JD_formula",
+        "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+        "https://aa.usno.navy.mil/faq/sun_approx"
+      ],
+      "method": "Ranges derived around the published 16:27 spring boundary; expected sides determined by comparison, no fabricated birth time"
+    },
+    "solar": {
+      "date": "2024-02-10",
+      "time": "14:10",
+      "longitudes": [
+        105,
+        120
+      ],
+      "source": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf",
+      "independent": "https://gml.noaa.gov/grad/solcalc/solareqns.PDF",
+      "method": "Synthetic 15-degree perturbation on an official calendar date, NOAA time_offset equation implies exactly 60 solar minutes for the same UTC instant"
+    },
+    "ages": {
+      "birthdays": [
+        "2000-06-15",
+        "2000-02-29"
+      ],
+      "checks": [
+        "2024-06-14",
+        "2024-06-15",
+        "2023-02-28",
+        "2023-03-01",
+        "2024-02-28",
+        "2024-02-29"
+      ],
+      "source": [
+        "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2000.pdf",
+        "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2023.pdf",
+        "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf"
+      ],
+      "independent": "https://aa.usno.navy.mil/faq/asa_glossary",
+      "method": "Gregorian dates/leap-day existence cross-check; age arithmetic and March-1 rule fixed by task card, not claimed as an almanac age entry"
+    },
+    "gap": {
+      "date": "2024-03-10",
+      "time": "02:30",
+      "timeZone": "America/New_York",
+      "source": "https://data.iana.org/time-zones/tzdb/northamerica"
+    },
+    "fold": {
+      "date": "2024-11-03",
+      "time": "01:30",
+      "timeZone": "America/New_York",
+      "source": "https://data.iana.org/time-zones/tzdb/northamerica"
+    },
+    "historicalAndFractionalDst": {
+      "cases": [
+        {
+          "date": "1988-07-01",
+          "time": "00:30",
+          "zone": "Asia/Shanghai",
+          "standard": "1988-06-30T23:30"
+        },
+        {
+          "date": "1988-04-17",
+          "time": "02:30",
+          "zone": "Asia/Shanghai",
+          "error": "NONEXISTENT_LOCAL_TIME"
+        },
+        {
+          "date": "1941-07-01",
+          "time": "14:30",
+          "zone": "Europe/London",
+          "standard": "1941-07-01T12:30"
+        },
+        {
+          "date": "2024-01-15",
+          "time": "13:15",
+          "zone": "Australia/Lord_Howe",
+          "standard": "2024-01-15T12:45"
+        }
+      ],
+      "sources": [
+        "https://data.iana.org/time-zones/tzdb/asia",
+        "https://data.iana.org/time-zones/tzdb/europe",
+        "https://data.iana.org/time-zones/tzdb/australasia",
+        "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/1941.pdf",
+        "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/1988.pdf",
+        "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf"
+      ],
+      "independent": [
+        "https://aa.usno.navy.mil/faq/JD_formula",
+        "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+        "https://aa.usno.navy.mil/faq/sun_approx"
+      ],
+      "method": "Synthetic clock probes on official calendar dates; civil/standard offsets cross-checked against IANA historical rules; JDN/five-rat expected day/hour independent of library"
+    },
+    "actualCitiesSolar": {
+      "date": "2024-02-10",
+      "time": "14:10",
+      "cities": [
+        "Xining",
+        "Beijing"
+      ],
+      "sources": [
+        "https://download.geonames.org/export/dump/CN.zip",
+        "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/2024.pdf"
+      ],
+      "independent": "https://gml.noaa.gov/grad/solcalc/solareqns.PDF",
+      "method": "Selected GeoNames city coordinates; 4 minutes per degree and EOT put Xining in 午 and Beijing in 未 at this clock minute"
+    },
+    "knownBlockingFailures": {
+      "status": "NOT ACCEPTED; explicit it.fails regressions, pending timezone dependency approval",
+      "cases": [
+        {
+          "date": "1948-07-01",
+          "time": "13:30",
+          "timeZone": "Asia/Macau",
+          "standard": "1948-07-01T12:30",
+          "expectedHourBranch": "午"
+        },
+        {
+          "date": "1935-07-01",
+          "time": "13:10",
+          "timeZone": "Asia/Singapore",
+          "standard": "1935-07-01T12:50",
+          "expectedHourBranch": "午"
+        }
+      ],
+      "sources": [
+        "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/1948.pdf",
+        "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/1935.pdf",
+        "https://data.iana.org/time-zones/tzdb/asia"
+      ],
+      "independent": [
+        "https://aa.usno.navy.mil/faq/JD_formula",
+        "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+        "https://aa.usno.navy.mil/faq/sun_approx"
+      ],
+      "method": "Official Gregorian calendar dates + IANA STDOFF/SAVE; independent five-rat rule. Correct expectations currently fail; never use current implementation output as expected."
+    }
+  }
+}
