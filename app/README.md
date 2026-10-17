@@ -8,3 +8,4 @@ M1-02 提供 IndexedDB 本地加密存储，身份由不可导出的设备密钥
 在本目录运行 npm ci，然后运行 npm run typecheck、npm test、npm run build。
 日常开发运行 npm run dev。src/core/identity/ 和 src/core/store/ 包含身份、存储及验收测试；
 src/core/llm/ 包含模型客户端（社区网关、自有 API Key、本地模型）及其测试。
+src/core/redflags/ 包含急症红线引擎及其验收测试（含界面入口）。
