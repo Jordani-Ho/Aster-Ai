@@ -87,3 +87,26 @@ it('每分钟限流到期后可再次提醒',async()=>{
  now=60000
  assert.equal((await service.handle('/push/notify',caller,{pubkey:owner})).status,202)
 })
+
+it('NIP-98：同内容请求带不同 nonce 都通过，原样重放仍然 401', async () => {
+ const path=file(), dir=join(path,'..'), membersFile=join(dir,'members.json')
+ const key=generateSecretKey(), pubkey=getPublicKey(key)
+ writeFileSync(membersFile, JSON.stringify([pubkey]))
+ const server=createGateway({ membersFile, logFile: join(dir,'nonce.log'), maxBodyBytes: 1024, rateLimit: { windowMs: 60000, maxPerWindow: 20 }, push: { subscriptionsFile: path, send: async () => {} } })
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
+ const base='http://127.0.0.1:'+server.address().port
+ const body=JSON.stringify({ subscription })
+ const headerWithNonce = nonce => {
+  const url=base+'/push/subscribe'
+  const event=finalizeEvent({kind:27235,created_at:Math.floor(Date.now()/1000),tags:[['u',url],['method','POST'],['payload',createHash('sha256').update(body).digest('hex')],['nonce',nonce]],content:''},key)
+  return 'Nostr '+Buffer.from(JSON.stringify(event)).toString('base64')
+ }
+ const send = authorization => fetch(base+'/push/subscribe',{method:'POST',headers:{authorization},body})
+ try {
+  const first = headerWithNonce(randomUUID())
+  const second = headerWithNonce(randomUUID())
+  assert.equal((await send(first)).status, 200)
+  assert.equal((await send(second)).status, 200)
+  assert.equal((await send(first)).status, 401)
+ } finally { server.closeAllConnections(); await new Promise(resolve=>server.close(resolve)) }
+})
