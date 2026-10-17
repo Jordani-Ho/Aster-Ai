@@ -140,3 +140,13 @@ CI 的现有 npm test 会自动执行这些用例，不需要浏览器或额外�
 M1-13集合登记：`homework`保存`{homework, startsOn}`（共用Homework及生效日期）；`checkins`保存`{homeworkId, at, note?}`。两个集合均使用随机ID键、AES-GCM加密，只保存在本人手机，不上传或同步。
 
 M1-06集合：backup-status保存result、lastAttempt、lastSuccess、lastFile、lastRestore和固定error；backup-config保存relays。均为随机UUID键及加密JSON，仅必要配置随加密备份恢复。
+
+M1-14b 集合登记：
+
+| 集合 | 用途与字段 | 备注 |
+| :-- | :-- | :-- |
+| ledger-index | 随机 UUID 键 -> {teacher, student, collection, key} | 值整体加密，关联不出现在集合名或键名 |
+| ledger-随机32位十六进制 | 每本师生账独立集合；随机 UUID 键保存 {ledger, notices, conflicts, receipts, pendingDisputes, outbox} | ledger 含老师记账链与学生异议；conflicts 保存已验签分叉证据；receipts 保存首次收到时间、决定、迟到提示；outbox 保存待发信封。全部 AES-GCM 加密，随备份恢复 |
+
+每本账的变更和待发记录在同一次 put 中保存，成功后才发网络；索引创建在账本记录之后。
+M1 仅支持同一身份一个账本控制器；多个标签页同时写同一本账不提供业务级合并或锁。

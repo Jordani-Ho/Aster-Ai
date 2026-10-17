@@ -23,3 +23,6 @@ export {
 } from './types'
 export { append, appendDispute, balance, createLedger, declarePricing, overdueSince, signDispute, signEvent } from './chain'
 export { verify } from './verify'
+
+export { createLedgerSync } from './sync'
+export type { DisputeReceipt, LedgerView } from './sync'

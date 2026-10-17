@@ -1,3 +1,4 @@
+import { LedgerSettings } from './LedgerSettings'
 import { BackupSettings } from './BackupSettings'
 import './homework.css'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
@@ -54,14 +55,14 @@ export function App() {
     } catch (cause) { result.privateKey.fill(0); setError(cause instanceof Error ? cause.message : '无法保存身份，请重试') }
     finally { setBusy(false) }
   }
-  if (homeworkPage && storeRef.current && identity) return <><div hidden><BackupSettings identity={identity} store={storeRef.current} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={storeRef.current} onBack={()=>setHomeworkPage(false)} /></Suspense></>
-  if (intakePage && storeRef.current && identity) return <Suspense fallback={<p>正在打开采集页…</p>}><IntakePage store={storeRef.current} identity={identity} onBack={()=>setIntakePage(false)} /></Suspense>
+  if (homeworkPage && storeRef.current && identity) return <><div hidden><BackupSettings identity={identity} store={storeRef.current} /><LedgerSettings identity={identity} store={storeRef.current} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={storeRef.current} onBack={()=>setHomeworkPage(false)} /></Suspense></>
+  if (intakePage && storeRef.current && identity) return <><div hidden><BackupSettings identity={identity} store={storeRef.current} /><LedgerSettings identity={identity} store={storeRef.current} /></div><Suspense fallback={<p>正在打开采集页…</p>}><IntakePage store={storeRef.current} identity={identity} onBack={()=>setIntakePage(false)} /></Suspense></>
   return (
     <main style={{ fontFamily: 'system-ui, sans-serif', padding: '24px 16px', maxWidth: 480, margin: '0 auto' }}>
       <h1>知衡 · 身份</h1>
       <p>请用生成时的同一种文字恢复</p>
       <p>身份由设备密钥加密保存在本机，重新打开可自动解锁。浏览器数据被清空后，请用助记词恢复；业务数据还需从备份恢复。请妥善抄写，不要交给他人。</p>
-      <details><summary>设置</summary><h2>存储状态</h2><p role="status">{persistenceLabels[persistence]}</p><p>持久化存储不能替代备份。</p>{identity && storeRef.current && <BackupSettings identity={identity} store={storeRef.current} />}</details>
+      <details><summary>设置</summary><h2>存储状态</h2><p role="status">{persistenceLabels[persistence]}</p><p>持久化存储不能替代备份。</p>{identity && storeRef.current && <><BackupSettings identity={identity} store={storeRef.current} /><LedgerSettings identity={identity} store={storeRef.current} /></>}</details>
       {loading && <p>正在解锁本地身份…</p>}
       {error && <p role="alert">{error}</p>}
       {!loading && step === 'start' && <>

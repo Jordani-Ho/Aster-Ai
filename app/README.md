@@ -17,3 +17,5 @@ src/SignEncounterPage.tsx 是老师端审改、签字界面；docs/screenshots/s
 src/InPersonPage.tsx 是老师端面诊记录界面（老师代录 intake、当面拍照，签字交还复用 M1-10/M1-11）；docs/screenshots/in-person-375.png 为 375px 截图。
 
 M1-06：身份就绪后的“备份状态”默认检查每日备份；部署用VITE_COMMUNITY_RELAYS提供公开中继列表，未配置会明确提示。支持含照片加密文件导出与助记词恢复后的中继恢复。详见src/core/backup/README.md及relay/backup.md。
+
+M1-14b：设置中登记师生公钥、查看康币账本和对账码；打开/前台恢复/推送后同步。规则与已知边界见 src/core/ledger/README.md。复用备份中继设置，双方需各自登记账本。本卡没有记账操作页和真实支付。
