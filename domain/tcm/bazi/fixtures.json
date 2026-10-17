@@ -1179,6 +1179,58 @@
         "day": "辛未",
         "hour": "己丑"
       }
+    },
+    {
+      "id": "macau-1948-dst",
+      "date": "1948-07-01",
+      "time": "13:30",
+      "timeZone": "Asia/Macau",
+      "longitude": 113.54611,
+      "utc": "1948-07-01T04:30:00.000Z",
+      "standard": "1948-07-01T12:30",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/1948.pdf",
+        "locator": "p1 July 1; clock probe 13:30; IANA asia Macau 1948 SAVE=1:00, standard offset +08:00",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "戊子",
+        "month": "戊午",
+        "day": "丁亥",
+        "hour": "丙午"
+      }
+    },
+    {
+      "id": "singapore-1935-dst",
+      "date": "1935-07-01",
+      "time": "13:10",
+      "timeZone": "Asia/Singapore",
+      "longitude": 103.85007,
+      "utc": "1935-07-01T05:50:00.000Z",
+      "standard": "1935-07-01T12:50",
+      "ziHourRule": "nextDay",
+      "sources": {
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/1935.pdf",
+        "locator": "p1 July 1; clock probe 13:10; IANA asia Singapore 1933-1936 fixed SAVE=0:20, standard offset +07:00",
+        "independent": [
+          "https://aa.usno.navy.mil/faq/JD_formula",
+          "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
+          "https://aa.usno.navy.mil/faq/sun_approx"
+        ],
+        "method": "HKO official dates/terms + independent JDN/cycle/five-rat formulas in testing/reference.ts; no library-generated expectations"
+      },
+      "expected": {
+        "year": "乙亥",
+        "month": "壬午",
+        "day": "戊寅",
+        "hour": "戊午"
+      }
     }
   ],
   "additionalAcceptance": {
@@ -1325,8 +1377,8 @@
       "independent": "https://gml.noaa.gov/grad/solcalc/solareqns.PDF",
       "method": "Selected GeoNames city coordinates; 4 minutes per degree and EOT put Xining in 午 and Beijing in 未 at this clock minute"
     },
-    "knownBlockingFailures": {
-      "status": "NOT ACCEPTED; explicit it.fails regressions, pending timezone dependency approval",
+    "historicalStandardRegressions": {
+      "status": "Fixed with approved timezonecomplete@5.15.1 and pinned tzdata@1.0.52; ordinary passing tests, no expected failures",
       "cases": [
         {
           "date": "1948-07-01",
@@ -1353,7 +1405,7 @@
         "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
         "https://aa.usno.navy.mil/faq/sun_approx"
       ],
-      "method": "Official Gregorian calendar dates + IANA STDOFF/SAVE; independent five-rat rule. Correct expectations currently fail; never use current implementation output as expected."
+      "method": "Official Gregorian calendar dates + IANA STDOFF/SAVE; independent five-rat rule. Expectations never copied from the implementation."
     }
   }
 }

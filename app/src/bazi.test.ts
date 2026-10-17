@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync, statSync } from 'node:fs'
-import { toBazi, ageAt, cities, type City } from '../../domain/tcm/bazi'
+import { toBazi as toBaziAsync, ageAt, cities, type City } from '../../domain/tcm/bazi'
+import { convertToBazi as toBazi } from '../../domain/tcm/bazi/conversion'
+import { clockCandidates } from '../../domain/tcm/bazi/time-zone'
 import fixtures from '../../domain/tcm/bazi/fixtures.json'
 import { approximateLongitude, referenceKnown, referenceDay, type KnownCase } from '../../domain/tcm/bazi/testing/reference'
 
@@ -24,11 +26,11 @@ describe('M1-03 sourced fixtures and independent oracle', () => {
     expect(reference).not.toMatch(/^import .*from .*lunar-typescript/m)
   })
   for (const row of fixtures.cases as KnownCase[]) {
-    it(row.id, () => {
+    it(row.id, async () => {
       expect(row.sources.official).toMatch(/^https:\/\/www.hko.gov.hk\//)
       expect(row.sources.independent.length).toBeGreaterThanOrEqual(2)
       expect(referenceKnown(row, fixtures.terms)).toEqual(row.expected)
-      const actual = toBazi({ date: row.date, time: row.time,
+      const actual = await toBaziAsync({ date: row.date, time: row.time,
         city: { ...beijing, longitude: row.longitude, timeZone: row.timeZone },
         occurrence: row.id.endsWith('fold-later') ? 'later' : 'earlier',
       }, { ziHourRule: row.ziHourRule })
@@ -108,16 +110,15 @@ describe('M1-03 clock rules', () => {
     expect(b.hour?.[1]).toBe('午')
     expect(b.day).toBe(referenceDay('1941-07-01'))
   })
-  // BLOCKING known failures, not accepted behavior. Remove .fails after the proposed
-  // historical-standard-offset dependency is approved and these cases really pass.
-  // Intl's numeric GMT names contain no DST/standard distinction.
-  it.fails('BLOCKER: Macau 1948 numeric GMT name hides a one-hour DST saving', () => {
+  it('Macau 1948 uses standard offset rather than its numeric GMT display name', () => {
     const city = {...beijing,timeZone:'Asia/Macau',longitude:113.54611}
-    expect(toBazi({date:'1948-07-01',time:'13:30',city}).hour?.[1]).toBe('午') // standard 12:30
+    const expected = fixtures.cases.find(c=>c.id==='macau-1948-dst')!.expected.hour
+    expect(toBazi({date:'1948-07-01',time:'13:30',city}).hour).toBe(expected) // standard 12:30
   })
-  it.fails('BLOCKER: Singapore 1935 numeric GMT name hides a twenty-minute saving', () => {
+  it('Singapore 1935 deducts the historical twenty-minute saving', () => {
     const city = {...beijing,timeZone:'Asia/Singapore',longitude:103.85007}
-    expect(toBazi({date:'1935-07-01',time:'13:10',city}).hour?.[1]).toBe('午') // standard 12:50
+    const expected = fixtures.cases.find(c=>c.id==='singapore-1935-dst')!.expected.hour
+    expect(toBazi({date:'1935-07-01',time:'13:10',city}).hour).toBe(expected) // standard 12:50
   })
   it('15 degrees equals one solar hour, independently of the configured time zone', () => {
     const west = {...beijing,longitude:105}
@@ -182,14 +183,14 @@ describe('M1-03 age and offline city data', () => {
     expect(()=>ageAt('2024-02-10','2024-02-09')).toThrow()
     expect(()=>ageAt('2023-02-29','2024-03-01')).toThrow()
   })
-  it('ships a compact attributed city table with valid coordinates and Intl time zones', () => {
+  it('ships a compact attributed city table with valid coordinates and pinned IANA time zones', () => {
     expect(cities.length).toBeGreaterThan(300)
     expect(statSync(new URL('../../domain/tcm/bazi/cities.json',import.meta.url)).size).toBeLessThan(300*1024)
     for(const city of cities) {
       expect(city.nameZh).toMatch(/[\u3400-\u9fff]/)
       expect(city.nameEn).not.toBe('')
       expect(Math.abs(city.longitude)).toBeLessThanOrEqual(180)
-      expect(()=>new Intl.DateTimeFormat('en',{timeZone:city.timeZone})).not.toThrow()
+      expect(()=>clockCandidates(Date.UTC(2024,1,10,12),city.timeZone)).not.toThrow()
     }
     for(const name of ['Beijing','Shanghai','New York City','Sydney','Singapore','Toronto']) {
       expect(cities.some(c=>c.nameEn===name)).toBe(true)

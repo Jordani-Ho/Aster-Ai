@@ -1,16 +1,16 @@
 # 八字与周岁（M1-03）
 
-纯本地函数，无网络、存储、日志或 AI 调用。遵循任务卡及 PR #4 两次答复。界面和消息发送在其他任务中接入。
+本地纯换算核心配合按需加载入口，无学生数据上传、存储、日志或 AI 调用。遵循任务卡及 PR #4 三次答复。首次换算只加载固定静态代码和时区数据；界面、离线资源缓存和消息发送在其他任务中接入。
 
-**状态：施工中，不能验收或合并。** 已发现 `Intl` 仅给出数字 GMT 名称的历史时刻无法按名称可靠扣除夏令时：1948 年澳门、1935 年新加坡仍有错误。测试明确标记了 2 个 `it.fails` 阻塞案例，不代表功能通过；依赖提案见任务提问文件及 PR #4，等待批准后替换标准偏移推断，并移除 `.fails` 使正确预期真正通过。
+已使用批准的单一时区数据源修复两条历史回归，移除全部预期失败标记，等待技术合伙人审核，未合并。
 
 ```ts
 import { toBazi, ageAt, cities } from './domain/tcm/bazi'
 
 const city = cities.find(c => c.nameEn === 'Beijing')!
-const result = toBazi({ date: '2024-02-04', time: null, city })
+const result = await toBazi({ date: '2024-02-04', time: null, city })
 // year/month 为 null；ambiguous.before/after 分别给出交节前后候选。
-const resolved = toBazi({ date: '2024-02-04', city,
+const resolved = await toBazi({ date: '2024-02-04', city,
   timeRange: { start: '17:00', end: '19:00' } })
 // 年/月柱唯一，hour 仍为 null，flags 含“时柱缺”。
 ageAt('2000-02-29', '2023-03-01') // 23
@@ -18,6 +18,7 @@ ageAt('2000-02-29', '2023-03-01') // 23
 
 ## 输入与返回
 
+- `toBazi` 返回 `Promise<BaziResult>`，调用方必须 `await`。公开入口只同步加载城市与轻量日期校验；首次调用才动态导入 `conversion.ts`，其中同步纯函数 `convertToBazi` 完成计算，后续调用复用已加载的模块。`ageAt` 保持同步，也不会加载时区引擎。
 - `date`：当地公历日期 `YYYY-MM-DD`，1900—2100 年；`time`：当地钟表时间 `HH:mm`，省略或 `null` 表示未知。禁止同时传入精确时间和大致时段。
 - `city`：中英文名、东经为正的 `longitude`、IANA `timeZone`。可直接传入只读的 `cities` 条目。
 - 缺时可传 `timeRange: {start,end}`，同一当地日期内的半开区间 `[start,end)`，末端允许 `24:00`。跨午夜区间需先明确出生日期；本参数不解析“下午”等自然语言，也不产生假定时柱。
@@ -29,19 +30,21 @@ ageAt('2000-02-29', '2023-03-01') // 23
 
 ## 换算依据与精度
 
-钟表时间先由 `Intl` 的历史 IANA 规则解析为 UTC。分别验证所有可能的偏移，区分不存在/重复时间。年/月柱以 UTC+8 送入历法库，用其精确节气秒值比较；不受真太阳时开关影响。
+整条时区路径只用 `timezonecomplete@5.15.1` 和 `tzdata@1.0.52`。模块显式 `TzDatabase.init(tzdata)`，不使用库的全局/模块自动发现机制。钟表时间的 UTC 候选由固定数据的总偏移往返核对：无候选为不存在，两候选为重复；不调用会自动修补缺口的 `offsetForZone`。年/月柱以 UTC+8 送入历法库，精确比较节气秒值，不受真太阳时开关影响。
 
-日/时柱要求使用当地标准时、扣除夏令时。当前草稿通过固定英语 locale 的 Daylight/Summer 名称识别夏令时，再查找最近标准时；普通夏令时、半小时和多年战时夏令时的测试通过，但数字 GMT 名称会使此推断失效，**不能作为最终实现**。正在申请基于 IANA 原始规则提供标准偏移的成熟库，替换这一推断，绝不以“1 月/7 月取最小偏移”掩盖问题。
+日/时柱使用 `TimeZone.standardOffsetForUtc` 返回的历史标准偏移，正确扣除普通、半小时、多年战时与固定 20 分钟的夏令时。两条回归（澳门 1948-07-01、新加坡 1935-07-01）已成为普通通过测试，并加入完整四柱来源样例。代码不再依据展示名称或冬夏最小偏移猜标准时。
 
 真太阳时采用 `UTC + 经度 × 4 分钟 + 均时差`。[均时差公式](https://gml.noaa.gov/grad/solcalc/calcdetails.html) 按 Meeus/NOAA 的太阳轨道公式计算，非天文台逐秒星历。输入精度为分钟，实际节气比较和太阳时修正保留秒；官方节气表四舍五入到分钟，所以来源边界样例取公布分钟前后各 2 分钟，避免把官方舍入误当实现错误。
 
 子时已核对 `lunar-typescript@1.8.6` 安装包源码：`Lunar._computeDay` 的 Exact 在 23:00 加一天，Exact2 不加；`_computeTime` 始终使用 Exact 日干；`EightChar.getDay` 按 sect 1/2 选择、`getTime` 不随 sect 变化。回归测试锁定这一行为。
 
-历史/未来时区结果取决于运行环境自带的 ICU/IANA 数据，法规更新后需更新浏览器。此实现依赖完整 `Intl` 历史规则和英语标准/夏令时名称；不是另外捆绑一份时区数据库。已验证 Node v24.20.0、ICU 78.3、tzdata 2026c；尚未进行手机浏览器实机测试。
+**IANA 数据来源和版本**：[IANA Time Zone Database](https://www.iana.org/time-zones)，通过 [tzdata npm 包](https://www.npmjs.com/package/tzdata/v/1.0.52) 分发；已安装 `timezone-data.json` 声明版本 **2026e**。`overrides` 强制 timezonecomplete 的依赖也使用 1.0.52，npm 依赖树只有这一份数据。八字换算路径不调用 `Intl`，所有日期字段使用显式 UTC 方法；测试把 `Intl.DateTimeFormat` 故意改为错误的 UTC 结果，首次及后续换算仍正确，并断言它未被调用。数据固定使设备一致，今后法规变化需要更新该固定数据，而不是随手机规则静默改变。
+
+已验证 Node v24.20.0；另运行真实生产 ESM 分包（非 Vitest 转译）检查初始化和两条历史回归。尚未进行手机浏览器实机测试。
 
 ## 样例、独立核对与复现
 
-`fixtures.json` 有 42 组四柱样例，每条含官方来源、定位说明、派生时刻的方法及独立公式来源；补充验收的缺时、时段、夏令时、真太阳时、周岁来源也在同一文件。仅使用公开日历日期与明确标注的边界扰动，不使用真实学生生日。
+`fixtures.json` 有 44 组四柱样例，每条含官方来源、定位说明、派生时刻的方法及独立公式来源；补充验收的缺时、时段、夏令时、真太阳时、周岁来源也在同一文件。仅使用公开日历日期与明确标注的边界扰动，不使用真实学生生日。
 
 两来源定义以获批任务卡为准：
 
@@ -56,6 +59,7 @@ ageAt('2000-02-29', '2023-03-01') // 23
 node domain/tcm/bazi/testing/generate-fixtures.mts
 cd app
 npm run typecheck && npm test && npm run build
+npm run build:bazi
 ```
 
 实现前上述测试已运行失败（模块尚不存在），实现后再运行完整检查。无以库的输出生成预期值的步骤。
@@ -79,6 +83,16 @@ npm run typecheck && npm test && npm run build
 
 ## 依赖与范围
 
-目前唯一已安装的新增运行时依赖 `lunar-typescript@1.8.6`：MIT，npm 发布日 2025-11-05，已在 PR #4 批准，超过 14 天并固定确切版本。上游最近活动核对至 2026-08-13 的图表修复，不能据此宣称算法没有缺陷或具有维护 SLA。许可证见 `THIRD-PARTY-NOTICES.md`，npm 完整性摘要锁在 app/package-lock.json。额外时区依赖尚未安装，待 PR #4 批准。
+三项运行时依赖均经 PR #4 批准、发布满 14 天并固定确切版本，完整性摘要在 app/package-lock.json，已安装包的许可原文在 `THIRD-PARTY-NOTICES.md`：
+
+| 包 | 固定版本 | 许可证 | npm 发布日（UTC） |
+| :-- | :-- | :-- | :-- |
+| lunar-typescript | 1.8.6 | MIT | 2025-11-05 |
+| timezonecomplete | 5.15.1 | MIT | 2026-06-05 |
+| tzdata | 1.0.52 | MIT，保留 IANA 数据来源 | 2026-10-01 |
+
+上游最近维护活动已核对为 lunar 的 2026-08-13 图表修复、timezonecomplete 的 2026-06-05 版本发布及 tzdata 的 2026-10-01 数据发布；不据此承诺维护 SLA 或算法无缺陷。
+
+`npm run build:bazi` 是独立库构建与体积检查，不给产品加界面。报告记录时区代码与完整数据的 gzip（level 6）体积，并在超过 150,000 字节或进入同步入口时使构建失败。当前时区部分 **60,093 字节 gzip**，无需裁剪数据；农历库另为 104,565 字节，转换代码为 1,992 字节，首次换算这三部分共约 167 KB。`index.ts` 到引擎只有动态导入，`ageAt`/城市读取不加载这些分包。输出同时包含第三方许可声明，分包报告见本次 PR 和 `bundle-report.json`。
 
 不含界面、老师模板设置界面、传输/存储接线、大运、流年或其他推算。只向 M1-09 提供数据接口，不修改其他任务的业务实现。

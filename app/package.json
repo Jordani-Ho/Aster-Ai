@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:bazi": "vite build --config bazi.bundle.config.ts && node scripts/check-bazi-bundle.mjs"
   },
   "dependencies": {
     "@scure/bip32": "2.4.0",
@@ -15,7 +16,9 @@
     "lunar-typescript": "1.8.6",
     "nostr-tools": "2.25.2",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "timezonecomplete": "5.15.1",
+    "tzdata": "1.0.52"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
@@ -26,5 +29,8 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
     "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "tzdata": "1.0.52"
   }
 }
