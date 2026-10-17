@@ -7,5 +7,5 @@
 | 急症红线清单与引擎 | `red-flags.json`（引擎在 `app/src/core/redflags/`） | ✅ v2（M1-04）；C 类：增删改须经发起人确认 |
 | 八字与年龄换算 | `bazi/` | ✅ 已完成（M1-03） |
 | 十问歌与问诊模板 | `templates/` | 待施工（M1-09） |
-| 子午流注、节气 | `calendar/` | 待施工（M1-13） |
+| 子午流注、节气 | `calendar/` | 已实现（M1-13，待审核） |
 | 擅长方向标签表 | `specialties.json` | M2 |
