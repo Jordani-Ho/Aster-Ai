@@ -8,3 +8,5 @@ coverage/
 
 push-subscriptions.json
 push-subscriptions.json.*.tmp
+
+relay/config.local.toml
