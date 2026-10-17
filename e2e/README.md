@@ -25,7 +25,8 @@ WSL 的 Cargo/二进制缓存放 Linux 用户目录的 .cache/aster-e2e/仓库�
 Linux 原生/CI 仍在工作区 .cache/e2e，方便 actions/cache。
 WSL 内也需上述构建前提及 Node >=22；默认发行版固定为 Ubuntu。可选私有 Rustup 位于
 `.cache/e2e/tools/cargo/bin/rustup`，对应 RUSTUP_HOME 为 `.cache/e2e/tools/rustup`；不要求改 Windows PATH。
-macOS 原生构建不在本轮验证范围，可在 Linux/CI 运行。
+Windows/WSL 本机首次成功构建约 20 分 44 秒（Cargo release 20 分 15 秒），缓存命中约 2.2 秒；
+5 条浏览器探针约 1.4 分钟，退出后无遗留中继进程/临时运行目录。macOS 原生构建不在本轮验证范围，可在 Linux/CI 运行。
 
 ## 固定版本与缓存
 
