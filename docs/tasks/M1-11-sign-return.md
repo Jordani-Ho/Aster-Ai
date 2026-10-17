@@ -1,6 +1,6 @@
 # M1-11 审改、签字、交还与诊毕即还
 
-- 状态：已派（DeepSeek，2026-10-16 由 Codex 改派）
+- 状态：已派（DeepSeek，2026-10-16）
 - 依赖：M1-01、M1-02（已完成）。草稿用 `docs/schemas/encounter.md` 格式的合成数据，不必等 M1-10。传输依赖 M1-05：已合并就接上，未合并就留接口。
 - 白皮书依据：§4.1、§4.3、§5.2 第 6～8 步、§6.1、§6.2
 - 共用约定：`docs/schemas/encounter.md`，类型在 `app/src/core/record/types.ts`（已存在，直接引用）
