@@ -1,3 +1,4 @@
+import { restoreWithLedgerPaused } from './core/ledger/runtime'
 import { useEffect, useRef, useState } from 'react'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
@@ -34,7 +35,7 @@ export function BackupSettings({identity,store}:{identity:Identity;store:LocalSt
  const configure=()=>run(async()=>{
   const relays=relaysText.split(/[\s,]+/).filter(Boolean)
   const probe=communityBackupRelay(identity,relays);probe.close()
-  const rows=await store.list('backup-config');await store.put('backup-config',rows[0]?.key??crypto.randomUUID(),{relays});setRevision(value=>value+1)
+  const rows=await store.list('backup-config');await store.put('backup-config',rows[0]?.key??crypto.randomUUID(),{relays});setRevision(value=>value+1);window.dispatchEvent(new Event('aster:relays-changed'))
  })
  const download=()=>run(async()=>{
   if(!managerRef.current)throw Error('备份设置尚未就绪')
@@ -54,10 +55,10 @@ export function BackupSettings({identity,store}:{identity:Identity;store:LocalSt
   <p><button disabled={busy} onClick={()=>void download()}>导出加密备份文件（含照片）</button></p>
   <p>恢复会替换本机全部业务数据。中继备份不含照片；如果本机仍有照片，请先导出文件。</p>
   <label><input type="checkbox" checked={replace} onChange={e=>setReplace(e.target.checked)}/>我已保存需要保留的本机资料，允许替换</label>
-  <p><button disabled={busy||!replace} onClick={()=>void run(async()=>{if(!managerRef.current)throw Error('备份尚未就绪');await managerRef.current.restoreLatest(true);setMessage('已从中继恢复')})}>从中继恢复最新备份</button></p>
+  <p><button disabled={busy||!replace} onClick={()=>void run(async()=>{if(!managerRef.current)throw Error('备份尚未就绪');await restoreWithLedgerPaused(()=>managerRef.current!.restoreLatest(true));setMessage('已从中继恢复')})}>从中继恢复最新备份</button></p>
   <label>从加密备份文件恢复<input type="file" accept="application/json,.json" disabled={busy||!replace} onChange={event=>{
    const file=event.target.files?.[0];if(!file)return
-   void run(async()=>{if(file.size>64*1024*1024)throw Error('备份文件超过64MB，请在容量充足的设备恢复');if(!managerRef.current)throw Error('备份尚未就绪');await managerRef.current.restoreFile(await file.text(),true);setMessage('已从加密文件恢复')})
+   void run(async()=>{if(file.size>64*1024*1024)throw Error('备份文件超过64MB，请在容量充足的设备恢复');if(!managerRef.current)throw Error('备份尚未就绪');const text=await file.text();await restoreWithLedgerPaused(()=>managerRef.current!.restoreFile(text,true));setMessage('已从加密文件恢复')})
    event.target.value=''
   }}/></label>
  </details>

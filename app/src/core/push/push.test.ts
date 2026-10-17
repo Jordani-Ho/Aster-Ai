@@ -59,6 +59,8 @@ it('SW忽略任意推送内容，始终显示固定文案，点击聚焦同源�
  listeners.push({get data(){throw Error('must not inspect payload')},waitUntil:(promise:Promise<unknown>)=>{work=promise}})
  await work
  expect(showNotification).toHaveBeenCalledWith('知衡：有新消息',expect.any(Object))
+ expect(postMessage).toHaveBeenCalledWith({type:'aster:sync-requested'})
+ postMessage.mockClear()
  listeners.notificationclick({notification:{close:vi.fn()},waitUntil:(promise:Promise<unknown>)=>{work=promise}})
  await work
  expect(focus).toHaveBeenCalled()
