@@ -221,3 +221,29 @@ verifyEvent(tampered) // true，因为 Symbol 缓存被一起复制过去了
 - 回归测试同时覆盖改金额和只改 sig；必须先验证一次再复制篡改。
 - 不要用“复制旧事件再改字段”的方式造新事件；要独立事件就重新构造并重新签名。
 - 用任何“校验后缓存结果”的库函数前，先确认它缓存的是内容还是对象；缓存结果不能替代内容绑定校验。
+
+---
+
+## E-005：把 nostr-tools 的事件对象直接写进本地加密存储
+
+**日期**：2026-10-17
+**发现人**：DeepSeek（M1-15a 串联施工）
+**性质**：库的实现细节与严格存储校验不匹配；测试替身掩盖了真实存储上的失败。
+
+### 现象
+
+1. `nostr-tools` 的 `finalizeEvent` 会在事件对象上挂 `Symbol("verified")`。本地加密存储只接受严格 JSON 值，`Reflect.ownKeys` 见到 symbol 键就报“JSON 属性无效”。M1-11 的 `completeSigning` 直接把签名事件存进 `pending-handover`，在真实 `LocalStore` 上会整条失败；此前测试用内存 `Map` 替身，所以没暴露。
+2. `modificationLog` 用 `'source' in value` 判断 Field，把作业条目（有 `source`、没有 `value`）误当 Field，取 `.value` 得到 undefined，`case-book` 写入失败。
+
+### 正确做法
+
+- 签名事件落盘或放进信封前先 `JSON.parse(JSON.stringify(event))`（顺带去掉 E-004 的缓存 Symbol）；不要用对象展开复制。
+- 判断 Field 要同时看 `value` 和 `source` 两个键。
+- 至少有一条集成测试跑真实 `LocalStore`（fake-indexeddb），不能只用内存 Map 替身。
+
+### 通用检查（写“签名事件落盘 / 修改记录”代码前过一遍）
+
+- [ ] 要落盘的 nostr 事件是否经过 JSON 往返？
+- [ ] `isField` 之类的鸭子类型是否只看了部分键？
+- [ ] 签署→交还→写医案的路径，有没有用真实存储的测试覆盖？
+

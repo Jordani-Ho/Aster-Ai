@@ -38,5 +38,5 @@
 
 ## 完成记录
 
-- 合并请求：
-- 结果：
+- 合并请求：https://github.com/Jordani-Ho/Aster-Ai/pull/22
+- 结果：收件分发（`core/inbox`）、一个 transport 的接线（`core/wiring`）、照片单条传输与老师端重算 sha256、发送后提醒、学生病历页、作业进提醒、老师问诊箱、可选扣费、首页按角色入口、四项加固已实现；6 条验收写成测试（5 条功能 + 375px 截图），另加 1 条加固用例。顺带修复已合并模块的两处隐藏缺陷（签名事件落盘遇 nostr-tools 的 Symbol 缓存、修改记录把作业条目误当 Field），并让 `LedgerSettings` 复用同一个账本控制器。M1-15b（Playwright/Docker 真实链路与试点指标）未做，归 Codex。

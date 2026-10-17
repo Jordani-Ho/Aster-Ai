@@ -93,18 +93,25 @@ export interface CompleteSigningOptions {
   send: SendSignedRecord
 }
 
+// nostr-tools 的 finalizeEvent / verifyEvent 会在事件对象上挂 Symbol(verified)；
+// 本地加密存储只收严格 JSON 值，且这类已验证缓存不能随事件落盘（team/mistakes.md E-004）。
+function jsonEvent(event: SignedEncounterEvent): SignedEncounterEvent {
+  return JSON.parse(JSON.stringify(event)) as SignedEncounterEvent
+}
+
 // 交还顺序：先暂存签名事件并发送；发送成功后销毁问诊包与附件、写医案和索引。
 // 发送失败时什么都不删，留给 retryHandover 重发。
 export async function completeSigning(options: CompleteSigningOptions): Promise<SignedEncounterIndex> {
+  const signed = jsonEvent(options.signed)
   const pending: PendingHandover = {
-    event: options.signed,
+    event: signed,
     encounter: options.encounter,
     draft: options.draft,
     attachmentIds: options.attachmentIds,
   }
-  await options.store.put(RECORD_COLLECTIONS.pendingHandover, options.signed.id, pending)
+  await options.store.put(RECORD_COLLECTIONS.pendingHandover, signed.id, pending)
   try {
-    await options.send('record.signed', options.signed)
+    await options.send('record.signed', signed)
   } catch {
     throw new UndeliveredError()
   }
