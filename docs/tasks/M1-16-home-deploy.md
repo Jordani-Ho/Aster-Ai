@@ -42,5 +42,5 @@
 
 ## 完成记录
 
-- 合并请求：
-- 结果：
+- 合并请求：https://github.com/Jordani-Ho/Aster-Ai/pull/23
+- 结果：`deploy/home/` 已交付 compose（relay/gateway/web/cloudflared，domain 与 quick 两种 profile、不发布端口、关闭访问日志）、gateway/web Dockerfile、web 容器启动时按当前域名重建 app + 同源反代 `/push` `/v1`、`setup.sh`/`start.sh`/`quick-start.sh`/`verify.sh`、`.env.example`、中文手把手 README、`data/` 与 `.env` 入 `.gitignore`。已实跑验证：脚本语法、compose YAML、`relay/configure.mjs`、网关配置生成、WSL 下 `npm ci && npm run build` + VITE 注入、`serve.mjs` 静态/反代/无访问日志、`verify.mjs` HTTP/NIP-98 部分。容器构建、隧道、手机访问、日志扫描与重启持久化未跑：WSL 未装 Docker 且 sudo 需用户密码（按约定未执行 sudo）；README 已写安装命令与预期输出，等用户装好后接手跑验收。
