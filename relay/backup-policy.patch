@@ -1,0 +1,30 @@
+diff --git a/src/server.rs b/src/server.rs
+index b84a04a..24ca17e 100644
+--- a/src/server.rs
++++ b/src/server.rs
+@@ -1071,6 +1071,12 @@ fn allowed_to_send(event_str: &str, conn: &conn::ClientConn, settings: &Settings
+         match serde_json::from_str::<Event>(event_str) {
+             Ok(event) => {
+                 if event.is_expired() { return false; }
++                if event.kind == 30078 {
++                    let slots = ["aster.backup.0", "aster.backup.1", "aster.backup.2"];
++                    return conn.auth_pubkey() == Some(&event.pubkey)
++                        && event.tag_values_by_name("d").len() == 1
++                        && event.tag_values_by_name("d").iter().any(|d| slots.contains(&d.as_str()));
++                }
+                 if event.kind == 4 || event.kind == 44 || event.kind == 1059 {
+                     match (conn.auth_pubkey(), event.tag_values_by_name("p").first()) {
+                         (Some(auth_pubkey), Some(recipient_pubkey)) => {
+@@ -1337,7 +1343,11 @@ async fn nostr_server(
+                                     continue;
+                                 }
+                                 // Only expiring gift wraps in M1; backup policy extends this separately.
+-                                if e.kind != 1059 || e.expiration().is_none() {
++                                let slots = ["aster.backup.0", "aster.backup.1", "aster.backup.2"];
++                                let own_backup = e.kind == 30078 && conn.auth_pubkey() == Some(&e.pubkey)
++                                    && e.tag_values_by_name("d").len() == 1
++                                    && e.tag_values_by_name("d").iter().any(|d| slots.contains(&d.as_str()));
++                                if !own_backup && (e.kind != 1059 || e.expiration().is_none()) {
+                                     ws_stream.send(make_notice_message(&Notice::invalid(e.id, "expiring gift wrap required"))).await.ok();
+                                     continue;
+                                 }
