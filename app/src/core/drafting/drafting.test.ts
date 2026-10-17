@@ -4,7 +4,7 @@ import type { ConsultPackage, Encounter } from '../record/types'
 import type { LlmClient } from '../llm'
 import { draftEncounter } from './index'
 import { searchCases } from './cases'
-import template from '../../../../../domain/tcm/templates/default.json'
+import template from '../../../../domain/tcm/templates/default.json'
 
 const unknown = () => ({ value: null, source: 'unknown' as const })
 function pkg(): ConsultPackage {
@@ -59,7 +59,8 @@ describe('老师起草验收（仅合成资料和模拟模型）', () => {
         await vi.advanceTimersByTimeAsync(11)
         const result = await pending
         expect(result.intake).toEqual(pkg().encounter.intake)
-        expect(result.judgment).toEqual(pkg().encounter.judgment)
+        expect(Object.values(result.judgment).every(field => field.value === null && field.source === 'unknown')).toBe(true)
+        expect(result.judgment.symptomSummary.note).toContain('起草失败')
         expect(onError).toHaveBeenCalledWith(expect.stringContaining('起草失败'))
         expect(JSON.stringify(onError.mock.calls)).not.toContain('敏感上游内容')
       }
@@ -67,18 +68,81 @@ describe('老师起草验收（仅合成资料和模拟模型）', () => {
   })
   it('检索五份合成医案，相关优先，最多三份，不修改原数组', () => {
     const cases = ['失眠 心脾两虚', '失眠', '腰痛', '心脾两虚', '咳嗽'].map((text, i) => ({ id: String(i), symptomSummary: text, pattern: text }))
-    expect(searchCases('失眠 心脾两虚', cases).map(c => c.id)).toEqual(['0', '1', '3'])
+    expect(searchCases('失眠 心脾两虚', cases).map(c => c.id)).toEqual(['0', '3', '1'])
     expect(cases[0].id).toBe('0')
     expect(searchCases('', cases)).toEqual([])
   })
   it('提示词包含全部禁止事项和输出约定', () => {
-    const prompt = readFileSync(new URL('../../../../../prompts/teacher/draft-encounter.md', import.meta.url), 'utf8')
+    const prompt = readFileSync(new URL('../../../../prompts/teacher/draft-encounter.md', import.meta.url), 'utf8')
     for (const sentence of ['fourExams', 'judgment', 'plan', '不得改动 intake 和 profile', '资料不足时填 null', '不得编造', '不得承诺疗效', '治愈', '包治', 'JSON', '不得签字']) expect(prompt).toContain(sentence)
+  })
+  it('无空格口语按汉字二元组命中相关医案；同分按 id 稳定排序', () => {
+    const cases = [
+      { id: 'z', symptomSummary: '多梦易醒', pattern: '' },
+      { id: 'b', symptomSummary: '胃脘胀满', pattern: '' },
+      { id: 'a', symptomSummary: '入睡困难，多梦易醒，心悸乏力', pattern: '' },
+    ]
+    const result = searchCases('最近总是睡不着，晚上多梦，心慌', cases)
+    expect(result.map(item => item.id)).toEqual(['a', 'z'])
+    expect(searchCases('最近总是睡不着，晚上多梦，心慌', [...cases].reverse())).toEqual(result)
+    expect(searchCases('心，慌', [{ id: 'x', symptomSummary: '心慌', pattern: '' }])).toEqual([])
+  })
+  it.each(['record', 'pattern', 'prescription'] as const)('%s 档的作业权限、来源和本机 id', async level => {
+    const homework = { id: 'model-id', title: '合成作业', detail: '合成说明', schedule: { kind: 'daily', time: '08:30' }, source: 'teacher', note: 'ai_accepted' }
+    const llm = model({ plan: { homework: [homework, homework] } })
+    const result = await draftEncounter(pkg(), template, [], llm, { level })
+    if (level !== 'prescription') expect(result.plan.homework).toEqual([])
+    else {
+      expect(result.plan.homework).toHaveLength(2)
+      for (const item of result.plan.homework) {
+        expect(item).toMatchObject({ title: homework.title, detail: homework.detail, schedule: homework.schedule, source: 'ai_draft' })
+        expect(item.note).toBeUndefined()
+        expect(item.id).not.toBe('model-id')
+      }
+      expect(result.plan.homework[0].id).not.toBe(result.plan.homework[1].id)
+    }
+  })
+  it('作业的四种合法日程保留，非法日程与字段整条丢弃，不修补', async () => {
+    const valid = [{ kind: 'daily', time: '23:59' }, { kind: 'shichen', shichen: '酉' }, { kind: 'jieqi', jieqi: '合成节气' }, { kind: 'once', date: '2026-10-16', time: '00:00' }]
+    const invalid = [{ kind: 'other' }, { kind: 'daily', time: '8:00' }, { kind: 'daily', time: '24:00' }, { kind: 'daily', time: '12:60' }, { kind: 'shichen', shichen: '甲' }, { kind: 'once', date: '2026-02-30' }, { kind: 'once', date: '2026-10-16', time: 42 }, null]
+    const make = (schedule: unknown) => ({ title: '合成作业', detail: '示例', schedule, source: 'teacher' })
+    const result = await draftEncounter(pkg(), template, [], model({ plan: { homework: [...valid.map(make), ...invalid.map(make), { ...make(valid[0]), durationDays: -1 }, { ...make(valid[0]), title: 42 }] } }), { level: 'prescription' })
+    expect(result.plan.homework.map(item => item.schedule)).toEqual(valid)
+    expect(result.plan.homework.every(item => item.source === 'ai_draft')).toBe(true)
   })
   it('坏方子和作业逐项拒绝；改方必须说明原因；来源不可信', async () => {
     const result: Encounter = await draftEncounter(pkg(), template, [], model({ plan: { prescription: { value: { items: [{ herb: '示例', dose: 4 }] } }, homework: [{ id: '1', title: '合成作业', detail: '示例', schedule: { kind: 'daily', time: '99:99' } }] } }), { level: 'prescription' })
     expect(result.plan.prescription.value).toBeNull()
     expect(result.plan.prescription.note).toBeTruthy()
     expect(result.plan.homework).toEqual([])
+  })
+  it('只给模型选中的去标识范例，不传身份或附件字节；提示词来自文件', async () => {
+    const llm = model(output)
+    await draftEncounter(pkg(), template, [{ id: 'example', symptomSummary: '失眠', pattern: '合成证候' }], llm)
+    const messages = vi.mocked(llm.complete).mock.calls[0][0]
+    expect(messages[0].content).toContain('不得改动 intake 和 profile')
+    const payload = JSON.parse(messages[1].content)
+    expect(payload.cases).toHaveLength(1)
+    expect(payload.level).toBe('record')
+    expect(payload.encounter.student).toBeUndefined()
+    expect(payload.encounter.teacher).toBeUndefined()
+    expect(payload.attachments).toBeUndefined()
+  })
+  it('重起草不携带原有判断；档位外的处理不会从旧草稿漏出', async () => {
+    const input = pkg()
+    input.encounter.plan.advice = { value: '已有草案', source: 'ai_draft' }
+    input.encounter.plan.prescription = { value: { items: [{ herb: '合成', dose: '示例' }] }, source: 'teacher' }
+    const result = await draftEncounter(input, template, [], model(output))
+    expect(result.plan.advice.value).toBeNull()
+    expect(result.plan.prescription.value).toBeNull()
+  })
+  it('改方引用合法且有理由才保留，模型来源和 note 不会冒充老师', async () => {
+    for (const reason of [undefined, '合成修改理由']) {
+      const value = { items: [{ herb: '合成', dose: '示例' }], previousOf: 'd'.repeat(64), changeReason: reason }
+      const result = await draftEncounter(pkg(), template, [], model({ plan: { prescription: { value, source: 'teacher', note: 'ai_accepted' } } }), { level: 'prescription' })
+      expect(result.plan.prescription.value !== null).toBe(reason !== undefined)
+      expect(result.plan.prescription.source).toBe(reason ? 'ai_draft' : 'unknown')
+      expect(result.plan.prescription.note).not.toBe('ai_accepted')
+    }
   })
 })

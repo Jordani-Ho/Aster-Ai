@@ -9,7 +9,7 @@
 资料不足时填 null，不得编造。不得承诺疗效，不得出现“治愈”“包治”。
 不得把范例医案的事实当作本次学生的事实。不要输出原始资料的逐字引述作为症状摘要。
 
-输出严格 JSON，不带 Markdown。每个字段使用 {"value": 值或null}，来源由客户端强制标记。
+输出严格 JSON，不带 Markdown。除 homework 数组外，每个字段使用 {"value": 值或null}，来源由客户端强制标记。
 
 ```json
 {
@@ -21,7 +21,10 @@
 
 字符串字段 value 只能为字符串或 null。prescription 的非空 value 格式为
 {"items":[{"herb":"药材","dose":"剂量","note":"可选说明"}],"method":"可选煎服法","days":1,"previousOf":"可选上一方签名事件id","changeReason":"改方时必须填写"}。
-不确定的处方填 null。作业暂留空数组：现有 Homework 没有来源标签，等待后续审改流程接入。
+不确定的处方填 null。homework 是作业数组，每条格式：
+{"title":"作业标题","detail":"说明","schedule":{"kind":"daily","time":"08:30"},"durationDays":7}。
+durationDays 可省略，否则必须为正整数。schedule 只能为 daily（time 为合法 HH:MM）、shichen（shichen 为十二地支之一）、jieqi（jieqi 为节气名称）或 once（date 为有效 YYYY-MM-DD，time 可选且为 HH:MM）。
+作业 id 由本机生成，来源强制为 ai_draft；不要提供 id、source 或 note，不得伪造老师确认。没有足够资料时 homework 返回 []。
 
 record（默认）：只整理四诊和 symptomSummary。pattern：再加 pattern、mechanism、rationale 和 principle。
-prescription：再加 prescription 和 advice。任何档位都不能自动签字或给学生下医嘱。
+prescription：再加 prescription、homework 和 advice。record、pattern 档的 homework 必须为 []。任何档位都不能自动签字或给学生下医嘱。

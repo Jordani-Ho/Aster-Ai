@@ -1,7 +1,8 @@
 import prompt from '../../../../prompts/teacher/draft-encounter.md?raw'
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
+import { shichenNames } from '../../../../domain/tcm/templates/types'
 import type { LlmClient } from '../llm'
-import type { ConsultPackage, Encounter, Field, Prescription } from '../record/types'
+import type { ConsultPackage, Encounter, Field, Homework, Prescription } from '../record/types'
 import { searchCases, type DraftCase } from './cases'
 
 export type DraftLevel = 'record' | 'pattern' | 'prescription'
@@ -44,6 +45,36 @@ function studentDraft(input: Encounter): Encounter {
   }
 }
 
+const time = (value: unknown): value is string => typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)
+function date(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(value + 'T00:00:00Z')
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}
+
+function schedule(value: unknown): Homework['schedule'] | null {
+  if (!object(value)) return null
+  switch (value.kind) {
+    case 'daily': return time(value.time) ? { kind: 'daily', time: value.time } : null
+    case 'shichen': return typeof value.shichen === 'string' && shichenNames.includes(value.shichen) ? { kind: 'shichen', shichen: value.shichen } : null
+    case 'jieqi': return text(value.jieqi) ? { kind: 'jieqi', jieqi: value.jieqi } : null
+    case 'once': return date(value.date) && (value.time === undefined || time(value.time))
+      ? { kind: 'once', date: value.date, ...(value.time === undefined ? {} : { time: value.time }) } : null
+    default: return null
+  }
+}
+
+function homework(raw: unknown): Homework[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((item): Homework[] => {
+    if (!object(item) || !text(item.title) || !text(item.detail)) return []
+    const timing = schedule(item.schedule)
+    if (!timing || (item.durationDays !== undefined && !(Number.isInteger(item.durationDays) && (item.durationDays as number) > 0))) return []
+    return [{ id: crypto.randomUUID(), title: item.title, detail: item.detail, schedule: timing,
+      ...(item.durationDays === undefined ? {} : { durationDays: item.durationDays as number }), source: 'ai_draft' }]
+  })
+}
+
 export async function draftEncounter(pkg: ConsultPackage, template: TeacherTemplate, cases: readonly DraftCase[], llm: LlmClient, options: DraftOptions = {}): Promise<Encounter> {
   const draft = studentDraft(pkg.encounter)
   const level = options.level ?? 'record'
@@ -74,6 +105,7 @@ export async function draftEncounter(pkg: ConsultPackage, template: TeacherTempl
     if (level === 'prescription') {
       draft.plan.prescription = field(plan.prescription, prescription)
       draft.plan.advice = field(plan.advice, text)
+      draft.plan.homework = homework(plan.homework)
     }
     return draft
   } catch {
