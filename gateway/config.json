@@ -1,0 +1,13 @@
+{
+  "port": 8787,
+  "publicUrl": null,
+  "upstreamBaseUrl": "https://api.deepseek.com",
+  "upstreamModel": "deepseek-chat",
+  "upstreamApiKeyEnv": "UPSTREAM_API_KEY",
+  "membersFile": "./members.json",
+  "rateLimit": {
+    "windowMs": 60000,
+    "maxPerWindow": 20
+  },
+  "logFile": "./gateway.log"
+}

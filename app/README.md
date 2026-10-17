@@ -6,4 +6,5 @@ M1-02 提供 IndexedDB 本地加密存储，身份由不可导出的设备密钥
 应用启动申请持久化存储，结果在“设置 → 存储状态”展示。
 
 在本目录运行 npm ci，然后运行 npm run typecheck、npm test、npm run build。
-日常开发运行 npm run dev。src/core/identity/ 和 src/core/store/ 包含身份、存储及验收测试。
+日常开发运行 npm run dev。src/core/identity/ 和 src/core/store/ 包含身份、存储及验收测试；
+src/core/llm/ 包含模型客户端（社区网关、自有 API Key、本地模型）及其测试。
