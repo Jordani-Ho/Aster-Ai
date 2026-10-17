@@ -52,7 +52,8 @@ const OUTCOME_KEYS = ['change', 'adverse', 'next'] as const
 export const INTAKE_FIELD_KEYS = ['chiefComplaint', 'presentIllness', 'history', 'medsAllergies'] as const
 
 function isField(value: unknown): value is Field<unknown> {
-  return typeof value === 'object' && value !== null && 'source' in value
+  // 作业条目也有 source 但没有 value，不能误判为 Field（否则修改记录把作业原文丢掉）。
+  return typeof value === 'object' && value !== null && 'source' in value && 'value' in value
 }
 
 // 返回仍是 AI 草稿的字段路径；有一条就不能签字。学生端也用它做纵深防御。

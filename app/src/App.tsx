@@ -9,13 +9,29 @@ import { beginBackup, checkBackup } from './core/identity/backup'
 import type { BackupChallenge } from './core/identity/backup'
 import { openStore, resumeStore, type LocalStore } from './core/store'
 import { persistenceLabels, requestPersistence, type PersistenceStatus } from './core/store/persistence'
+import { createWiring, type Wiring } from './core/wiring'
 
 const HomeworkPage = lazy(() => import('./HomeworkPage').then(module => ({ default: module.HomeworkPage })))
 const IntakePage = lazy(() => import('./IntakePage').then(module => ({ default: module.IntakePage })))
+const StudentRecordsPage = lazy(() => import('./StudentRecordsPage').then(module => ({ default: module.StudentRecordsPage })))
+const TeacherInboxPage = lazy(() => import('./TeacherInboxPage').then(module => ({ default: module.TeacherInboxPage })))
+
+type Role = 'student' | 'teacher'
+type LinkStatus = 'offline' | 'connecting' | 'ready' | 'rejected' | 'invalid-message'
+const defaultRelays = ((import.meta as ImportMeta & { env: Record<string, string | undefined> }).env.VITE_COMMUNITY_RELAYS ?? '')
+  .split(',').map(value => value.trim()).filter(Boolean)
+
+function errorMessage(cause: unknown, fallback: string): string {
+  return cause instanceof Error && cause.message ? cause.message : fallback
+}
 
 export function App() {
   const [homeworkPage, setHomeworkPage] = useState(false)
   const [intakePage, setIntakePage] = useState(false)
+  const [recordsPage, setRecordsPage] = useState(false)
+  const [inboxPage, setInboxPage] = useState(false)
+  const [role, setRole] = useState<Role | null>(null)
+  const [stackStatus, setStackStatus] = useState<LinkStatus>('offline')
   const [language, setLanguage] = useState<Language>('simplified')
   const [step, setStep] = useState<'start' | 'write' | 'check' | 'restore' | 'done'>('start')
   const [phrase, setPhrase] = useState('')
@@ -28,6 +44,8 @@ export function App() {
   const [persistence, setPersistence] = useState<PersistenceStatus>('requesting')
   const storeRef = useRef<LocalStore | null>(null)
   const identityRef = useRef<Identity | null>(null)
+  const stackRef = useRef<Wiring | null>(null)
+
   useEffect(() => {
     let cancelled = false
     void requestPersistence(navigator.storage).then(status => { if (!cancelled) setPersistence(status) })
@@ -37,14 +55,59 @@ export function App() {
         storeRef.current = session.store; identityRef.current = session.identity
         setIdentity(session.identity); setStep('done')
       }
-    }).catch(cause => { if (!cancelled) setError(cause instanceof Error ? cause.message : '本地存储不可用，请用助记词恢复') })
+    }).catch(cause => { if (!cancelled) setError(errorMessage(cause, '本地存储不可用，请用助记词恢复')) })
       .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true; storeRef.current?.close(); storeRef.current = null; identityRef.current?.privateKey.fill(0); identityRef.current = null }
+    return () => { cancelled = true; stackRef.current?.close(); stackRef.current = null; storeRef.current?.close(); storeRef.current = null; identityRef.current?.privateKey.fill(0); identityRef.current = null }
   }, [])
+
+  // 按身份（老师 / 学生，M1 手动选）显示对应入口；选择存在本机设置里。
+  useEffect(() => {
+    if (!identity || !storeRef.current) return
+    const store = storeRef.current
+    let cancelled = false
+    void store.get('settings', 'role').then(value => {
+      if (cancelled) return
+      const saved = value as { role?: unknown } | undefined
+      if (saved?.role === 'student' || saved?.role === 'teacher') setRole(saved.role)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [identity])
+
+  // M1-15a：一个 transport + 收件分发 + 账本同步；有中继配置才启动。
+  useEffect(() => {
+    if (!identity || !storeRef.current) return
+    const store = storeRef.current
+    let cancelled = false
+    void (async () => {
+      const config = (await store.list('backup-config'))[0]?.value as { relays?: unknown } | undefined
+      const relays = Array.isArray(config?.relays) && config.relays.every(item => typeof item === 'string')
+        ? config.relays as string[] : defaultRelays
+      if (cancelled || relays.length === 0) return
+      const stack = createWiring({
+        identity, store, relays,
+        onStatus: status => { if (!cancelled) setStackStatus(status as LinkStatus) },
+        onError: () => { if (!cancelled) setStackStatus('offline') },
+      })
+      stackRef.current = stack
+      stack.start()
+      // M1-05 接通后，把本机待发的替身问诊包真实发出，成功后删除。
+      void stack.flushIntakeOutbox().catch(() => {})
+    })().catch(() => {})
+    return () => {
+      cancelled = true
+      const stack = stackRef.current
+      stackRef.current = null
+      if (stack) void stack.close()
+    }
+  }, [identity])
+
   const reset = () => {
+    stackRef.current?.close(); stackRef.current = null
     storeRef.current?.close(); storeRef.current = null; identityRef.current = null
     identity?.privateKey.fill(0)
-    setIdentity(null); setPhrase(''); setChallenge(null); setAnswers(['', '', '']); setError(''); setStep('start')
+    setIdentity(null); setPhrase(''); setChallenge(null); setAnswers(['', '', ''])
+    setError(''); setStep('start'); setRole(null); setHomeworkPage(false); setIntakePage(false); setRecordsPage(false); setInboxPage(false)
+    setStackStatus('offline')
   }
   const complete = async (result: Identity) => {
     setBusy(true)
@@ -52,17 +115,37 @@ export function App() {
       const store = await openStore(result)
       storeRef.current?.close(); storeRef.current = store; identityRef.current = result
       setIdentity(result); setPhrase(''); setChallenge(null); setAnswers(['', '', '']); setError(''); setStep('done')
-    } catch (cause) { result.privateKey.fill(0); setError(cause instanceof Error ? cause.message : '无法保存身份，请重试') }
+    } catch (cause) { result.privateKey.fill(0); setError(errorMessage(cause, '无法保存身份，请重试')) }
     finally { setBusy(false) }
   }
-  if (homeworkPage && storeRef.current && identity) return <><div hidden><BackupSettings identity={identity} store={storeRef.current} /><LedgerSettings identity={identity} store={storeRef.current} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={storeRef.current} onBack={()=>setHomeworkPage(false)} /></Suspense></>
-  if (intakePage && storeRef.current && identity) return <><div hidden><BackupSettings identity={identity} store={storeRef.current} /><LedgerSettings identity={identity} store={storeRef.current} /></div><Suspense fallback={<p>正在打开采集页…</p>}><IntakePage store={storeRef.current} identity={identity} onBack={()=>setIntakePage(false)} /></Suspense></>
+  const chooseRole = async (next: Role) => {
+    setError('')
+    setRole(next)
+    try { if (storeRef.current) await storeRef.current.put('settings', 'role', { role: next }) }
+    catch (cause) { setError(errorMessage(cause, '角色没有保存成功')) }
+  }
+
+  const store = storeRef.current
+  const stack = stackRef.current
+  if (homeworkPage && store && identity) return <><div hidden><BackupSettings identity={identity} store={store} /><LedgerSettings identity={identity} store={store} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={store} onBack={() => setHomeworkPage(false)} /></Suspense></>
+  if (intakePage && store && identity) return <><div hidden><BackupSettings identity={identity} store={store} /><LedgerSettings identity={identity} store={store} /></div><Suspense fallback={<p>正在打开采集页…</p>}><IntakePage store={store} identity={identity} sendConsult={stack?.sendConsult} onBack={() => setIntakePage(false)} /></Suspense></>
+  if (recordsPage && store && identity) return <Suspense fallback={<p>正在打开病历…</p>}><StudentRecordsPage identity={identity} store={store} onBack={() => setRecordsPage(false)} /></Suspense>
+  if (inboxPage && store && identity) {
+    return <Suspense fallback={<p>正在打开问诊箱…</p>}>
+      {stack
+        ? <TeacherInboxPage identity={identity} store={store} send={stack.send} ledger={stack.ledger} onBack={() => setInboxPage(false)} />
+        : <main style={{ padding: 24 }}>
+          <h1>问诊箱</h1>
+          <p role="alert">还没有配置社区中继，暂时收不到问诊。请先在“设置 → 社区备份中继”里填写中继地址。</p>
+          <button onClick={() => setInboxPage(false)}>返回</button>
+        </main>}
+    </Suspense>
+  }
   return (
     <main style={{ fontFamily: 'system-ui, sans-serif', padding: '24px 16px', maxWidth: 480, margin: '0 auto' }}>
       <h1>知衡 · 身份</h1>
       <p>请用生成时的同一种文字恢复</p>
       <p>身份由设备密钥加密保存在本机，重新打开可自动解锁。浏览器数据被清空后，请用助记词恢复；业务数据还需从备份恢复。请妥善抄写，不要交给他人。</p>
-      <details><summary>设置</summary><h2>存储状态</h2><p role="status">{persistenceLabels[persistence]}</p><p>持久化存储不能替代备份。</p>{identity && storeRef.current && <><BackupSettings identity={identity} store={storeRef.current} /><LedgerSettings identity={identity} store={storeRef.current} /></>}</details>
       {loading && <p>正在解锁本地身份…</p>}
       {error && <p role="alert">{error}</p>}
       {!loading && step === 'start' && <>
@@ -88,23 +171,35 @@ export function App() {
       {step === 'restore' && <form onSubmit={async event => {
         event.preventDefault()
         if (busy) return
-        try { await complete(restoreIdentity(phrase)) } catch (cause) { setError(cause instanceof Error ? cause.message : '恢复失败') }
+        try { await complete(restoreIdentity(phrase)) } catch (cause) { setError(errorMessage(cause, '恢复失败')) }
       }}>
         <label>输入 12 个词（中文可连写，英文用空格或标点分隔，自动识别文字）<textarea rows={5} style={{ width: '100%', boxSizing: 'border-box' }} autoComplete="off" autoCapitalize="none" spellCheck={false} value={phrase} onChange={event => setPhrase(event.target.value)} /></label>
         <button type="submit" disabled={busy}>校验并恢复</button>
       </form>}
       {step === 'done' && identity && <>
         <h2>身份已就绪</h2>
-        <p><button onClick={()=>setHomeworkPage(true)}>今日作业</button></p>
+        <p>当前角色：{role === 'teacher' ? '老师' : role === 'student' ? '学生' : '未选择'}（M1 手动选择，可在设置里切换）</p>
+        <p role="status">中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : stackStatus === 'rejected' ? '中继拒绝连接，请核对成员资格' : '尚未连接（可在设置里配置社区中继）'}</p>
+        {role === 'student' && <section>
+          <h3>学生入口</h3>
+          <p><button type="button" onClick={() => setIntakePage(true)}>开始采集</button></p>
+          <p><button type="button" onClick={() => setRecordsPage(true)}>我的病历</button></p>
+          <p><button type="button" onClick={() => setHomeworkPage(true)}>今日作业</button></p>
+        </section>}
+        {role === 'teacher' && <section>
+          <h3>老师入口</h3>
+          <p><button type="button" onClick={() => setInboxPage(true)}>问诊箱</button></p>
+        </section>}
+        <details><summary>设置</summary>
+          <h3>身份角色</h3>
+          <p><button type="button" disabled={role === 'student'} onClick={() => void chooseRole('student')}>我是学生</button>{' '}<button type="button" disabled={role === 'teacher'} onClick={() => void chooseRole('teacher')}>我是老师</button></p>
+          <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p><p>持久化存储不能替代备份。</p>
+          {store && <><BackupSettings identity={identity} store={store} /><LedgerSettings identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></>}
+        </details>
         <PushSettings identity={identity} />
         <p>词表：{languageLabels[identity.language]} · 账户：{identity.account}（本人）</p>
         <p style={{ overflowWrap: 'anywhere' }}>公钥 npub：{identity.npub}</p>
         <p style={{ overflowWrap: 'anywhere' }}>公钥十六进制：{identity.publicKey}</p>
-        <section>
-          <h2>看诊前采集</h2>
-          <p>用输入法的语音输入，把不舒服说清楚。急症筛查只在本地进行；点“确认发送”之前，没有任何数据离开手机。M1-05 接通中继后才会真正交给老师。</p>
-          <p><button type="button" onClick={() => setIntakePage(true)}>开始采集</button></p>
-        </section>
       </>}
       {step !== 'start' && <p><button disabled={busy} onClick={reset}>{step === 'done' ? '返回首页' : '取消并返回'}</button></p>}
     </main>

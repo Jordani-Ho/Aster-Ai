@@ -19,7 +19,6 @@ import {
   organizeSession,
   processPhoto,
   removePhoto,
-  restartAfterEmergency,
   saveDraft,
   saveStoredPackage,
   skipFocus,
@@ -29,6 +28,7 @@ import {
   type IntakeKey,
   type IntakeSession,
 } from './core/intake'
+import { restartIntakeAfterEmergency } from './core/inbox'
 import type { LlmClient } from './core/llm'
 import type { AttachmentRef, ConsultPackage, Encounter } from './core/record/types'
 import type { LocalStore } from './core/store'
@@ -57,10 +57,12 @@ export interface IntakePageProps {
   onBack: () => void
   // 有模型客户端时走模型整理；未配置（M1-07 设置还没有界面）或断网时自动退回固定问句。
   llm?: LlmClient | null
+  // 中继接通后由 App 传入真实发送（问诊包 + 每张照片单独一条）；没有传入时退回本机待发集合。
+  sendConsult?: (pkg: ConsultPackage) => Promise<void>
 }
 
 // 学生采集页：说话 → 本地急症筛查 → 追问 → 确认页核对 → 点“确认发送”才调用 send。
-export function IntakePage({ store, identity, onBack, llm = null }: IntakePageProps) {
+export function IntakePage({ store, identity, onBack, llm = null, sendConsult }: IntakePageProps) {
   const [session, setSession] = useState<IntakeSession | null>(null)
   const [teacherInput, setTeacherInput] = useState('')
   const [draftText, setDraftText] = useState('')
@@ -186,9 +188,13 @@ export function IntakePage({ store, identity, onBack, llm = null }: IntakePagePr
     setBusy(true); setError('')
     try {
       const candidates = historyCandidates.filter(item => selectedHistory.includes(item.id))
-      // M1-05 还没合并：发送替身把问诊包加密存进本机待发集合，真发送接口接通后替换这一行。
-      const sendStub = async (pkg: ConsultPackage) => { await saveStoredPackage(store, pkg, INTAKE_COLLECTIONS.outbox, session.encounterId) }
-      await confirmAndSend(store, session, profile, candidates, photos, sendStub)
+      // 中继已接通时用 App 传来的真实发送；没有时退回本机待发集合，等接通后再发。
+      const sendPackage = sendConsult ?? (async (pkg: ConsultPackage) => {
+        await saveStoredPackage(store, pkg, INTAKE_COLLECTIONS.outbox, session.encounterId)
+      })
+      await confirmAndSend(store, session, profile, candidates, photos, sendPackage)
+      // 真实发送成功后，把旧的替身待发件一并删除。
+      await store.delete(INTAKE_COLLECTIONS.outbox, session.encounterId).catch(() => {})
       setSent(true)
       setSession({ ...session, phase: 'sent' })
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -197,7 +203,10 @@ export function IntakePage({ store, identity, onBack, llm = null }: IntakePagePr
   const restart = () => {
     if (!session) return
     setPhotos([]); setAnswers({})
-    apply(restartAfterEmergency(session), '已重新开始一次采集。')
+    // 急症中断后点“我已知晓并重新开始”：先删掉含急症原文的旧草稿，再开新的一次采集。
+    void restartIntakeAfterEmergency(store, session)
+      .then(next => apply(next, '已重新开始一次采集。'))
+      .catch(() => setError('旧草稿没有删除成功，请重试。'))
   }
 
   const notifyTeacher = () => {
@@ -214,8 +223,8 @@ export function IntakePage({ store, identity, onBack, llm = null }: IntakePagePr
     return <main className="intake-page">
       <header><p className="eyebrow">知衡 · 学生</p><h1>已确认</h1></header>
       <section className="intake-card">
-        <p>问诊包已加密保存在本机，并留了一份你自己的副本。</p>
-        <p className="privacy-note">中继还没有接通（M1-05）：接通后会把这份问诊包交给老师。在那之前不会自动外发。</p>
+        <p>问诊包已加密发出，并留了一份你自己的副本。</p>
+        <p className="privacy-note">老师签字交还后，病历会出现在“我的病历”，作业会进入“今日作业”。中继暂时不通时，内容仍会先留在本机待发。</p>
         <button onClick={onBack}>返回</button>
       </section>
     </main>

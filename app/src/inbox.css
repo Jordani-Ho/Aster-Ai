@@ -1,0 +1,24 @@
+.inbox-page { box-sizing: border-box; max-width: 375px; margin: 0 auto; padding: 16px 12px 32px; font-family: system-ui, -apple-system, sans-serif; color: #111; }
+.inbox-page * { box-sizing: border-box; }
+.inbox-head h1 { margin: 0 0 4px; font-size: 22px; }
+.inbox-head p { margin: 0 0 8px; color: #666; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.inbox-back { margin-bottom: 8px; min-height: 32px; padding: 0 10px; font-size: 13px; border-radius: 9px; border: 1px solid #d0d0d0; background: #fff; color: #111; }
+.inbox-card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px; margin: 12px 0; background: #fff; }
+.inbox-card h2 { margin: 0 0 6px; font-size: 15px; color: #333; overflow-wrap: anywhere; }
+.inbox-meta { margin: 0 0 6px; color: #666; font-size: 12px; overflow-wrap: anywhere; }
+.inbox-note { color: #666; font-size: 12px; line-height: 1.5; }
+.inbox-status { color: #15803d; font-size: 13px; font-weight: 600; }
+.inbox-error { color: #b91c1c; font-size: 13px; font-weight: 600; }
+.inbox-label { margin: 8px 0 2px; font-size: 13px; color: #333; font-weight: 600; }
+.inbox-source { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #e7f7ec; color: #15803d; }
+.inbox-value { margin: 0 0 4px; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.inbox-alert { border: 2px solid #b45309; border-radius: 12px; padding: 12px; margin: 12px 0; background: #fff7ed; }
+.inbox-alert h2 { margin: 0 0 4px; font-size: 16px; color: #b45309; }
+.inbox-alert p { margin: 0; font-size: 13px; line-height: 1.5; color: #7c2d12; }
+.inbox-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.inbox-actions button { min-height: 40px; padding: 0 14px; font-size: 15px; border-radius: 9px; border: 1px solid #d0d0d0; background: #fff; color: #111; }
+.inbox-primary { border-color: #15803d !important; background: #15803d !important; color: #fff !important; }
+.inbox-primary:disabled { opacity: .45; }
+.inbox-charge { border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px; margin: 12px auto; max-width: 375px; background: #fff; font-family: system-ui, sans-serif; }
+.inbox-charge label { display: block; font-size: 13px; color: #333; }
+.inbox-charge input { width: 120px; margin-top: 4px; padding: 6px 8px; font-size: 15px; border: 1px solid #d0d0d0; border-radius: 8px; }

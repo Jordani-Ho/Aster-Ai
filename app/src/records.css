@@ -1,0 +1,17 @@
+.records-page { box-sizing: border-box; max-width: 375px; margin: 0 auto; padding: 16px 12px 32px; font-family: system-ui, -apple-system, sans-serif; color: #111; }
+.records-page * { box-sizing: border-box; }
+.records-head h1 { margin: 0 0 4px; font-size: 22px; }
+.records-head p { margin: 0 0 8px; color: #666; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.records-back { margin-bottom: 8px; min-height: 32px; padding: 0 10px; font-size: 13px; border-radius: 9px; border: 1px solid #d0d0d0; background: #fff; color: #111; }
+.records-note { color: #666; font-size: 13px; line-height: 1.6; }
+.records-error { color: #b91c1c; font-size: 13px; font-weight: 600; }
+.record-card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px; margin: 12px 0; background: #fff; }
+.record-meta { margin: 0 0 8px; color: #666; font-size: 12px; overflow-wrap: anywhere; }
+.record-section { border-top: 1px dashed #e5e5e5; padding-top: 8px; margin-top: 8px; }
+.record-section h3 { margin: 0 0 4px; font-size: 14px; color: #333; }
+.record-section p { margin: 4px 0; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.record-source { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #e6f0ff; color: #1d4ed8; }
+.record-detail { color: #555; font-size: 13px !important; }
+.record-homework { margin: 4px 0; padding-left: 18px; font-size: 14px; line-height: 1.6; }
+.record-revisions summary { cursor: pointer; color: #555; font-size: 13px; }
+.record-revision { border-top: 1px dashed #e5e5e5; margin-top: 8px; padding-top: 8px; opacity: .85; }
