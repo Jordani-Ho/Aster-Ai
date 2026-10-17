@@ -225,6 +225,7 @@ cd /mnt/d/projects/Aster-Ai/deploy/home
 - 这种模式只暴露「应用」和「中继」两个临时地址；网关不单独暴露，页面通过 `app/push`、`app/v1` 同源访问（M1-08 要求应用与网关同源）。
 - 自测模式下 Cloudflare 隧道容器保留少量日志（只有临时地址与连接状态），用来读取地址；拿到地址并重建容器后日志不再增长。
 - **WSL 闲时会被 Windows 回收**：如果最后一个 WSL 会话退出、一段时间没人用，WSL2 会停掉，容器和临时隧道随之停止；下次启动 WSL 后临时地址会变，必须重新跑 `./quick-start.sh`。做自测时保持一个 WSL 终端开着（或 `wsl -d Ubuntu -- bash -lc "sleep 7200"` 这种保活）。域名模式不受影响：hostname 固定，容器重启后按同一个 token 重连。
+- **短时间反复重建可能被 Cloudflare 限流**：容器反复重启、连续多次重跑脚本时，cloudflared 日志会出现 `quick tunnel provisioning failed with status 429`（HTTP 429、`error code: 1015`），响应头 `retry-after` 给出还要等多少秒（本次实测约 35 分钟）。这时**不要再反复重启容器**（只会继续撞限流），等限流解除后重跑 `./quick-start.sh` 即可；需要稳定地址请用域名模式。
 
 ### 从自测模式切到域名模式
 
