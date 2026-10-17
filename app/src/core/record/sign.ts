@@ -49,7 +49,7 @@ export interface ModificationLogEntry {
 const FOUR_EXAM_KEYS = ['look', 'listenSmell', 'ask', 'pulse'] as const
 const JUDGMENT_KEYS = ['symptomSummary', 'pattern', 'mechanism', 'rationale'] as const
 const OUTCOME_KEYS = ['change', 'adverse', 'next'] as const
-const INTAKE_KEYS = ['chiefComplaint', 'presentIllness', 'history', 'medsAllergies'] as const
+export const INTAKE_FIELD_KEYS = ['chiefComplaint', 'presentIllness', 'history', 'medsAllergies'] as const
 
 function isField(value: unknown): value is Field<unknown> {
   return typeof value === 'object' && value !== null && 'source' in value
@@ -73,11 +73,16 @@ export function pendingDraftFields(encounter: Encounter): string[] {
 }
 
 // 病历格式第 3 节第 2 条硬规则：intake 只能来自学生（或未知），老师端不得改写。
-export function studentIntakeSources(encounter: Encounter): string[] {
+// 唯一例外是面诊（kind === 'in_person'）：学生在老师面前，主诉由老师代录，
+// 来源为 teacher 且 note 必须写 'in_person'；其他 kind 照旧只许 student/unknown。
+export function intakeSourceViolations(encounter: Encounter): string[] {
   const wrong: string[] = []
-  for (const key of INTAKE_KEYS) {
-    const source = encounter.intake[key]?.source
-    if (source !== 'student' && source !== 'unknown') wrong.push('intake.' + key)
+  for (const key of INTAKE_FIELD_KEYS) {
+    const item = encounter.intake[key]
+    const source = item?.source
+    if (source === 'student' || source === 'unknown') continue
+    if (encounter.kind === 'in_person' && source === 'teacher' && item.note === 'in_person') continue
+    wrong.push('intake.' + key)
   }
   return wrong
 }
@@ -94,8 +99,8 @@ export function signEncounter(encounter: Encounter, privateKey: Uint8Array): Sig
   }
   const pending = pendingDraftFields(encounter)
   if (pending.length > 0) throw new Error('还有未确认的 AI 草稿字段：' + pending.join('、'))
-  const wrongIntake = studentIntakeSources(encounter)
-  if (wrongIntake.length > 0) throw new Error('intake 只能来自学生，不能签字：' + wrongIntake.join('、'))
+  const wrongIntake = intakeSourceViolations(encounter)
+  if (wrongIntake.length > 0) throw new Error('intake 来源不符合规则，不能签字：' + wrongIntake.join('、'))
   validateEncounter(encounter)
   if (getPublicKey(privateKey) !== encounter.teacher) throw new Error('签名人不是病历里的老师')
   const created = Date.parse(encounter.createdAt)
@@ -147,8 +152,8 @@ export function verifySignedEncounter(event: SignedEncounterEvent, options: Veri
   }
   const pending = pendingDraftFields(encounter)
   if (pending.length > 0) throw new Error('签名病历里还有未确认的 AI 草稿：' + pending.join('、'))
-  const wrongIntake = studentIntakeSources(encounter)
-  if (wrongIntake.length > 0) throw new Error('intake 来源不是学生，拒绝接收：' + wrongIntake.join('、'))
+  const wrongIntake = intakeSourceViolations(encounter)
+  if (wrongIntake.length > 0) throw new Error('intake 来源不符合规则，拒绝接收：' + wrongIntake.join('、'))
   return encounter
 }
 

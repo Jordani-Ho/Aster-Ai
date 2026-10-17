@@ -14,5 +14,6 @@ src/core/ledger/ 包含康币账本核心（单一写入者记账链、异议列
 M1-08：网页提醒见 app/src/core/push/README.md；gateway/push 为唯一有状态组件。
 src/IntakePage.tsx 是学生采集页（说话、追问、照片、确认发送）；核心逻辑见 src/core/intake/README.md。
 src/SignEncounterPage.tsx 是老师端审改、签字界面；docs/screenshots/sign-encounter-375.png 为 375px 截图。
+src/InPersonPage.tsx 是老师端面诊记录界面（老师代录 intake、当面拍照，签字交还复用 M1-10/M1-11）；docs/screenshots/in-person-375.png 为 375px 截图。
 
 M1-06：身份就绪后的“备份状态”默认检查每日备份；部署用VITE_COMMUNITY_RELAYS提供公开中继列表，未配置会明确提示。支持含照片加密文件导出与助记词恢复后的中继恢复。详见src/core/backup/README.md及relay/backup.md。
