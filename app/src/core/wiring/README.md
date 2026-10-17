@@ -10,3 +10,5 @@
 界面侧：`App.tsx` 在身份就绪且配置了社区中继时创建一个 wiring；学生端采集页用 `sendConsult` 真实发送，老师端问诊箱用 `send` + `ledger` 完成签字交还与扣费。没有配置中继时页面明确提示，采集仍可先存本机待发集合。
 
 测试不新增依赖：`inbox.test.ts` 注入内存中继（`socket`）与假 LLM，不连真实 relay/gateway。
+
+M1-15b：收到信封并处理完后调用 onChange；App发本机事件更新收件箱/病历页。恢复前等待共享连接关闭，恢复或中继配置变化后重建共享wiring；LedgerSettings的managed模式在初始化期间也不会另建账本控制器。

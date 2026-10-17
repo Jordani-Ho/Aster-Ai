@@ -78,11 +78,13 @@ export function StudentRecordsPage({ identity, store, onBack }: StudentRecordsPa
   const [error, setError] = useState('')
   useEffect(() => {
     let cancelled = false
-    void listReceivedRecords(store, identity).then(records => {
+    const refresh = () => { void listReceivedRecords(store, identity).then(records => {
       if (!cancelled) setGroups(groupReceivedRecords(records))
     }).catch(() => { if (!cancelled) setError('无法读取本机病历，请稍后重试。') })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
+      .finally(() => { if (!cancelled) setLoading(false) }) }
+    refresh()
+    window.addEventListener('aster:data-changed', refresh)
+    return () => { cancelled = true; window.removeEventListener('aster:data-changed', refresh) }
   }, [store, identity])
   return <main className="records-page">
     <header className="records-head">

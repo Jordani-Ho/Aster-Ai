@@ -290,6 +290,8 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
   if (!isEncounter(value.encounter)) return
   if (value.encounter.teacher !== identity.publicKey) return
   if (value.encounter.student !== message.sender) return
+  // Already handed back: relay replay must not resurrect deleted raw material.
+  if (await store.get(RECORD_COLLECTIONS.signedEncounters, value.encounter.id + '-v' + value.encounter.version)) return
   if (!Array.isArray(value.attachments) || value.attachments.length > MAX_PHOTOS || !value.attachments.every(isRef)) return
   const history = Array.isArray(value.history) ? value.history : []
   const checked = validHistory({ ...value, history }, identity)

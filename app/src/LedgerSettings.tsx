@@ -11,9 +11,10 @@ type LinkStatus = Parameters<NonNullable<TransportOptions['onStatus']>>[0]
 
 // 账本设置：默认自己起一个 transport；M1-15a 之后 App 传入已有的同步控制器（同一个 transport），
 // 避免同一份加密存储上同时跑两个账本控制器。
-export function LedgerSettings({ identity, store, ledger, status: sharedStatus }: {
+export function LedgerSettings({ identity, store, ledger, managed = false, status: sharedStatus }: {
   identity: Identity
   store: LocalStore
+  managed?: boolean
   ledger?: ReturnType<typeof createLedgerSync>
   status?: LinkStatus
 }) {
@@ -41,6 +42,7 @@ export function LedgerSettings({ identity, store, ledger, status: sharedStatus }
         await refresh()
         return
       }
+      if (managed) return
       const config = (await store.list('backup-config'))[0]?.value as { relays?: unknown } | undefined
       const relays = Array.isArray(config?.relays) && config.relays.every(s => typeof s === 'string') ? config.relays as string[] : defaults
       if (disposed || pausing) return
@@ -67,7 +69,7 @@ export function LedgerSettings({ identity, store, ledger, status: sharedStatus }
       window.removeEventListener('aster:store-restoring', pause)
       window.removeEventListener('aster:relays-changed', reload); window.removeEventListener('aster:store-restored', reload)
     }
-  }, [identity, store, revision, ledger])
+  }, [identity, store, revision, ledger, managed])
   const run = async (action: (runtime: ReturnType<typeof createLedgerSync>) => Promise<unknown>) => {
     setError('')
     try {

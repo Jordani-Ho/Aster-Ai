@@ -40,3 +40,5 @@ npm run build    # 构建
 ## 参与开发
 
 施工智能体（Codex、DeepSeek 等）请先读 [`AGENTS.md`](AGENTS.md)。
+
+M1-15b：根目录 `npm run e2e` 编译/复用双补丁真实中继，通过真实网关与本地模型/推送替身，运行375px双身份完整问诊、四条硬验收及本机CSV。环境、耗时和边界见 [e2e/README.md](e2e/README.md)。

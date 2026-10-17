@@ -434,3 +434,19 @@ it('6 375px 截图：学生病历页、老师问诊箱', () => {
   expect(existsSync(new URL('../../records.css', import.meta.url))).toBe(true)
   expect(existsSync(new URL('../../inbox.css', import.meta.url))).toBe(true)
 })
+
+it('completed consultation replay cannot resurrect teacher raw package or photo', async () => {
+  const { teacher, student, teacherStore } = await nodes()
+  const pkg = await syntheticPackage(1)
+  await student.sendConsult(pkg)
+  const consult = await waitFor(async () => {
+    const rows = await listConsults(teacherStore)
+    if (rows.length !== 1) return null
+    return (await consultReadiness(teacherStore, rows[0].encounter.id)).ready ? rows[0] : null
+  })
+  await completeConsultSigning({ identity:teacherId,store:teacherStore,consult,draft:consult.encounter,final:consult.encounter,send:teacher.send })
+  await teacher.inbox.receive({ id:crypto.randomUUID(),sender:studentPub,at:Math.floor(Date.now()/1000),envelope:consultEnvelope(pkg) })
+  await teacher.inbox.receive({ id:crypto.randomUUID(),sender:studentPub,at:Math.floor(Date.now()/1000),envelope:{type:'consult.attachment',version:1,payload:{encounterId:pkg.encounter.id,ref:pkg.attachments[0].ref,data:toBase64(pkg.attachments[0].data)}} })
+  expect(await teacherStore.list('consult-package')).toHaveLength(0)
+  expect(await teacherStore.list('attachments')).toHaveLength(0)
+})

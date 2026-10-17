@@ -41,6 +41,7 @@ export function createBackupManager({identity,store,relay}:{identity:Identity;st
   const prior=await status(),attempt=now.toISOString()
   try{
    const events=known??await snapshots(),archive=await store.exportEncrypted()
+   archive.records=archive.records.filter(record=>record.c!=='pilot-metrics')
    active()
    const used=new Set(events.map(event=>Object.fromEntries(event.tags).d))
    const slot=BACKUP_SLOTS.find(value=>!used.has(value))??Object.fromEntries(events[events.length-1].tags).d

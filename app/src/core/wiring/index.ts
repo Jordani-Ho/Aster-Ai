@@ -35,7 +35,7 @@ export function createWiring(options: WiringOptions) {
     privateKey: identity.privateKey,
     relays: options.relays,
     socket: options.socket,
-    onMessage: message => inbox.receive(message),
+    onMessage: async message => { await inbox.receive(message); options.onChange?.() },
     onStatus: status => {
       options.onStatus?.(status)
       if (status === 'ready') {

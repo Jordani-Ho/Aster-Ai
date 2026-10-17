@@ -10,3 +10,6 @@ push-subscriptions.json
 push-subscriptions.json.*.tmp
 
 relay/config.local.toml
+.cache/e2e/
+playwright-report/
+test-results/
