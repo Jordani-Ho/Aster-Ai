@@ -51,7 +51,7 @@ export function createWiring(options: WiringOptions) {
     ledger,
     inbox,
     send,
-    sendConsult: (pkg: ConsultPackage) => sendConsultPackage(send, pkg),
+    sendConsult: (pkg: ConsultPackage) => sendConsultPackage(send, pkg, { store }),
     flushIntakeOutbox: () => flushIntakeOutbox(store, send),
     start() { transport.start() },
     async close() { transport.close(); await ledger.close() },
