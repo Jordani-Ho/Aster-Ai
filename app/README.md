@@ -10,3 +10,5 @@ M1-02 提供 IndexedDB 本地加密存储，身份由不可导出的设备密钥
 src/core/llm/ 包含模型客户端（社区网关、自有 API Key、本地模型）及其测试。
 src/core/redflags/ 包含急症红线引擎及其验收测试（含界面入口）。
 src/core/ledger/ 包含康币账本核心（单一写入者记账链、异议列表、余额/欠费）及其验收测试。
+
+身份完成后“今日作业”进入学生打卡页；本地加密保存，不发网络。详见src/core/homework/README.md。

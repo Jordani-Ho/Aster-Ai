@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import './homework.css'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { createIdentity, generatePhrase, languages, languageLabels, restoreIdentity } from './core/identity'
 import type { Identity, Language } from './core/identity'
 import { beginBackup, checkBackup } from './core/identity/backup'
@@ -9,11 +10,14 @@ import { openStore, resumeStore, type LocalStore } from './core/store'
 import { persistenceLabels, requestPersistence, type PersistenceStatus } from './core/store/persistence'
 import { RedFlagAlert } from './RedFlagAlert'
 
+const HomeworkPage = lazy(() => import('./HomeworkPage').then(module => ({ default: module.HomeworkPage })))
+
 function recordId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(12)), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
 export function App() {
+  const [homeworkPage, setHomeworkPage] = useState(false)
   const [language, setLanguage] = useState<Language>('simplified')
   const [step, setStep] = useState<'start' | 'write' | 'check' | 'restore' | 'done'>('start')
   const [phrase, setPhrase] = useState('')
@@ -74,6 +78,7 @@ export function App() {
     if (!category) return
     void storeRef.current?.put('redflag-log', recordId(), { categoryId: category.id, action: category.action, at: new Date().toISOString(), region: region ?? 'unknown' })
   }
+  if (homeworkPage && storeRef.current && identity) return <Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={storeRef.current} onBack={()=>setHomeworkPage(false)} /></Suspense>
   return (
     <main style={{ fontFamily: 'system-ui, sans-serif', padding: '24px 16px', maxWidth: 480, margin: '0 auto' }}>
       <h1>知衡 · 身份</h1>
@@ -112,6 +117,7 @@ export function App() {
       </form>}
       {step === 'done' && identity && <>
         <h2>身份已就绪</h2>
+        <p><button onClick={()=>setHomeworkPage(true)}>今日作业</button></p>
         <p>词表：{languageLabels[identity.language]} · 账户：{identity.account}（本人）</p>
         <p style={{ overflowWrap: 'anywhere' }}>公钥 npub：{identity.npub}</p>
         <p style={{ overflowWrap: 'anywhere' }}>公钥十六进制：{identity.publicKey}</p>

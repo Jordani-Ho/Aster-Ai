@@ -122,3 +122,5 @@ store.test.ts 在 fake-indexeddb 中覆盖全部 12 项验收，另覆盖未知�
 重复键、bin 篡改、错误加密密钥、事务中途失败回滚和跨会话 salt 变化。
 持久化申请覆盖获准、拒绝、不支持和异常四种状态，实际界面在“设置 → 存储状态”展示。
 CI 的现有 npm test 会自动执行这些用例，不需要浏览器或额外服务。
+
+M1-13集合登记：`homework`保存`{homework, startsOn}`（共用Homework及生效日期）；`checkins`保存`{homeworkId, at, note?}`。两个集合均使用随机ID键、AES-GCM加密，只保存在本人手机，不上传或同步。

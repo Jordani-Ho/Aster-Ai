@@ -1,0 +1,122 @@
+[
+  {
+    "name": "子",
+    "meridian": "胆",
+    "startHour": 23,
+    "endHour": 1,
+    "source": {
+      "title": "国家体育总局健身气功管理中心：十二时辰与十二经脉对应关系（2018）",
+      "url": "https://www.sport.gov.cn/qgzx/n5407/c845051/content.html"
+    }
+  },
+  {
+    "name": "丑",
+    "meridian": "肝",
+    "startHour": 1,
+    "endHour": 3,
+    "source": {
+      "title": "国家体育总局健身气功管理中心：十二时辰与十二经脉对应关系（2018）",
+      "url": "https://www.sport.gov.cn/qgzx/n5407/c845051/content.html"
+    }
+  },
+  {
+    "name": "寅",
+    "meridian": "肺",
+    "startHour": 3,
+    "endHour": 5,
+    "source": {
+      "title": "国家体育总局健身气功管理中心：十二时辰与十二经脉对应关系（2018）",
+      "url": "https://www.sport.gov.cn/qgzx/n5407/c845051/content.html"
+    }
+  },
+  {
+    "name": "卯",
+    "meridian": "大肠",
+    "startHour": 5,
+    "endHour": 7,
+    "source": {
+      "title": "国家体育总局健身气功管理中心：十二时辰与十二经脉对应关系（2018）",
+      "url": "https://www.sport.gov.cn/qgzx/n5407/c845051/content.html"
+    }
+  },
+  {
+    "name": "辰",
+    "meridian": "胃",
+    "startHour": 7,
+    "endHour": 9,
+    "source": {
+      "title": "国家体育总局健身气功管理中心：十二时辰与十二经脉对应关系（2018）",
+      "url": "https://www.sport.gov.cn/qgzx/n5407/c845051/content.html"
+    }
+  },
+  {
+    "name": "巳",
+    "meridian": "脾",
+    "startHour": 9,
+    "endHour": 11,
+    "source": {
+      "title": "国家体育总局健身气功管理中心：十二时辰与十二经脉对应关系（2018）",
+      "url": "https://www.sport.gov.cn/qgzx/n5407/c845051/content.html"
+    }
+  },
+  {
+    "name": "午",
+    "meridian": "心",
+    "startHour": 11,
+    "endHour": 13,
+    "source": {
+      "title": "国家体育总局健身气功管理中心：十二时辰与十二经脉对应关系（2018）",
+      "url": "https://www.sport.gov.cn/qgzx/n5407/c845051/content.html"
+    }
+  },
+  {
+    "name": "未",
+    "meridian": "小肠",
+    "startHour": 13,
+    "endHour": 15,
+    "source": {
+      "title": "国家体育总局健身气功管理中心：十二时辰与十二经脉对应关系（2018）",
+      "url": "https://www.sport.gov.cn/qgzx/n5407/c845051/content.html"
+    }
+  },
+  {
+    "name": "申",
+    "meridian": "膀胱",
+    "startHour": 15,
+    "endHour": 17,
+    "source": {
+      "title": "国家体育总局健身气功管理中心：十二时辰与十二经脉对应关系（2018）",
+      "url": "https://www.sport.gov.cn/qgzx/n5407/c845051/content.html"
+    }
+  },
+  {
+    "name": "酉",
+    "meridian": "肾",
+    "startHour": 17,
+    "endHour": 19,
+    "source": {
+      "title": "国家体育总局健身气功管理中心：十二时辰与十二经脉对应关系（2018）",
+      "url": "https://www.sport.gov.cn/qgzx/n5407/c845051/content.html"
+    }
+  },
+  {
+    "name": "戌",
+    "meridian": "心包",
+    "startHour": 19,
+    "endHour": 21,
+    "source": {
+      "title": "国家体育总局健身气功管理中心：十二时辰与十二经脉对应关系（2018）",
+      "url": "https://www.sport.gov.cn/qgzx/n5407/c845051/content.html"
+    }
+  },
+  {
+    "name": "亥",
+    "meridian": "三焦",
+    "startHour": 21,
+    "endHour": 23,
+    "source": {
+      "title": "国家体育总局健身气功管理中心：十二时辰与十二经脉对应关系（2018）",
+      "url": "https://www.sport.gov.cn/qgzx/n5407/c845051/content.html"
+    }
+  }
+]
