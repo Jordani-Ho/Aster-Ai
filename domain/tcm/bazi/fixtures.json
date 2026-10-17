@@ -1216,8 +1216,8 @@
       "standard": "1935-07-01T12:50",
       "ziHourRule": "nextDay",
       "sources": {
-        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/1935.pdf",
-        "locator": "p1 July 1; clock probe 13:10; IANA asia Singapore 1933-1936 fixed SAVE=0:20, standard offset +07:00",
+        "official": "https://www.hko.gov.hk/tc/gts/time/calendar/text/files/T1935c.txt",
+        "locator": "HKO text row 1935-07-01 (lunar month 6 day 1); clock probe 13:10; IANA asia Singapore 1933-1936 fixed SAVE=0:20, standard offset +07:00",
         "independent": [
           "https://aa.usno.navy.mil/faq/JD_formula",
           "https://ytliu0.github.io/ChineseCalendar/sexagenary.html",
@@ -1397,7 +1397,7 @@
       ],
       "sources": [
         "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/1948.pdf",
-        "https://www.hko.gov.hk/tc/gts/time/calendar/pdf/files/1935.pdf",
+        "https://www.hko.gov.hk/tc/gts/time/calendar/text/files/T1935c.txt",
         "https://data.iana.org/time-zones/tzdb/asia"
       ],
       "independent": [
