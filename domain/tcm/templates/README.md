@@ -4,4 +4,6 @@ TeacherTemplate 类型定义在 types.ts：id、name、recordOrder（病历字�
 
 types.ts 另提供起草日程校验用的十二时辰与24节气标准名称表，模型输出必须精确匹配，不接纳别名或首尾空白。
 
+default-questions.json 提供每个 focus 的固定问句（模型不可用时使用），与 default.json 的 focus 一一对应；缺一个 focus 不致命，流程仍可走完。
+
 default.json 提供十问歌默认模板：focus 按寒热、汗、头身、便、饮食、胸腹、聋、渴、旧病、因及补充项目排列；recordOrder 使用共用 Encounter 的字段路径，问诊细项在 fourExams.ask 中依 focus 顺序整理，不增加病历字段。

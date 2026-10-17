@@ -1,0 +1,31 @@
+.intake-page{box-sizing:border-box;max-width:480px;margin:auto;padding:18px 16px 40px;font-family:system-ui,-apple-system,sans-serif;color:#203b34;background:#f7f4ee;min-height:100vh;overflow-wrap:anywhere}
+.intake-page *{box-sizing:border-box}
+.intake-page h1{font-size:28px;line-height:1.25;margin:8px 0 6px}
+.intake-page h2{font-size:18px;margin:0 0 8px}
+.intake-page p{font-size:14px;line-height:1.7;margin:8px 0}
+.intake-page .eyebrow{font-size:12px;letter-spacing:2px;margin:16px 0 0;color:#5a6b62}
+.intake-page .privacy-note{color:#5a6b62;font-size:12px;line-height:1.6}
+.intake-page button{min-height:44px;padding:10px 15px;background:#fff;border:1px solid #adc0b4;border-radius:10px;color:#234d40;font:inherit;cursor:pointer;max-width:100%;white-space:normal}
+.intake-page button:disabled{opacity:.55;cursor:default}
+.intake-page .intake-primary{background:#2f5d50;border-color:#2f5d50;color:#fff}
+.intake-page .intake-back{min-height:36px;padding:6px 12px;font-size:13px}
+.intake-card{border:1px solid #d9dfd5;border-radius:16px;padding:16px;background:#fff;margin:16px 0;box-shadow:0 4px 16px #24433308}
+.intake-page label{display:block;font-size:13px;color:#3a5248;margin:6px 0}
+.intake-page input[type=text],.intake-page input:not([type]),.intake-page textarea{display:block;width:100%;margin:8px 0;padding:10px;border:1px solid #bdc9c0;border-radius:8px;font:inherit;font-size:14px;color:#203b34;background:#fdfcf9}
+.intake-page textarea{resize:vertical}
+.intake-page input[type=file]{display:block;width:100%;margin:8px 0;font-size:13px}
+.intake-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.intake-quotes{margin:8px 0 0;padding-left:20px;font-size:14px;line-height:1.7}
+.intake-question{border-top:1px solid #e8ece5;padding-top:12px;margin-top:12px}
+.intake-question:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.intake-focus{display:inline-block;margin:0;padding:2px 8px;border-radius:999px;background:#edf3ec;color:#2f5d50;font-size:12px;font-weight:600}
+.intake-source{display:inline-block;font-size:11px;color:#7a8a80;margin-bottom:6px}
+.intake-photos{list-style:none;padding:0;margin:8px 0}
+.intake-photos li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #edf0ea;font-size:13px}
+.intake-photos button{min-height:34px;padding:4px 10px;font-size:12px}
+.intake-history{display:flex;align-items:center;gap:8px}
+.intake-history input{width:auto;margin:0}
+.intake-status{padding:10px 12px;border-radius:10px;background:#edf3ec;font-size:13px}
+.intake-error{padding:10px 12px;border-radius:10px;background:#fdecec;color:#9d2b2b;font-size:13px}
+.intake-footer{margin-top:18px}
+.intake-footer p{font-size:13px;color:#3a5248}
