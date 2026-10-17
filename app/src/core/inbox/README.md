@@ -4,8 +4,16 @@
 
 - `consult.package` → 老师端问诊箱（`consult-package`），只存 `AttachmentRef`，不存照片字节。
 - `consult.attachment` → 老师端附件（payload `{ encounterId, ref, data: base64 }`）。照片按 `id` + `sha256` 匹配问诊包里的引用，**现场重算 sha256**，字节长度或哈希不符就丢弃；到齐前 `assertConsultReady` 抛“照片还在路上”。
-- `record.signed` → 学生端 `verifySignedEncounter`（签名人必须是这位老师）通过后写入 `student-records`，并把 `plan.homework` 写进 M1-13 的 `homework` 集合（`startsOn` 取收到当天；同一 `encounter.id` 的新版本替换旧作业，迟到的旧版本不覆盖新版本）。
+- `record.signed` → 学生端先查“我的老师”白名单（本机 `settings` 的 `teachers`）：发件人不在名单里直接丢弃（验签、写库之前就拦住）；在名单里才 `verifySignedEncounter`（签名人必须是这位老师），通过后写入 `student-records`，并把 `plan.homework` 写进 M1-13 的 `homework` 集合（`startsOn` 取收到当天；同一 `encounter.id` 的新版本替换旧作业，迟到的旧版本不覆盖新版本）。
 - `ledger.*` → `createLedgerSync().receive`；不认识的类型丢弃。
+
+## 我的老师白名单
+
+- 存储：`settings` 集合，键 `teachers`，值为 64 位十六进制公钥数组（校验 + 去重）。`loadTeachers` / `saveTeachers` / `addTeacher` / `removeTeacher` 是唯一读写入口。
+- 收件：`receiveSignedRecord` 只在发件人属于名单时才验签入库，陌生成员签发的病历与作业都不会落库。
+- 展示：`listReceivedRecords` 显示前再按名单过滤，白名单之前写进本机的旧数据同样不显示；重新登记老师后会恢复显示。
+- 自动加入：`sendConsultPackage` 全部消息发送成功后把 `pkg.encounter.teacher` 加入名单（发送失败不加入）；`flushIntakeOutbox` 同样。
+- 手动登记：App“设置 → 我的老师”里添加/移除（`TeacherListSettings`）。
 
 ## 发送
 

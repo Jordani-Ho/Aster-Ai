@@ -19,7 +19,11 @@ export const INBOX_COLLECTIONS = {
   attachments: RECORD_COLLECTIONS.attachments,
   records: 'student-records',
   homework: 'homework',
+  settings: 'settings',
 } as const
+
+// 学生端的“我的老师”白名单：只接受名单里的公钥签发的病历（病历格式第 3 节第 3 条）。
+export const TEACHERS_SETTING_KEY = 'teachers'
 
 const HEX32 = /^[0-9a-f]{32}$/
 const HEX64 = /^[0-9a-f]{64}$/
@@ -120,6 +124,40 @@ export function fromBase64(value: string): Uint8Array {
   return Uint8Array.from(binary, char => char.charCodeAt(0))
 }
 
+function normalizeTeachers(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const teachers: string[] = []
+  for (const item of value) {
+    if (typeof item !== 'string' || !HEX64.test(item) || teachers.includes(item)) continue
+    teachers.push(item)
+  }
+  return teachers
+}
+
+// “我的老师”列表存在本机 settings 集合，键 `teachers`，值为 hex64 公钥数组（去重后保存）。
+export async function loadTeachers(store: LocalStore): Promise<string[]> {
+  const value = await store.get(INBOX_COLLECTIONS.settings, TEACHERS_SETTING_KEY)
+  return normalizeTeachers(value)
+}
+
+export async function saveTeachers(store: LocalStore, teachers: readonly string[]): Promise<string[]> {
+  const normalized = normalizeTeachers([...teachers])
+  await store.put(INBOX_COLLECTIONS.settings, TEACHERS_SETTING_KEY, normalized as unknown as StoreValue)
+  return normalized
+}
+
+export async function addTeacher(store: LocalStore, teacher: string): Promise<string[]> {
+  if (typeof teacher !== 'string' || !HEX64.test(teacher)) throw new Error('老师公钥必须是 64 位十六进制')
+  const teachers = await loadTeachers(store)
+  if (teachers.includes(teacher)) return teachers
+  return saveTeachers(store, [...teachers, teacher])
+}
+
+export async function removeTeacher(store: LocalStore, teacher: string): Promise<string[]> {
+  const teachers = await loadTeachers(store)
+  return saveTeachers(store, teachers.filter(item => item !== teacher))
+}
+
 function parseSignedEvent(value: unknown): SignedEncounterEvent | null {
   if (!object(value)) return null
   if (typeof value.id !== 'string' || !HEX64.test(value.id)) return null
@@ -162,10 +200,12 @@ export function attachmentEnvelope(encounterId: string, ref: AttachmentRef, data
 }
 
 // 学生发送：先发问诊包（只带 AttachmentRef），再每张照片单独一条，避免超过单条 2 MB。
-export async function sendConsultPackage(send: SendEnvelope, pkg: ConsultPackage): Promise<void> {
+// 全部发送成功后，把这位老师加入“我的老师”白名单（发送失败不加入）。
+export async function sendConsultPackage(send: SendEnvelope, pkg: ConsultPackage, options: { store?: LocalStore } = {}): Promise<void> {
   const teacher = pkg.encounter.teacher
   await send(teacher, consultEnvelope(pkg))
   for (const item of pkg.attachments) await send(teacher, attachmentEnvelope(pkg.encounter.id, item.ref, item.data))
+  if (options.store) await addTeacher(options.store, teacher)
 }
 
 export async function listConsults(store: LocalStore): Promise<StoredConsult[]> {
@@ -281,6 +321,9 @@ async function receiveAttachment(store: LocalStore, message: Message, payload: R
 }
 
 async function receiveSignedRecord(identity: Identity, store: LocalStore, message: Message, payload: unknown, now: () => Date): Promise<void> {
+  // 学生端只认“我的老师”名单：陌生成员发来的签名病历直接丢弃，验签和写库之前就拦住。
+  const teachers = await loadTeachers(store)
+  if (!teachers.includes(message.sender)) return
   const event = parseSignedEvent(payload)
   if (!event) return
   let encounter: Encounter
@@ -326,13 +369,15 @@ export function createInbox(options: InboxOptions) {
   }
 }
 
-// 学生端病历页：只显示验签通过、签名人是自己老师的病历；按同一 encounter.id 归组版本。
+// 学生端病历页：只显示验签通过、且签名人在“我的老师”名单里的病历（旧数据也按名单过滤）；
+// 按同一 encounter.id 归组版本。
 export async function listReceivedRecords(store: LocalStore, identity: Identity): Promise<ReceivedRecord[]> {
+  const teachers = await loadTeachers(store)
   const rows = await store.list(INBOX_COLLECTIONS.records)
   const records: ReceivedRecord[] = []
   for (const row of rows) {
     const value = recordValue(row.value)
-    if (!value) continue
+    if (!value || !teachers.includes(value.teacher)) continue
     let parsed: unknown
     try { parsed = JSON.parse(value.eventJson) } catch { continue }
     const event = parseSignedEvent(parsed)
@@ -479,7 +524,7 @@ export async function flushIntakeOutbox(store: LocalStore, send: SendEnvelope): 
       encounter: stored.encounter,
       history: Array.isArray(stored.history) ? stored.history.filter(item => typeof item === 'string') : [],
       attachments,
-    })
+    }, { store })
     await store.delete(INTAKE_COLLECTIONS.outbox, row.key)
     flushed += 1
   }

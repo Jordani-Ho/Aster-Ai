@@ -46,7 +46,7 @@ const session = await resumeStore() // { identity, store }；全新数据库返�
 | `intake-attachments` | 采集照片处理后的字节（已缩到长边 ≤1600、去掉 EXIF、≤500 KB） | 键为附件 id，值为 JPEG 字节 | 随问诊包副本或待发件一起保存 |
 | `profile` | 学生本机常驻档案：称呼、性别、年龄、八字、居住城市 | 键 `self`，值为 `Encounter['profile']` 的五个 Field | 随问诊包给老师；**只在本机** |
 | `student-records` | 学生收到的签名病历（历史病历来源，M1-15a 收件入库） | 键为签名事件 id，值为 `{ id, teacher, createdAt, eventJson, version }` | 显示前重新验签；确认页默认附带同一位老师近 3 次；**只在本机** |
-| `settings` | 本机设置 | 键 `role`，值为 `{ role: 'student' | 'teacher' }` | M1 由用户手动选择身份角色 |
+| `settings` | 本机设置 | 键 `role` 值为 `{ role: 'student' | 'teacher' }`；键 `teachers` 值为 64 位十六进制老师公钥数组（学生端“我的老师”白名单，校验+去重） | M1 由用户手动选择身份角色；学生端只接收名单内老师签发的病历，发问诊包后收件老师自动加入 |
 | `homework` | M1-13 作业集合（M1-15a 收到签字病历时写入） | 值为 `{ homework, startsOn, encounterId, version }` | 同一 `encounterId` 的新版本替换旧作业 |
 
 | `consult-package` | 老师端临时收到的问诊包（主诉等原文） | 键为病历 id，值为整份问诊包 | 交还学生成功后立即删除；**不得长期保留** |

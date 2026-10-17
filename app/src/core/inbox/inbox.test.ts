@@ -4,13 +4,13 @@ import { IDBFactory } from 'fake-indexeddb'
 import { type Event } from 'nostr-tools/pure'
 import type { Socket } from '../transport'
 import { validSignature } from '../transport/crypto'
-import { openStore, type LocalStore } from '../store'
+import { openStore, type LocalStore, type StoreValue } from '../store'
 import { createIdentity, type Identity } from '../identity'
 import type { LlmClient } from '../llm'
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
 import template from '../../../../domain/tcm/templates/default.json'
 import type { ConsultPackage, Encounter, Homework } from '../record/types'
-import { signEncounter } from '../record/sign'
+import { signEncounter, type SignedEncounterEvent } from '../record/sign'
 import { draftEncounter } from '../drafting'
 import {
   addPhoto,
@@ -25,6 +25,7 @@ import {
 } from '../intake/session'
 import { localDay } from '../homework/schedule'
 import {
+  addTeacher,
   assertConsultReady,
   completeConsultSigning,
   consultEnvelope,
@@ -34,11 +35,14 @@ import {
   groupReceivedRecords,
   listConsults,
   listReceivedRecords,
+  loadTeachers,
+  removeTeacher,
   restartIntakeAfterEmergency,
   sha256Hex,
   toBase64,
 } from './index'
 import { createWiring } from '../wiring'
+import { startInPersonEncounter, recordIntakeField } from '../record/in-person'
 
 // 只用合成身份、合成病历与内存中继；不连真实 relay/gateway，不发真实推送。
 const phrase = 'leader monkey parrot ring guide accident before fence cannon height naive bean'
@@ -111,20 +115,24 @@ async function testStore(identity: Identity): Promise<LocalStore> {
   return store
 }
 
+async function openNode(identity: Identity, relay: MemoryRelay, notifier?: (pubkey: string) => Promise<void>) {
+  const store = await testStore(identity)
+  const status = { value: '' }
+  const wiring = createWiring({
+    identity, store, relays: ['ws://localhost/'], socket: relay.socket,
+    notifier, onStatus: value => { status.value = value },
+  })
+  closers.push(() => { void wiring.close() })
+  wiring.start()
+  return { wiring, store, status }
+}
+
 async function nodes(options: { studentNotifier?: (pubkey: string) => Promise<void> } = {}) {
   const relay = new MemoryRelay()
-  const teacherStore = await testStore(teacherId)
-  const studentStore = await testStore(studentId)
-  const statuses = { teacher: '', student: '' }
-  const teacher = createWiring({ identity: teacherId, store: teacherStore, relays: ['ws://localhost/'], socket: relay.socket, onStatus: status => { statuses.teacher = status } })
-  const student = createWiring({
-    identity: studentId, store: studentStore, relays: ['ws://localhost/'], socket: relay.socket,
-    notifier: options.studentNotifier, onStatus: status => { statuses.student = status },
-  })
-  closers.push(() => { void teacher.close(); void student.close() })
-  teacher.start(); student.start()
-  await waitFor(() => statuses.teacher === 'ready' && statuses.student === 'ready')
-  return { relay, teacher, student, teacherStore, studentStore }
+  const teacherNode = await openNode(teacherId, relay)
+  const studentNode = await openNode(studentId, relay, options.studentNotifier)
+  await waitFor(() => teacherNode.status.value === 'ready' && studentNode.status.value === 'ready')
+  return { relay, teacher: teacherNode.wiring, student: studentNode.wiring, teacherStore: teacherNode.store, studentStore: studentNode.store }
 }
 
 // 合成照片：任意字节 + 真实 sha256，模拟 M1-09 处理后的结果。
@@ -170,6 +178,25 @@ function fakeLlm(): LlmClient {
     },
   }
   return { complete: vi.fn().mockResolvedValue(JSON.stringify(reply)), stream: vi.fn() }
+}
+
+// 合成一份面诊病历并签名：用于学生端“我的老师”白名单测试。
+function signedRecordFor(signer: Identity, options: { encounterId?: string; homework?: boolean } = {}): SignedEncounterEvent {
+  let encounter: Encounter = startInPersonEncounter({
+    teacher: signer.publicKey, student: studentPub,
+    id: options.encounterId ?? 'd'.repeat(32), now: new Date('2026-10-17T09:00:00.000Z'),
+  })
+  encounter = recordIntakeField(encounter, 'chiefComplaint', '合成主诉，只用合成数据').encounter
+  if (options.homework) {
+    encounter = {
+      ...encounter,
+      plan: {
+        ...encounter.plan,
+        homework: [{ id: 'hw-synthetic', title: '合成作业', detail: '合成说明', schedule: { kind: 'daily', time: '08:00' }, source: 'teacher' }],
+      },
+    }
+  }
+  return signEncounter(encounter, signer.privateKey)
 }
 
 function acceptDraft(draft: Encounter): Encounter {
@@ -288,6 +315,8 @@ it('3 照片缺一张时老师端不能起草，补到后可以', async () => {
 
 it('4 篡改过的签字病历学生端不显示', async () => {
   const { teacher, teacherStore, studentStore } = await nodes()
+  // 先把这个老师登记进“我的老师”，否则学生端按白名单直接丢弃。
+  await addTeacher(studentStore, teacherPub)
   const pkg = await syntheticPackage(0)
   const signed = signEncounter(pkg.encounter, teacherId.privateKey)
   await teacher.send(studentPub, { type: 'record.signed', version: 1, payload: signed })
@@ -336,6 +365,67 @@ it('7 加固：急症后重启会删除旧草稿；intake-outbox 改为真实发
   expect(flushed).toBe(1)
   await waitFor(async () => (await consultReadiness(teacherStore, pkg.encounter.id)).ready)
   expect(await store.list('intake-outbox')).toHaveLength(0)
+})
+
+it('8 陌生成员签发的病历不显示、作业不进 homework；旧数据也按“我的老师”过滤', async () => {
+  const relay = new MemoryRelay()
+  const strangerId = createIdentity(phrase, 'english', 2)
+  relay.members.add(strangerId.publicKey)
+  const studentNode = await openNode(studentId, relay)
+  const strangerNode = await openNode(strangerId, relay)
+  await waitFor(() => studentNode.status.value === 'ready' && strangerNode.status.value === 'ready')
+
+  const strangerEvent = signedRecordFor(strangerId, { homework: true })
+  await strangerNode.wiring.send(studentPub, { type: 'record.signed', version: 1, payload: strangerEvent })
+  await new Promise(resolve => setTimeout(resolve, 300))
+  // 名单为空：陌生成员的病历不写库，作业也不进 M1-13 集合。
+  expect(await studentNode.store.list('student-records')).toHaveLength(0)
+  expect(await studentNode.store.list('homework')).toHaveLength(0)
+  expect(await listReceivedRecords(studentNode.store, studentId)).toHaveLength(0)
+
+  // 旧数据（白名单之前已经写进本机的）在显示时同样按名单过滤。
+  await studentNode.store.put('student-records', strangerEvent.id, {
+    id: 'd'.repeat(32),
+    teacher: strangerId.publicKey,
+    createdAt: '2026-10-17T09:00:00.000Z',
+    eventJson: JSON.stringify(strangerEvent),
+    version: 1,
+  } as unknown as StoreValue)
+  expect(await listReceivedRecords(studentNode.store, studentId)).toHaveLength(0)
+  // 手动登记后同一份旧数据才显示（名单决定可见性）。
+  await addTeacher(studentNode.store, strangerId.publicKey)
+  expect(await listReceivedRecords(studentNode.store, studentId)).toHaveLength(1)
+  await removeTeacher(studentNode.store, strangerId.publicKey)
+  expect(await listReceivedRecords(studentNode.store, studentId)).toHaveLength(0)
+})
+
+it('9 已登记老师正常显示并进作业；已发出的问诊包会自动把老师加入名单', async () => {
+  const { teacher, student, studentStore } = await nodes()
+  const pkg = await syntheticPackage(0)
+  expect(await loadTeachers(studentStore)).toHaveLength(0)
+  await student.sendConsult(pkg)
+  // 问诊包发送成功后自动加入“我的老师”。
+  await waitFor(async () => (await loadTeachers(studentStore)).includes(teacherPub))
+
+  const event = signedRecordFor(teacherId, { homework: true })
+  await teacher.send(studentPub, { type: 'record.signed', version: 1, payload: event })
+  const records = await waitFor(async () => {
+    const rows = await listReceivedRecords(studentStore, studentId)
+    return rows.length === 1 ? rows : null
+  })
+  expect(records[0].teacher).toBe(teacherPub)
+  const homework = await waitFor(async () => {
+    const rows = await studentStore.list('homework')
+    return rows.length === 1 ? rows : null
+  })
+  expect((homework[0].value as { homework: { title: string } }).homework.title).toBe('合成作业')
+
+  // 改名单位后旧病历不再显示；重新登记后恢复，且非法公钥被拒绝。
+  await removeTeacher(studentStore, teacherPub)
+  expect(await listReceivedRecords(studentStore, studentId)).toHaveLength(0)
+  await expect(addTeacher(studentStore, 'not-a-key')).rejects.toThrow('64 位十六进制')
+  await addTeacher(studentStore, teacherPub)
+  expect(await listReceivedRecords(studentStore, studentId)).toHaveLength(1)
 })
 
 it('6 375px 截图：学生病历页、老师问诊箱', () => {

@@ -11,6 +11,7 @@ import { openStore, resumeStore, type LocalStore } from './core/store'
 import { persistenceLabels, requestPersistence, type PersistenceStatus } from './core/store/persistence'
 import { createWiring, type Wiring } from './core/wiring'
 import { createPushClient } from './core/push'
+import { TeacherListSettings } from './TeacherListSettings'
 
 const HomeworkPage = lazy(() => import('./HomeworkPage').then(module => ({ default: module.HomeworkPage })))
 const IntakePage = lazy(() => import('./IntakePage').then(module => ({ default: module.IntakePage })))
@@ -202,6 +203,7 @@ export function App() {
         <details><summary>设置</summary>
           <h3>身份角色</h3>
           <p><button type="button" disabled={role === 'student'} onClick={() => void chooseRole('student')}>我是学生</button>{' '}<button type="button" disabled={role === 'teacher'} onClick={() => void chooseRole('teacher')}>我是老师</button></p>
+          {store && <TeacherListSettings store={store} />}
           <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p><p>持久化存储不能替代备份。</p>
           {store && <><BackupSettings identity={identity} store={store} /><LedgerSettings identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></>}
         </details>
