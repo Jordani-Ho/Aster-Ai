@@ -224,7 +224,7 @@ cd /mnt/d/projects/Aster-Ai/deploy/home
 - 每次 `wsl --shutdown`/重启后，**临时地址会变**，必须重跑 `./quick-start.sh`；这时旧链接失效，需要重新发链接。
 - 这种模式只暴露「应用」和「中继」两个临时地址；网关不单独暴露，页面通过 `app/push`、`app/v1` 同源访问（M1-08 要求应用与网关同源）。
 - 自测模式下 Cloudflare 隧道容器保留少量日志（只有临时地址与连接状态），用来读取地址；拿到地址并重建容器后日志不再增长。
-- **WSL 闲时会被 Windows 回收**：如果最后一个 WSL 会话退出、一段时间没人用，WSL2 会停掉，容器和临时隧道随之停止；下次启动 WSL 后临时地址会变，必须重新跑 `./quick-start.sh`。做自测时保持一个 WSL 终端开着（或 `wsl -d Ubuntu -- bash -lc "sleep 7200"` 这种保活）。域名模式不受影响：hostname 固定，容器重启后按同一个 token 重连。
+- **WSL 闲时会被 Windows 回收**：如果最后一个 WSL 会话退出、一段时间没人用，WSL2 会停掉，容器和临时隧道随之停止；下次启动 WSL 后临时地址会变，必须重新跑 `./quick-start.sh`。做自测时保持一个 WSL 终端开着（或 `wsl -d Ubuntu -- bash -lc "sleep 7200"` 这种保活）。**注意：WSL 被回收时所有容器都会停，域名模式也一样**——域名模式只是 hostname 固定、重连后地址不变，不等于容器常驻；长时间在线（无论哪种模式）都要按下面第 6.6 节做保活。
 - **短时间反复重建可能被 Cloudflare 限流**：容器反复重启、连续多次重跑脚本时，cloudflared 日志会出现 `quick tunnel provisioning failed with status 429`（HTTP 429、`error code: 1015`），响应头 `retry-after` 给出还要等多少秒（本次实测约 35 分钟）。这时**不要再反复重启容器**（只会继续撞限流），等限流解除后重跑 `./quick-start.sh` 即可；需要稳定地址请用域名模式。
 
 ### 从自测模式切到域名模式
@@ -306,6 +306,52 @@ docker compose exec gateway node -e "fetch('http://localhost:8787/v1/chat/comple
 ```
 
 排障需要临时打开某个服务的日志时：把 `compose.yaml` 里该服务的 `logging: driver: none` 注释掉，重建容器，**查完改回去**（日志默认必须关闭；不要把带日志的版本提交）。
+
+### 6.6 让服务一直在线（防止 WSL 被回收）
+
+WSL2 在最后一个会话退出约 1 分钟后会被 Windows 回收，容器和临时隧道随之停止（域名模式也一样，只是地址不变，见第 4 步的注意）。家用内测要长期在线，做两件事：
+
+1. 登录时自动保活：用 Windows 任务计划程序，在用户登录时以隐藏窗口跑一个常驻 WSL 会话。下面命令**直接粘贴到 PowerShell 执行一次**即可（改系统配置属于用户自己的操作，脚本不会替你注册）：
+
+   ```powershell
+   $action = New-ScheduledTaskAction -Execute "wsl.exe" -Argument "-d Ubuntu --exec sleep infinity"
+   $trigger = New-ScheduledTaskTrigger -AtLogOn
+   $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+   $settings = New-ScheduledTaskSettingsSet -Hidden -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+   Register-ScheduledTask -TaskName "Aster-WSL-Keepalive" -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Aster 内测：登录时保持 WSL 常驻，防容器被回收" -Force
+   ```
+
+   含义：`-Hidden` 隐藏窗口；`-ExecutionTimeLimit 0` 不设执行时限；`-RestartCount` / `-RestartInterval` 失败后自动重试；`-Force` 重复执行时覆盖同名任务。想取消就 `Unregister-ScheduledTask -TaskName "Aster-WSL-Keepalive" -Confirm:$false`。
+
+2. 接通电源时不睡眠（避免电脑入睡后容器停机）：
+
+   ```powershell
+   powercfg /change standby-timeout-ac 0
+   powercfg /change hibernate-timeout-ac 0
+   ```
+
+   两个 `0` 都表示“从不”。想还原把 `0` 换成分钟数即可。
+
+3. 整机重启后怎么验证：
+
+   ```powershell
+   Get-ScheduledTask -TaskName "Aster-WSL-Keepalive"   # 状态应是 Ready / Running
+   wsl -l -v                                            # Ubuntu 的 STATE = Running
+   ```
+
+   ```bash
+   wsl -d Ubuntu -- bash -lc "cd /mnt/d/projects/Aster-Ai/deploy/home && docker compose ps"
+   ```
+
+   容器起来后：无域名模式重跑 `./quick-start.sh`（临时地址会变），域名模式跑 `./start.sh`，最后 `./verify.sh` 六项全 PASS 即恢复在线。
+
+### 6.7 升级 cloudflared
+
+`compose.yaml` 里三处 cloudflared 用的是固定版本加摘要 `cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c`（发布于 2026-09-24，Apache-2.0）。升级时：
+
+1. 到 Docker Hub 的 `cloudflare/cloudflared` 页挑一个发布满 14 天的新 tag，记下 `tag` 和 digest：`docker pull cloudflare/cloudflared:<tag>` 后用 `docker image inspect --format '{{.RepoDigests}}' cloudflare/cloudflared:<tag>` 看 `@sha256:…`。
+2. 把 `compose.yaml` 三处 `image:` 换成 `cloudflare/cloudflared:<tag>@sha256:<digest>`（三处保持一致）。
+3. 重建并验证：无域名自测跑 `./quick-start.sh`，域名模式跑 `./start.sh`，最后 `./verify.sh` 六项全 PASS。
 
 ---
 

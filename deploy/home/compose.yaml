@@ -55,7 +55,8 @@ services:
 
   # ---- 域名模式：一条 token 隧道，三条 Public Hostname 在 Cloudflare Zero Trust 里配置 ----
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    # cloudflared 固定到 2026.9.3（发布于 2026-09-24，Apache-2.0）；升级见 README 6.7。
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
     profiles: ["domain"]
     command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN:-}
     restart: unless-stopped
@@ -69,7 +70,8 @@ services:
   # 云朵临时隧道地址由云朵进程日志打印，所以这两个服务保留 stdout 日志（只有隧道地址与连接状态，
   # 没有请求内容）；拿到地址后 quick-start.sh 会重建 relay/gateway/web，不需要再读日志。
   cloudflared-app:
-    image: cloudflare/cloudflared:latest
+    # cloudflared 固定到 2026.9.3（发布于 2026-09-24，Apache-2.0）；升级见 README 6.7。
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
     profiles: ["quick"]
     command: tunnel --no-autoupdate --loglevel info --url http://web:8080
     restart: unless-stopped
@@ -82,7 +84,8 @@ services:
     networks: [internal]
 
   cloudflared-relay:
-    image: cloudflare/cloudflared:latest
+    # cloudflared 固定到 2026.9.3（发布于 2026-09-24，Apache-2.0）；升级见 README 6.7。
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
     profiles: ["quick"]
     command: tunnel --no-autoupdate --loglevel info --url http://relay:8080
     restart: unless-stopped
