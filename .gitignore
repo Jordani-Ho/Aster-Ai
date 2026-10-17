@@ -10,6 +10,13 @@ push-subscriptions.json
 push-subscriptions.json.*.tmp
 
 relay/config.local.toml
+
 .cache/e2e/
 playwright-report/
 test-results/
+
+# 内测部署：数据、真实环境变量不进仓库；.env.example 是模板，要入库。
+deploy/home/data/
+deploy/home/.env
+deploy/home/.env.runtime
+!deploy/home/.env.example

@@ -1,0 +1,334 @@
+# M1-16 内测部署：把知衡放在发起人家里的一台电脑上
+
+这台电脑跑四个容器：**中继（relay）**、**模型网关（gateway，含推送）**、**手机网页应用（web）**、**Cloudflare Tunnel（cloudflared）**。
+家里路由器**不开任何端口**，也不用公网 IP：cloudflared 从家里主动连到 Cloudflare，外面的人用 HTTPS 访问。
+
+```
+手机 / 老师的电脑
+   │ https://app.<域名>    → Cloudflare → cloudflared（家里）→ web 容器（静态页面 + /push /v1 反代）
+   │ wss://relay.<域名>    → Cloudflare → cloudflared（家里）→ relay 容器（Nostr 中继）
+   └ https://gw.<域名>     → Cloudflare → cloudflared（家里）→ gateway 容器（直连排障用）
+```
+
+- 中继/网关/网页的**访问日志全部关闭**；数据只在这台电脑的 `deploy/home/data/`（不进仓库）。
+- 页面里的中继与网关地址是**构建时**常量，所以 `web` 容器每次启动时会用当前 `.env` 里的域名重新构建一次 app。
+- 这份手册面向发起人本人，每条命令都写了预期看到什么。
+
+---
+
+## 0. 这台电脑的现状（2026-10-17 核对）
+
+| 项目 | 现状 |
+| :-- | :-- |
+| 系统 | WSL2 · Ubuntu 24.04（systemd 已启用） |
+| WSL 用户 | `jordamodell`（下面命令都以这个普通用户运行，**不要用 root**） |
+| 内存 / 磁盘 | 3.7 GiB / 940 GB 可用 |
+| Node.js | 已装 v22.22.2（本仓库开发也需要） |
+| Docker | **还没装**（第 1 步装） |
+| 到 trycloudflare.com 的网络 | 通 |
+
+> 施工者（AI）按约定**没有执行任何 sudo、没有安装 Docker**。第 1 步需要你本人输入 WSL 密码。
+
+---
+
+## 1. 第 1 步：在 WSL 里安装 Docker（需要 sudo 密码）
+
+打开 Windows 终端，进入 WSL：
+
+```bash
+wsl -d Ubuntu
+```
+
+确认是普通用户（预期输出 `jordamodell` 或你自己的用户名，不是 `root`）：
+
+```bash
+whoami
+```
+
+然后逐段执行（每段都会要一次密码）：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+把当前用户加入 docker 组，并让 systemd 开机启动 Docker：
+
+```bash
+sudo usermod -aG docker "$USER"
+sudo systemctl enable --now docker
+newgrp docker
+```
+
+验证（预期：`Docker version 28.x` 与 `Docker Compose version v2.x`）：
+
+```bash
+docker --version
+docker compose version
+docker run --rm hello-world
+```
+
+`hello-world` 的预期输出里会有一句 `Hello from Docker!`。
+如果提示 `permission denied while trying to connect to the Docker daemon`，退出 WSL（`exit`）后重新 `wsl -d Ubuntu` 再试。
+
+> 3.7 GiB 内存编译中继可能吃紧。若第 3 步 `docker compose build relay` 被系统杀掉（OOM），先加 4 GB 交换文件（需要 sudo，执行一次即可）：
+> ```bash
+> sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+> echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+> ```
+
+---
+
+## 2. 第 2 步：准备仓库和 .env
+
+仓库在 `D:\projects\Aster-Ai`，WSL 里的路径是 `/mnt/d/projects/Aster-Ai`：
+
+```bash
+cd /mnt/d/projects/Aster-Ai/deploy/home
+cp .env.example .env
+chmod 600 .env
+```
+
+用文本编辑器打开 `.env`，至少填写：
+
+| 变量 | 填什么 |
+| :-- | :-- |
+| `MEMBER_PUBKEYS` | 老师和学生的 64 位十六进制公钥，逗号分隔（就是 App 里显示的那串「公钥十六进制」） |
+| `UPSTREAM_API_KEY` | 模型服务商的 API Key（部署时不要在聊天里贴出来） |
+| `VAPID_SUBJECT` | 你的联系邮箱，`mailto:you@example.com` |
+| `APP_DOMAIN` / `RELAY_DOMAIN` / `GATEWAY_DOMAIN` | 域名模式填，例如 `app.example.com`；无域名自测留空，交给 `quick-start.sh` |
+| `CF_TUNNEL_TOKEN` | 域名模式下 Cloudflare 隧道的 token；无域名留空 |
+
+`.env` 不要提交、不要发给别人。`SELF_TEST_MEMBER=1` 会额外生成一对只用于验收的自测密钥（公钥自动加进成员名单），正式对外前改成 `0` 并重跑 `./setup.sh`。
+
+---
+
+## 3. 第 3 步：域名模式（推荐，真实内测用）
+
+### 3.1 Cloudflare 准备（在浏览器里做，不在这台电脑上）
+
+1. 把一个域名托管到 Cloudflare（修改域名的 NS 记录，等生效）。
+2. 进入 **Zero Trust → Networks → Tunnels → Create a tunnel**，类型选 **Cloudflared**，名字填 `aster-home`。
+3. 创建后会显示安装命令，其中 `--token` 后面那一长串就是 `CF_TUNNEL_TOKEN`，复制到 `.env`。
+   **不要**在这台电脑上执行它给的 `cloudflared service install`；容器会替我们运行。
+4. 在隧道的 **Public Hostname** 里加三条：
+
+   | 子域名 | 服务（Service） |
+   | :-- | :-- |
+   | `app.<你的域名>` | `http://web:8080` |
+   | `relay.<你的域名>` | `http://relay:8080` |
+   | `gw.<你的域名>` | `http://gateway:8787` |
+
+   `http://web:8080` 这种写法是容器内部服务名，Cloudflare 面板里原样填即可。
+   页面里的推送与模型请求都走 `app.<域名>/push` 与 `app.<域名>/v1`（web 容器里同源反代到网关），所以 **gw 子域名只用于直连排障**，浏览器不需要它。
+5. Cloudflare 不需要任何端口转发；路由器也不要动。
+
+### 3.2 第一次生成配置并构建（在 WSL 里）
+
+```bash
+cd /mnt/d/projects/Aster-Ai/deploy/home
+./setup.sh
+```
+
+预期看到类似：
+
+```
+成员：2 个
+应用域名：app.example.com
+中继域名：relay.example.com
+构建镜像（relay 首次要在容器里编译 Rust，约 10–30 分钟；之后有缓存会快很多）…
+...
+生成 VAPID 推送密钥…
+VAPID 已生成并写入 .env（不要提交 .env）
+生成验收用自测成员密钥…
+自测成员公钥：xxxx…
+生成中继配置 data/relay-config.toml（relay_url=wss://relay.example.com/）…
+生成网关配置 data/gateway-config.json 与成员名单 data/gateway-members.json…
+gateway config: publicUrl=https://app.example.com members=3
+完成：
+  - 数据目录：/mnt/d/projects/Aster-Ai/deploy/home/data（已加入 .gitignore，备份就备份这个目录）
+  - 域名模式启动：./start.sh
+  - 无域名自测：./quick-start.sh（会生成 trycloudflare 临时地址并写回 .env）
+  - 验收探测：./verify.sh
+```
+
+首次中继构建很久是正常的（Rust 编译），**不要中途 Ctrl-C**。
+
+### 3.3 启动
+
+```bash
+./start.sh
+```
+
+预期最后打印容器状态，四个服务都是 `running`：`relay`、`gateway`、`web`、`cloudflared`。
+用手机浏览器打开 `https://app.<你的域名>`，应该看到「知衡 · 身份」页面；生成/恢复身份后可以开始采集。
+
+### 3.4 验收
+
+```bash
+./verify.sh
+```
+
+预期输出摘要（全部 `PASS`、`RESULT PASS`）：
+
+```
+== 1/5 网络探测（应用 / 中继 / 网关） ==
+PASS 应用页面可打开（200）
+PASS 网关无凭据返回 401
+PASS 网关拒绝非成员（403）
+PASS 网关接受成员请求并经隧道返回 202（推送路由，无订阅也 202）
+PASS 中继拒绝非成员 AUTH（rejected）
+PASS 中继接受成员 AUTH
+RESULT PASS
+== 2/5 数据目录 ==
+...
+== 3/5 docker compose logs 隐私扫描（relay / gateway / web） ==
+PASS 日志里没有请求正文标记
+PASS 日志里没有完整公钥
+PASS 日志里没有 IP 地址
+== 5/5 结论 ==
+全部通过。
+```
+
+---
+
+## 4. 第 4 步：没有域名时的自测模式（trycloudflare）
+
+Cloudflare 临时隧道不需要域名和账号，但**地址每次重启都会变**，只适合自测，不能当作内测入口。
+
+```bash
+cd /mnt/d/projects/Aster-Ai/deploy/home
+./quick-start.sh
+```
+
+它会：准备镜像与占位配置 → 起两条临时隧道 → 读出两个 `https://xxx.trycloudflare.com` 地址 → 写回 `.env` 的 `APP_DOMAIN` / `RELAY_DOMAIN` → 重新生成中继/网关配置 → 重建 `relay/gateway/web`。
+
+预期最后看到：
+
+```
+已就绪（临时地址，重启后会变；只适合自测）：
+  应用：https://xxxx.trycloudflare.com
+  中继：wss://yyyy.trycloudflare.com
+  网关：https://xxxx.trycloudflare.com（页面同源访问 /v1 与 /push）
+验收：./verify.sh
+```
+
+把「应用」地址发到手机上打开即可。注意：
+
+- 每次 `wsl --shutdown`/重启后，**临时地址会变**，必须重跑 `./quick-start.sh`；这时旧链接失效，需要重新发链接。
+- 这种模式只暴露「应用」和「中继」两个临时地址；网关不单独暴露，页面通过 `app/push`、`app/v1` 同源访问（M1-08 要求应用与网关同源）。
+- 自测模式下 Cloudflare 隧道容器保留少量日志（只有临时地址与连接状态），用来读取地址；拿到地址并重建容器后日志不再增长。
+
+### 从自测模式切到域名模式
+
+1. 在 `.env` 里把 `APP_DOMAIN` / `RELAY_DOMAIN` / `GATEWAY_DOMAIN` 改成你的域名，`CF_TUNNEL_TOKEN` 填 Cloudflare 隧道 token。
+2. `./setup.sh`
+3. `docker compose --profile quick down`（停掉临时隧道和容器）
+4. `./start.sh`
+
+反向切回自测：把域名清空后跑 `./quick-start.sh` 即可。
+
+---
+
+## 5. 对照任务卡的验收清单
+
+| # | 验收项 | 怎么跑 | 预期 |
+| :-- | :-- | :-- | :-- |
+| 1 | 干净机器按 README 跑起来 | 本文件第 1–3 步 | 没报错，`docker compose ps` 四个容器 running |
+| 2 | 手机经 Tunnel 打开应用，能连中继、调网关 | 手机打开 `https://app.<域名>`；`./verify.sh` | 页面出现；中继成员 AUTH 通过；网关成员推送 202 |
+| 3 | 非成员公钥连不上中继 | `./verify.sh` 第 1 步 | `PASS 中继拒绝非成员 AUTH` |
+| 4 | `docker compose logs` 无请求内容/公钥全文/IP | `./verify.sh` 第 3 步 | 三条 PASS，日志原文在 `data/verify-logs.txt` |
+| 5 | 重启后数据还在 | 见下面「重启与数据持久化」 | 重启后 `./verify.sh` 仍通过，`data/` 文件数与大小不变 |
+
+---
+
+## 6. 日常运维
+
+### 6.1 添加新成员（新学生/新老师）
+
+1. 让对方在 App 里生成身份，把「公钥十六进制」发给你。
+2. 在 `.env` 的 `MEMBER_PUBKEYS` 里加一个逗号和新公钥。
+3. `./setup.sh`（会重建中继/网关配置）。
+4. 让新配置生效：
+
+   ```bash
+   docker compose --profile domain up -d --force-recreate relay gateway
+   ```
+
+   预期：两个容器重新创建并 running；新成员可以连中继、调用网关，老成员不受影响。
+   移除成员反向操作即可；历史事件不会因此删除。
+
+### 6.2 重启
+
+- 只重启容器：`docker compose --profile domain down && ./start.sh`
+- 重启 WSL：在 Windows 终端执行 `wsl --shutdown`，再 `wsl -d Ubuntu`，然后
+  ```bash
+  cd /mnt/d/projects/Aster-Ai/deploy/home && ./start.sh
+  ```
+- 整机重启：开机后确认 Docker 服务已启动（`sudo systemctl status docker`），再执行上面的 `./start.sh`。
+  （本卡用 `wsl --shutdown` 模拟整机重启，见 PR 说明。）
+
+### 6.3 备份中继数据
+
+```bash
+cd /mnt/d/projects/Aster-Ai/deploy/home
+docker compose --profile domain stop relay gateway
+tar czf ~/aster-home-backup-$(date +%F-%H%M).tar.gz data/
+docker compose --profile domain start relay gateway
+```
+
+预期：`data/` 里主要是中继 SQLite、网关推送订阅文件、生成的配置与成员名单。备份文件里的 `data/verify-logs.txt` 是验收日志，可删。
+恢复：停容器 → 解压覆盖 `data/` → `./start.sh`。**恢复后建议重跑 `./setup.sh`**，确认配置与 `.env` 一致。
+
+### 6.4 停用
+
+```bash
+docker compose --profile domain down
+```
+
+数据仍在 `deploy/home/data/`。要彻底清空：`docker compose down` 后再删除 `data/`（不可恢复，先备份）。
+
+### 6.5 看状态 / 排障
+
+```bash
+docker compose --profile domain ps          # 容器状态
+docker compose logs cloudflared             # 域名模式：cloudflared 日志驱动是 none，一般没输出
+docker compose exec web wget -qO- http://localhost:8080/ | head   # 页面在容器内是否正常
+docker compose exec gateway node -e "fetch('http://localhost:8787/v1/chat/completions',{method:'POST'}).then(r=>console.log(r.status))"  # 网关在容器内是否正常
+```
+
+排障需要临时打开某个服务的日志时：把 `compose.yaml` 里该服务的 `logging: driver: none` 注释掉，重建容器，**查完改回去**（日志默认必须关闭；不要把带日志的版本提交）。
+
+---
+
+## 7. 隐私边界（内测必须有数）
+
+- 中继只存加密事件（Nostr 端到端加密的外层包裹）。中继能看到收件公钥、AUTH 身份与连接时间，**看不到内容**；详见 `relay/README.md` 的「已裁决的隐私边界」。
+- 模型网关不记录请求/回复内容；`data/gateway-config.json` 里把指标日志写到了 `/dev/null`。
+- relay / gateway / web 的 Docker 日志驱动都是 `none`；`verify.sh` 会扫描这三份日志，确认没有请求正文标记、完整公钥和 IP。
+- Cloudflare Tunnel 在 Cloudflare 边缘终止 TLS，因此 **Cloudflare 能看到解密后的 HTTP**（页面 HTML、请求的 URL/路径、NIP-98 里有公钥；中继/网关的业务内容本身是端到端加密的）。这是选择 Cloudflare 隧道的已知代价，内测接受；正式落地时的隧道/入口方案另行评估。
+- `.env` 含 API Key、VAPID 私钥、中继成员名单，权限设为 600，不进仓库、不发给任何人。
+
+---
+
+## 8. 已知限制（内测版）
+
+1. 一条命令部署只覆盖**单机、单实例**；没有监控告警、没有自动备份（按 6.3 手动备份）。
+2. 无域名模式（trycloudflare）地址每次重启都会变，只适合自测；真实内测用域名模式。
+3. 应用目前能连中继、能经同源 `/push` 调用网关；模型整理/起草的客户端在 App 里还没有设置界面（M1-15a 的遗留边界），所以「调网关」验收用的是推送路由的成员鉴权请求（`/push/notify` 202），不消耗模型额度。
+4. 中继首次构建要编译 Rust，3.7 GiB 内存下可能较慢；OOM 时按第 1 步末尾加 swap。
+5. `data/relay` 目录给了 777 权限（中继容器以 uid 10001 运行）；内测机单用户可接受，正式部署再收紧。
+
+---
+
+## 9. 施工者说明（交给你时还没跑的部分）
+
+- 施工环境里 **WSL 没有 Docker、sudo 需要密码**，按约定我没有安装、没有执行 sudo。
+- 因此**容器构建、compose 起服务、隧道、手机访问、日志扫描、WSL 重启持久化这五项验收都还没真跑**；已完成的验证是：脚本语法（`bash -n`）、Node 脚本语法与生成器实跑、compose YAML 结构（无发布端口）、应用在容器等价流程下的 `npm ci && npm run build` 与 VITE 注入（见 PR 说明）。
+- 你装好 Docker 后，按第 3.2–3.4 节跑一遍，把 `./setup.sh`、`./start.sh`、`./verify.sh` 的输出贴回 PR，我再接着修问题。

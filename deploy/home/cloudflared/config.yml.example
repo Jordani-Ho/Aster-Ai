@@ -1,0 +1,15 @@
+# 域名模式（可选）：本地托管的 Cloudflare Tunnel 配置样例。
+# 用 token 模式在 Zero Trust 面板配 Public Hostname 时不需要这个文件；
+# 若改用 `cloudflared tunnel --config` 本地配置，把下面三行的 <你的域名> 换掉，并在 .env 里保留 CF_TUNNEL_TOKEN。
+# 注意：应用域名下的 /push 与 /v1 由 web 容器自身反代到网关，保持同源；gw 只作直连排障用。
+tunnel: aster-home
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: app.<你的域名>
+    service: http://web:8080
+  - hostname: relay.<你的域名>
+    service: http://relay:8080
+  - hostname: gw.<你的域名>
+    service: http://gateway:8787
+  - service: http_status:404

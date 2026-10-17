@@ -1,0 +1,13 @@
+# 部署用的 Docker 构建上下文忽略：不要把这些打进镜像，也别把数据带出去。
+.git
+.gitignore
+**/node_modules
+**/dist
+**/coverage
+**/*.log
+deploy/home/data
+**/config.local.toml
+**/push-subscriptions.json
+.env
+.env.*
+!deploy/home/.env.example
