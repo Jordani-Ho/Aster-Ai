@@ -1,0 +1,16 @@
+{
+  "name": "aster-e2e",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "e2e": "node e2e/run.mjs",
+    "e2e:build-relay": "node e2e/build-relay.mjs",
+    "test:e2e-env": "node --test e2e/environment.test.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2"
+  }
+}
