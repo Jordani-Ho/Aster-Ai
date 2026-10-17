@@ -1,6 +1,6 @@
 import prompt from '../../../../prompts/teacher/draft-encounter.md?raw'
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
-import { shichenNames } from '../../../../domain/tcm/templates/types'
+import { jieqiNames, shichenNames } from '../../../../domain/tcm/templates/types'
 import type { LlmClient } from '../llm'
 import type { ConsultPackage, Encounter, Field, Homework, Prescription } from '../record/types'
 import { searchCases, type DraftCase } from './cases'
@@ -57,7 +57,7 @@ function schedule(value: unknown): Homework['schedule'] | null {
   switch (value.kind) {
     case 'daily': return time(value.time) ? { kind: 'daily', time: value.time } : null
     case 'shichen': return typeof value.shichen === 'string' && shichenNames.includes(value.shichen) ? { kind: 'shichen', shichen: value.shichen } : null
-    case 'jieqi': return text(value.jieqi) ? { kind: 'jieqi', jieqi: value.jieqi } : null
+    case 'jieqi': return typeof value.jieqi === 'string' && jieqiNames.includes(value.jieqi) ? { kind: 'jieqi', jieqi: value.jieqi } : null
     case 'once': return date(value.date) && (value.time === undefined || time(value.time))
       ? { kind: 'once', date: value.date, ...(value.time === undefined ? {} : { time: value.time }) } : null
     default: return null

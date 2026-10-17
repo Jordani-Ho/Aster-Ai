@@ -8,7 +8,7 @@ options.level 默认 record：只允许四诊与症状摘要。pattern 再允许
 
 `searchCases(query, cases)` 只读去标识投影 DraftCase（id、symptomSummary、pattern）。NFKC 规范化后，对各连续汉字短句取去重二元组，不跨标点或空白；按共同二元组数降序，同分按 id 字典序，最多三份。无共同二元组时不匹配，单字及非汉字不计分；不是语义检索。调用者应只提供当前老师本机医案；不传完整 Encounter。存取留给 M1-11。
 
-作业使用 main 已更新的 Homework 类型，仅在 prescription 档接纳。本机生成随机 id，强制 source=ai_draft，不接纳模型 note。逐条校验 title/detail、正整数 durationDays、四类 schedule；时间严格 HH:MM，日期须有效，时辰须为十二地支，非法条目整条丢弃，不修补。仅构造类型允许的字段，不进入签字或提醒流程。
+作业使用 main 已更新的 Homework 类型，仅在 prescription 档接纳。本机生成随机 id，强制 source=ai_draft，不接纳模型 note。逐条校验 title/detail、正整数 durationDays、四类 schedule；时间严格 HH:MM，日期须有效，时辰须为十二地支，节气须精确匹配 domain/tcm/templates/types.ts 的24节气名称，非法条目整条丢弃，不修补。仅构造类型允许的字段，不进入签字或提醒流程。
 
 没有 M1-05 传输代码，直接接收 ConsultPackage，历史签名与附件校验由接收层负责；本模块不解析历史病历、不读取附件二进制。
 

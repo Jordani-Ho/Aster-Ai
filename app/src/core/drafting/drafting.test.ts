@@ -103,11 +103,19 @@ describe('老师起草验收（仅合成资料和模拟模型）', () => {
     }
   })
   it('作业的四种合法日程保留，非法日程与字段整条丢弃，不修补', async () => {
-    const valid = [{ kind: 'daily', time: '23:59' }, { kind: 'shichen', shichen: '酉' }, { kind: 'jieqi', jieqi: '合成节气' }, { kind: 'once', date: '2026-10-16', time: '00:00' }]
+    const valid = [{ kind: 'daily', time: '23:59' }, { kind: 'shichen', shichen: '酉' }, { kind: 'jieqi', jieqi: '立冬' }, { kind: 'once', date: '2026-10-16', time: '00:00' }]
     const invalid = [{ kind: 'other' }, { kind: 'daily', time: '8:00' }, { kind: 'daily', time: '24:00' }, { kind: 'daily', time: '12:60' }, { kind: 'shichen', shichen: '甲' }, { kind: 'once', date: '2026-02-30' }, { kind: 'once', date: '2026-10-16', time: 42 }, null]
     const make = (schedule: unknown) => ({ title: '合成作业', detail: '示例', schedule, source: 'teacher' })
     const result = await draftEncounter(pkg(), template, [], model({ plan: { homework: [...valid.map(make), ...invalid.map(make), { ...make(valid[0]), durationDays: -1 }, { ...make(valid[0]), title: 42 }] } }), { level: 'prescription' })
     expect(result.plan.homework.map(item => item.schedule)).toEqual(valid)
+    expect(result.plan.homework.every(item => item.source === 'ai_draft')).toBe(true)
+  })
+  it('作业只接纳24个标准节气名，伪造名称、别名和空白不修补', async () => {
+    const names = ['立春', '雨水', '惊蛰', '春分', '清明', '谷雨', '立夏', '小满', '芒种', '夏至', '小暑', '大暑', '立秋', '处暑', '白露', '秋分', '寒露', '霜降', '立冬', '小雪', '大雪', '冬至', '小寒', '大寒']
+    const invalid = ['合成节气', '春节', '冬至日', 'DONG_ZHI', ' 立春', '立春 ', '', null, 42]
+    const homework = [...names, ...invalid].map(jieqi => ({ title: '合成作业', detail: '合成说明', schedule: { kind: 'jieqi', jieqi } }))
+    const result = await draftEncounter(pkg(), template, [], model({ plan: { homework } }), { level: 'prescription' })
+    expect(result.plan.homework.map(item => item.schedule)).toEqual(names.map(jieqi => ({ kind: 'jieqi', jieqi })))
     expect(result.plan.homework.every(item => item.source === 'ai_draft')).toBe(true)
   })
   it('坏方子和作业逐项拒绝；改方必须说明原因；来源不可信', async () => {
