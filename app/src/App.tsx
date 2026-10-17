@@ -3,8 +3,15 @@ import { createIdentity, generatePhrase, languages, languageLabels, restoreIdent
 import type { Identity, Language } from './core/identity'
 import { beginBackup, checkBackup } from './core/identity/backup'
 import type { BackupChallenge } from './core/identity/backup'
+import { check, detectRegion } from './core/redflags'
+import type { RedFlagResult } from './core/redflags'
 import { openStore, resumeStore, type LocalStore } from './core/store'
 import { persistenceLabels, requestPersistence, type PersistenceStatus } from './core/store/persistence'
+import { RedFlagAlert } from './RedFlagAlert'
+
+function recordId(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(12)), byte => byte.toString(16).padStart(2, '0')).join('')
+}
 
 export function App() {
   const [language, setLanguage] = useState<Language>('simplified')
@@ -17,8 +24,12 @@ export function App() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [persistence, setPersistence] = useState<PersistenceStatus>('requesting')
+  const [talk, setTalk] = useState('')
+  const [alert, setAlert] = useState<RedFlagResult | null>(null)
+  const [notice, setNotice] = useState('')
   const storeRef = useRef<LocalStore | null>(null)
   const identityRef = useRef<Identity | null>(null)
+  const region = detectRegion(navigator.language)
   useEffect(() => {
     let cancelled = false
     void requestPersistence(navigator.storage).then(status => { if (!cancelled) setPersistence(status) })
@@ -35,7 +46,7 @@ export function App() {
   const reset = () => {
     storeRef.current?.close(); storeRef.current = null; identityRef.current = null
     identity?.privateKey.fill(0)
-    setIdentity(null); setPhrase(''); setChallenge(null); setAnswers(['', '', '']); setError(''); setStep('start')
+    setIdentity(null); setPhrase(''); setChallenge(null); setAnswers(['', '', '']); setError(''); setStep('start'); setTalk(''); setAlert(null); setNotice('')
   }
   const complete = async (result: Identity) => {
     setBusy(true)
@@ -45,6 +56,23 @@ export function App() {
       setIdentity(result); setPhrase(''); setChallenge(null); setAnswers(['', '', '']); setError(''); setStep('done')
     } catch (cause) { result.privateKey.fill(0); setError(cause instanceof Error ? cause.message : '无法保存身份，请重试') }
     finally { setBusy(false) }
+  }
+  const runCheck = () => {
+    const result = check(talk)
+    if (!result.hit) { setAlert(null); setNotice('没有发现急症信号。这是本地筛查，不能替代医生判断。'); return }
+    setNotice(''); setAlert(result)
+  }
+  const notifyTeacher = () => {
+    const category = alert?.category
+    if (!category) return
+    setNotice('已记录，等中继接通后再发送。')
+    void storeRef.current?.put('redflag-notify', recordId(), { categoryId: category.id, action: category.action, at: new Date().toISOString() })
+  }
+  const dismissAlert = () => {
+    const category = alert?.category
+    setAlert(null); setNotice('')
+    if (!category) return
+    void storeRef.current?.put('redflag-log', recordId(), { categoryId: category.id, action: category.action, at: new Date().toISOString(), region: region ?? 'unknown' })
   }
   return (
     <main style={{ fontFamily: 'system-ui, sans-serif', padding: '24px 16px', maxWidth: 480, margin: '0 auto' }}>
@@ -87,8 +115,16 @@ export function App() {
         <p>词表：{languageLabels[identity.language]} · 账户：{identity.account}（本人）</p>
         <p style={{ overflowWrap: 'anywhere' }}>公钥 npub：{identity.npub}</p>
         <p style={{ overflowWrap: 'anywhere' }}>公钥十六进制：{identity.publicKey}</p>
+        <section>
+          <h2>急症自检</h2>
+          <p>写下现在的感受。检查只在本地进行：不联网、不调用大模型，结果可以复现。M1-09 接入采集流程后，这个临时入口会被替换。</p>
+          <label>现在的感受<textarea rows={3} style={{ width: '100%', boxSizing: 'border-box' }} value={talk} onChange={event => setTalk(event.target.value)} /></label>
+          <p><button type="button" onClick={runCheck} disabled={!talk.trim()}>检查</button></p>
+          {notice && <p role="status">{notice}</p>}
+        </section>
       </>}
       {step !== 'start' && <p><button disabled={busy} onClick={reset}>{step === 'done' ? '返回首页' : '取消并返回'}</button></p>}
+      {alert && <RedFlagAlert result={alert} region={region} status={notice} onNotifyTeacher={notifyTeacher} onDismiss={dismissAlert} />}
     </main>
   )
 }
