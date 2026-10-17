@@ -5,3 +5,6 @@ coverage/
 .env.*
 *.log
 .DS_Store
+
+push-subscriptions.json
+push-subscriptions.json.*.tmp

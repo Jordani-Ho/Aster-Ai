@@ -7,6 +7,6 @@ redflags/：急症红线的本地确定性匹配引擎，规则从 domain/tcm/re
 ledger/：康币账本纯逻辑：只由老师写的记账链、学生签名的独立异议列表、余额与欠费、L2 退款校验。
 record/：共用病历和问诊包类型。
 drafting/：按模板和只读医案起草、校验模型回复、过滤档位；提示词和领域模板在仓库对应目录。
+homework/：本机作业排程、加密打卡和近 7 天完成统计，领域历法由 domain/tcm/calendar 提供。
+push/：标准网页推送（Web Push + VAPID）的 Service Worker 注册、订阅/注销与提醒客户端。
 不包含中医逻辑或中继通信。
-
-homework/：本机作业排程、加密打卡和近7天完成统计，领域历法由domain/tcm/calendar提供。
