@@ -187,3 +187,17 @@ describe('M1-14a 康币账本核心验收', () => {
 function odueSinceIsNull(ledger: Ledger): boolean {
   return overdueSince(ledger) === null
 }
+
+it('缓存过的事件签名被修改仍须失败', () => {
+ const ledger = append(emptyLedger(), teacherKey, { type: 'topup', amount: 10, at: day(1) })
+ expect(verify(ledger)).toEqual([])
+ const changed = { ...ledger, events: [{ ...ledger.events[0], sig: '0'.repeat(128) }] }
+ expect(verify(changed).some(issue => issue.code === 'bad-signature')).toBe(true)
+})
+it('两部手机并发写入后合并仍是一条链', () => {
+ const base = append(emptyLedger(), teacherKey, { type: 'charge', amount: 10, chargeReason: 'consult', at: day(1) })
+ const teacherCopy = append(base, teacherKey, { type: 'topup', amount: 20, at: day(4) })
+ const studentCopy = appendDispute(base, studentKey, { disputeFor: base.events[0].id, memo: '合成异议', at: day(2) })
+ expect(verify({ ...teacherCopy, disputes: studentCopy.disputes })).toEqual([])
+ expect(JSON.parse(studentCopy.disputes[0].content)).not.toHaveProperty('prev')
+})

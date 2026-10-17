@@ -19,7 +19,11 @@ type Part = VerifyIssue['part']
 function signatureValid(event: SignedLedgerEvent): boolean {
   try {
     if (getEventHash(event) !== event.id) return false
-    return verifyEvent(event)
+    // 逐字段重建，不能展开复制输入上的 verified Symbol；sig 不参与 id 哈希。
+    return verifyEvent({
+      id: event.id, pubkey: event.pubkey, created_at: event.created_at,
+      kind: event.kind, tags: event.tags.map(tag => [...tag]), content: event.content, sig: event.sig,
+    })
   } catch {
     return false
   }
