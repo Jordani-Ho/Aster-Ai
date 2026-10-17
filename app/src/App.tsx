@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 import './homework.css'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+=======
+import { PushSettings } from './PushSettings'
+import { useEffect, useRef, useState } from 'react'
+>>>>>>> bfd9656 (feat(push): add authenticated Web Push subscriptions and fixed reminders)
 import { createIdentity, generatePhrase, languages, languageLabels, restoreIdentity } from './core/identity'
 import type { Identity, Language } from './core/identity'
 import { beginBackup, checkBackup } from './core/identity/backup'
@@ -117,7 +122,11 @@ export function App() {
       </form>}
       {step === 'done' && identity && <>
         <h2>身份已就绪</h2>
+<<<<<<< HEAD
         <p><button onClick={()=>setHomeworkPage(true)}>今日作业</button></p>
+=======
+        <PushSettings identity={identity} />
+>>>>>>> bfd9656 (feat(push): add authenticated Web Push subscriptions and fixed reminders)
         <p>词表：{languageLabels[identity.language]} · 账户：{identity.account}（本人）</p>
         <p style={{ overflowWrap: 'anywhere' }}>公钥 npub：{identity.npub}</p>
         <p style={{ overflowWrap: 'anywhere' }}>公钥十六进制：{identity.publicKey}</p>

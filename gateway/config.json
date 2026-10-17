@@ -10,5 +10,8 @@
   "rateLimit": {
     "windowMs": 60000,
     "maxPerWindow": 20
+  },
+  "push": {
+    "subscriptionsFile": "./push-subscriptions.json"
   }
 }

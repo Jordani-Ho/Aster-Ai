@@ -1,3 +1,4 @@
+import { createPushService, PUSH_ROUTES } from './push/index.js'
 import { createServer } from 'node:http'
 import { appendFileSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -17,6 +18,7 @@ export function createGateway(config) {
   const members = new Set(JSON.parse(readFileSync(config.membersFile, 'utf8')))
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
   const upstreamTimeoutMs = config.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS
+  const push = config.push ? createPushService({ file: config.push.subscriptionsFile ?? './push-subscriptions.json', endpointHosts: config.push.endpointHosts, send: config.push.send }) : null
   const hits = new Map()
   const seen = new Map()
   const log = record => {
@@ -141,7 +143,7 @@ export function createGateway(config) {
     }
     try {
       // 只放行一个路径：成员不能借用上游账户的微调、文件等接口。
-      if (req.url !== ROUTE) {
+      if (req.url !== ROUTE && !PUSH_ROUTES.includes(req.url)) {
         status = 404
         reject(404, 'not found')
       } else if (req.method !== 'POST') {
@@ -169,7 +171,16 @@ export function createGateway(config) {
           else if (!allowed(pubkey)) {
             status = 429
             reply(res, 429, 'too many requests')
-          } else status = await forward(req, res, read.body)
+           } else if (req.url === ROUTE) status = await forward(req, res, read.body)
+          else if (!push) { status = 503; reply(res, 503, 'push unavailable') }
+          else {
+            let body
+            try { body = JSON.parse(read.body) } catch { status = 400; reply(res, 400, 'invalid json'); return }
+            const result = await push.handle(req.url, pubkey, body)
+            status = result.status
+            res.writeHead(status, { 'content-type': 'application/json' })
+            res.end(JSON.stringify({ ok: status < 400 }))
+          }
         }
       }
     } catch {
