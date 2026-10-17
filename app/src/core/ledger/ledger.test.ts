@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
-import { append, balance, createLedger, declarePricing, overdueSince, signEvent, verify, type Ledger } from './index'
+import {
+  append,
+  appendDispute,
+  balance,
+  createLedger,
+  declarePricing,
+  overdueSince,
+  signDispute,
+  signEvent,
+  verify,
+  type Ledger,
+} from './index'
 
 const DAY = 24 * 60 * 60 * 1000
 // 合成时间轴：2026-01-01 起第 n 天（UTC）。
@@ -16,7 +27,7 @@ function emptyLedger(): Ledger {
   return createLedger(teacher, student)
 }
 
-function tamper(ledger: Ledger, index: number, change: (fields: Record<string, unknown>) => void): Ledger {
+function tamperChain(ledger: Ledger, index: number, change: (fields: Record<string, unknown>) => void): Ledger {
   const events = ledger.events.map((event, position) => {
     if (position !== index) return event
     const fields = JSON.parse(event.content) as Record<string, unknown>
@@ -38,33 +49,38 @@ describe('M1-14a 康币账本核心验收', () => {
     expect(verify(ledger)).toEqual([])
   })
 
-  it('2 改动金额或删掉中间一条事件，verify 都报出出错的位置', () => {
+  it('2 改动金额或删掉链里中间一条，verify 都报出位置；改异议内容也能发现', () => {
     let ledger = emptyLedger()
     ledger = append(ledger, teacherKey, { type: 'topup', amount: 100, at: day(1) })
     ledger = append(ledger, teacherKey, { type: 'gift', amount: 20, at: day(1) })
     ledger = append(ledger, teacherKey, { type: 'charge', amount: 50, chargeReason: 'consult', at: day(2) })
+    ledger = appendDispute(ledger, studentKey, { disputeFor: ledger.events[2].id, memo: '合成异议', at: day(3) })
 
-    const amountIssues = verify(tamper(ledger, 1, fields => { fields.amount = 200 }))
-    expect(amountIssues.some(issue => issue.index === 1)).toBe(true)
+    const amountIssues = verify(tamperChain(ledger, 1, fields => { fields.amount = 200 }))
+    expect(amountIssues.some(issue => issue.part === 'chain' && issue.index === 1)).toBe(true)
     expect(amountIssues.some(issue => issue.code === 'bad-signature')).toBe(true)
 
     const removed = { ...ledger, events: ledger.events.filter((_, index) => index !== 1) }
     const removalIssues = verify(removed)
-    expect(removalIssues.some(issue => issue.index === 1)).toBe(true)
+    expect(removalIssues.some(issue => issue.part === 'chain' && issue.index === 1)).toBe(true)
     expect(removalIssues.some(issue => issue.code === 'broken-chain')).toBe(true)
+
+    const disputes = ledger.disputes.map(event => ({ ...event, content: event.content.replace('合成异议', '改过的异议') }))
+    const disputeIssues = verify({ ...ledger, disputes })
+    expect(disputeIssues.some(issue => issue.part === 'disputes' && issue.index === 0 && issue.code === 'bad-signature')).toBe(true)
   })
 
-  it('3 学生签发的 charge、老师签发的 dispute 都校验不通过', () => {
+  it('3 学生签的 charge、老师签的 dispute 都校验不通过；append 入口也拒绝', () => {
     const wrongCharge = signEvent(emptyLedger(), studentKey, { type: 'charge', amount: 10, chargeReason: 'consult', at: day(1) })
     const chargeLedger: Ledger = { ...emptyLedger(), events: [wrongCharge] }
-    expect(verify(chargeLedger).some(issue => issue.code === 'wrong-issuer' && issue.index === 0)).toBe(true)
+    expect(verify(chargeLedger).some(issue => issue.part === 'chain' && issue.code === 'wrong-issuer' && issue.index === 0)).toBe(true)
 
-    const wrongDispute = signEvent(emptyLedger(), teacherKey, { type: 'dispute', disputeFor: 'a'.repeat(64), memo: '合成理由', at: day(1) })
-    const disputeLedger: Ledger = { ...emptyLedger(), events: [wrongDispute] }
-    expect(verify(disputeLedger).some(issue => issue.code === 'wrong-issuer' && issue.index === 0)).toBe(true)
+    const wrongDispute = signDispute(emptyLedger(), teacherKey, { disputeFor: 'a'.repeat(64), memo: '合成理由', at: day(1) })
+    const disputeLedger: Ledger = { ...emptyLedger(), disputes: [wrongDispute] }
+    expect(verify(disputeLedger).some(issue => issue.part === 'disputes' && issue.code === 'wrong-issuer' && issue.index === 0)).toBe(true)
 
     expect(() => append(emptyLedger(), studentKey, { type: 'charge', amount: 10, chargeReason: 'consult', at: day(1) })).toThrow()
-    expect(() => append(emptyLedger(), teacherKey, { type: 'dispute', disputeFor: 'a'.repeat(64), memo: '合成理由', at: day(1) })).toThrow()
+    expect(() => appendDispute(emptyLedger(), teacherKey, { disputeFor: 'a'.repeat(64), memo: '合成理由', at: day(1) })).toThrow()
   })
 
   it('4 扣费后第 7 天的异议通过，第 8 天的不通过', () => {
@@ -72,29 +88,27 @@ describe('M1-14a 康币账本核心验收', () => {
     ledger = append(ledger, teacherKey, { type: 'charge', amount: 10, chargeReason: 'consult', at: day(1) })
     const charge = ledger.events[0]
 
-    const onDay7 = append(ledger, studentKey, {
-      type: 'dispute',
+    const onDay7 = appendDispute(ledger, studentKey, {
       disputeFor: charge.id,
       memo: '合成异议理由',
       at: new Date(Date.parse(day(1)) + 7 * DAY).toISOString(),
     })
-    expect(verify(onDay7).filter(issue => issue.index === 1)).toEqual([])
+    expect(verify(onDay7).filter(issue => issue.part === 'disputes')).toEqual([])
     expect(balance(onDay7)).toBe(balance(ledger))
 
-    const onDay8 = append(ledger, studentKey, {
-      type: 'dispute',
+    const onDay8 = appendDispute(ledger, studentKey, {
       disputeFor: charge.id,
       memo: '合成异议理由',
       at: new Date(Date.parse(day(1)) + 8 * DAY).toISOString(),
     })
-    expect(verify(onDay8).some(issue => issue.code === 'dispute-too-late' && issue.index === 1)).toBe(true)
+    expect(verify(onDay8).some(issue => issue.part === 'disputes' && issue.code === 'dispute-too-late' && issue.index === 0)).toBe(true)
   })
 
   it('5 退款金额超过“累计充值 − 累计退款”时校验不通过（L2）', () => {
     let over = emptyLedger()
     over = append(over, teacherKey, { type: 'topup', amount: 20, at: day(1) })
     over = append(over, teacherKey, { type: 'refund', amount: 30, at: day(2) })
-    expect(verify(over).some(issue => issue.code === 'refund-exceeds-topups' && issue.index === 1)).toBe(true)
+    expect(verify(over).some(issue => issue.part === 'chain' && issue.code === 'refund-exceeds-topups' && issue.index === 1)).toBe(true)
 
     let allowed = emptyLedger()
     allowed = append(allowed, teacherKey, { type: 'topup', amount: 20, at: day(1) })
@@ -116,7 +130,7 @@ describe('M1-14a 康币账本核心验收', () => {
   it('7 金额为 0、负数或小数时校验不通过', () => {
     for (const amount of [0, -5, 1.5]) {
       const ledger = append(emptyLedger(), teacherKey, { type: 'charge', amount, chargeReason: 'other', at: day(1) })
-      expect(verify(ledger).some(issue => issue.code === 'invalid-amount' && issue.index === 0), String(amount)).toBe(true)
+      expect(verify(ledger).some(issue => issue.part === 'chain' && issue.code === 'invalid-amount' && issue.index === 0), String(amount)).toBe(true)
     }
   })
 
@@ -140,4 +154,36 @@ describe('M1-14a 康币账本核心验收', () => {
     expect(() => declarePricing({ currency: 'cny', perCoin: 1 })).toThrow()
     expect(() => declarePricing({ currency: 'CNY', perCoin: 0 })).toThrow()
   })
+
+  it('9 记账链只有一个写入者：老师记账与学生提异议互不干扰，异议不进链也不改余额', () => {
+    let ledger = emptyLedger()
+    ledger = append(ledger, teacherKey, { type: 'topup', amount: 30, at: day(1) })
+    ledger = append(ledger, teacherKey, { type: 'charge', amount: 20, chargeReason: 'consult', at: day(2) })
+    ledger = appendDispute(ledger, studentKey, { disputeFor: ledger.events[1].id, memo: '合成异议', at: day(3) })
+    // 学生提异议之后，老师继续记账，链不会分叉。
+    ledger = append(ledger, teacherKey, { type: 'charge', amount: 5, chargeReason: 'herbs', at: day(4) })
+
+    expect(ledger.events).toHaveLength(3)
+    expect(ledger.disputes).toHaveLength(1)
+    expect(verify(ledger)).toEqual([])
+    expect(balance(ledger)).toBe(5)
+    expect(odueSinceIsNull(ledger)).toBe(true)
+  })
+
+  it('10 异议只能针对链里已存在的扣费', () => {
+    let ledger = emptyLedger()
+    ledger = append(ledger, teacherKey, { type: 'topup', amount: 10, at: day(1) })
+    expect(() => appendDispute(ledger, studentKey, { disputeFor: ledger.events[0].id, memo: '合成异议', at: day(2) })).toThrow()
+
+    const wrongTarget = signDispute(ledger, studentKey, { disputeFor: ledger.events[0].id, memo: '合成异议', at: day(2) })
+    expect(verify({ ...ledger, disputes: [wrongTarget] }).some(issue => issue.part === 'disputes' && issue.code === 'unknown-dispute-target')).toBe(true)
+
+    const missing = signDispute(ledger, studentKey, { disputeFor: 'b'.repeat(64), memo: '合成异议', at: day(2) })
+    expect(verify({ ...ledger, disputes: [missing] }).some(issue => issue.part === 'disputes' && issue.code === 'unknown-dispute-target')).toBe(true)
+  })
 })
+
+// 小工具：让第 9 条只关心余额与链，不依赖具体欠费语义。
+function odueSinceIsNull(ledger: Ledger): boolean {
+  return overdueSince(ledger) === null
+}
