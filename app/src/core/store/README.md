@@ -24,7 +24,7 @@ const session = await resumeStore() // { identity, store }；全新数据库返�
 可通过 `{ name, factory }` 注入测试数据库名及 IDBFactory。openStore 接收已核验助记词后
 得到的 Identity；resumeStore 使用设备密钥恢复，不需要助记词。close 后不接受新操作，
 已进入队列的操作完成后关闭连接并覆写存储实例的私钥副本；不删除持久化数据。
-应用中的“锁定本次页面并返回”仅清除本次会话，重新打开仍可自动解锁。
+应用中的“返回首页”仅清除本次会话，重新打开仍可自动解锁；它不提供锁定保护。
 
 值支持严格的 JSON 值（有限数字、字符串、布尔、null、数组、普通对象）和 Uint8Array。
 不接受 undefined、BigInt、循环引用、NaN、Infinity、Date、Blob 等；Blob 由调用方先转字节。
@@ -54,7 +54,8 @@ iv、ct、salt 均为标准带填充 Base64 字符串；owner 为小写十六进
 
 首次生成或助记词恢复时，通过 WebCrypto 生成不可导出的 AES-256-GCM 设备密钥，
 将 CryptoKey 结构化克隆存进 meta.deviceKey。私钥用它包裹，独立 12 字节随机 IV，
-AAD 为 UTF-8 `aster/device-identity/v1\u0000` 后接公钥。
+AAD 为 UTF-8 编码的 `aster/device-identity/v1\u0000{owner}\u0000{language}\u0000{account}`，
+account 使用十进制整数字符串；公钥、词表和账户序号均受认证，篡改后解包失败。
 meta.identity 为 `{ iv, ct, language, account }`，其中 ct 为 32 字节私钥加 GCM 标签的密文。
 设备密钥不通过 exportKey 导出，也不写入导出容器；没有助记词或明文私钥落盘。
 启动时读取设备密钥、解包私钥、复核公钥，再派生存储密钥。
@@ -97,6 +98,13 @@ createdAt、记录数量和元数据不构成签名；此格式不能防止删�
 
 同一实例的操作串行化；另一页面导入不同 salt 后，旧实例拒绝读取/写入并要求重新打开，
 防止使用旧密钥写入。导入使用内存全量校验，不保证超大备份的低内存占用。
+
+已知局限：list() 目前一次读入所有集合的记录，再仅解密目标集合；exportEncrypted()
+一次读入并验证所有记录（包括照片），筛选二进制之前也会解密。M1-09 引入照片时再评估
+为 records 增加集合索引，当前不实现。resumeStore 的元数据读取、校验和解包阶段
+共用“请用助记词恢复”提示，暂时性存储故障也可能显示该提示；它不会自动删除数据。
+本轮修正前开发版本包裹的私钥不支持自动解包，需要用原助记词重建设备包裹；
+原有业务密文及存储 salt 保留，不回退到未认证词表/账户的旧 AAD。
 
 ## 验证
 

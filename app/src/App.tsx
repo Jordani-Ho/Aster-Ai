@@ -88,7 +88,7 @@ export function App() {
         <p style={{ overflowWrap: 'anywhere' }}>公钥 npub：{identity.npub}</p>
         <p style={{ overflowWrap: 'anywhere' }}>公钥十六进制：{identity.publicKey}</p>
       </>}
-      {step !== 'start' && <p><button disabled={busy} onClick={reset}>{step === 'done' ? '锁定本次页面并返回' : '取消并返回'}</button></p>}
+      {step !== 'start' && <p><button disabled={busy} onClick={reset}>{step === 'done' ? '返回首页' : '取消并返回'}</button></p>}
     </main>
   )
 }

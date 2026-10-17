@@ -13,7 +13,7 @@ export interface EncryptedExport {
   kdf: Header['kdf']; cipher: 'AES-256-GCM'; includesBinary: boolean; records: EncryptedRecord[]
 }
 const recoveryMessage = '设备密钥不可用或身份数据损坏，请用助记词恢复'
-const deviceAAD = (owner: string) => new TextEncoder().encode(`aster/device-identity/v1\u0000${owner}`)
+const deviceAAD = (owner: string, language: Language, account: number) => new TextEncoder().encode(`aster/device-identity/v1\u0000${owner}\u0000${language}\u0000${account}`)
 function validateHeader(input: unknown): Header {
   if (!input || typeof input !== 'object') throw new Error('存储格式或版本无效')
   const h = input as Header
@@ -139,7 +139,7 @@ export async function openStore(identity: Identity, options: StoreOptions = {}):
     const proposed: Header = { version: 1, owner: identity.publicKey, kdf: { alg: 'HKDF-SHA256', salt: base64(random(16)), info: INFO } }
     const deviceKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
     const iv = random(12)
-    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: deviceAAD(identity.publicKey), tagLength: 128 }, deviceKey, bytes(identity.privateKey))
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: deviceAAD(identity.publicKey, identity.language, identity.account), tagLength: 128 }, deviceKey, bytes(identity.privateKey))
     const wrapped: WrappedIdentity = { iv: base64(iv), ct: base64(new Uint8Array(ct)), language: identity.language, account: identity.account }
     const header = await transaction(db, ['meta'], 'readwrite', async tx => {
       const existing = await readMeta(tx, 'header')
@@ -165,7 +165,7 @@ export async function resumeStore(options: StoreOptions = {}): Promise<{ identit
     if (!state.deviceKey || state.deviceKey.extractable !== false || state.deviceKey.algorithm.name !== 'AES-GCM' || !state.wrapped) throw new Error(recoveryMessage)
     const wrapped = state.wrapped
     if (!languages.includes(wrapped.language) || !Number.isSafeInteger(wrapped.account) || wrapped.account < 0 || wrapped.account >= 2 ** 31) throw new Error(recoveryMessage)
-    secret = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unbase64(wrapped.iv, 12), additionalData: deviceAAD(header.owner), tagLength: 128 }, state.deviceKey, unbase64(wrapped.ct)))
+    secret = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unbase64(wrapped.iv, 12), additionalData: deviceAAD(header.owner, wrapped.language, wrapped.account), tagLength: 128 }, state.deviceKey, unbase64(wrapped.ct)))
     if (secret.length !== 32 || getPublicKey(secret) !== header.owner) throw new Error(recoveryMessage)
     const identity: Identity = { privateKey: secret, publicKey: header.owner, npub: npubEncode(header.owner), language: wrapped.language, account: wrapped.account }
     return { identity, store: new LocalStore(db, header, await deriveKey(secret, header.kdf.salt), bytes(secret)) }

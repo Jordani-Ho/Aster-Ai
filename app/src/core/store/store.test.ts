@@ -113,10 +113,10 @@ describe('M1-02 acceptance with fake-indexeddb', () => {
     const { open } = setup(); const store = await open()
     const data = new Uint8Array(256 * 1024).fill(123)
     await store.put('media', key, data)
-    expect(await store.get('media', key)).toEqual(data)
+    expect(Buffer.from(await store.get('media', key) as Uint8Array).equals(Buffer.from(data))).toBe(true)
     const archive = await store.exportEncrypted({ includeBinary: true })
     await store.importEncrypted(archive, { replace: true })
-    expect(await store.get('media', key)).toEqual(data)
+    expect(Buffer.from(await store.get('media', key) as Uint8Array).equals(Buffer.from(data))).toBe(true)
     for (const bad of [undefined, NaN, Infinity, new Date(), { absent: undefined }]) await expect(store.put('notes', secondKey, bad as any)).rejects.toThrow()
   })
   it('10: rejects Chinese or overlong IDs and non-English collections', async () => {
@@ -138,6 +138,28 @@ describe('M1-02 acceptance with fake-indexeddb', () => {
     await raw(options, 'meta', s => s.delete('deviceKey'))
     await expect(resumeStore(options)).rejects.toThrow('请用助记词恢复')
     const recovered = await open(); expect(await recovered.get('notes', key)).toEqual(fixture)
+  })
+  it.each(['account', 'language'] as const)('requires mnemonic recovery after wrapped identity %s is tampered with', async field => {
+    const { open, options } = setup(); const store = await open()
+    await store.put('notes', key, fixture); store.close()
+    const wrapped = (await raw(options, 'meta')).find(item => item.k === 'identity')
+    const changed = { ...wrapped, value: { ...wrapped.value, [field]: field === 'account' ? 7 : 'simplified' } }
+    await raw(options, 'meta', s => s.put(changed))
+    const outcome = await resumeStore(options).then(session => {
+      session?.store.close(); session?.identity.privateKey.fill(0)
+      return 'unexpected success'
+    }, (cause: Error) => cause.message)
+    expect(outcome).toContain('请用助记词恢复')
+    const recovered = await open()
+    expect(await recovered.get('notes', key)).toEqual(fixture)
+  })
+  it('preserves authenticated language and account when resuming a child identity', async () => {
+    const { open, options } = setup(); const owner = other(); const store = await open(owner); store.close()
+    const session = await resumeStore(options); expect(session).not.toBeNull(); handles.push(session!.store)
+    expect(session!.identity.language).toBe(owner.language)
+    expect(session!.identity.account).toBe(1)
+    expect(session!.identity.publicKey).toBe(owner.publicKey)
+    session!.identity.privateKey.fill(0)
   })
   it('refuses unknown formats/versions and replacement without explicit confirmation', async () => {
     const { open } = setup(); const store = await open(); await store.put('notes', key, fixture)
