@@ -12,5 +12,5 @@ export function beginBackup(phrase: string): BackupChallenge {
   return { positions: [...positions].sort((a, b) => a - b), words }
 }
 export function checkBackup(challenge: BackupChallenge, answers: string[]): boolean {
-  return answers.length === 3 && challenge.positions.length === 3 && challenge.positions.every((position, index) => answers[index].normalize('NFKD').trim() === challenge.words[position])
+  return answers.length === 3 && challenge.positions.length === 3 && challenge.positions.every((position, index) => normalizePhrase(answers[index]) === challenge.words[position])
 }

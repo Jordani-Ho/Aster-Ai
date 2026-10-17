@@ -48,7 +48,7 @@ export function App() {
         event.preventDefault()
         try { complete(restoreIdentity(phrase)) } catch (cause) { setError(cause instanceof Error ? cause.message : '恢复失败') }
       }}>
-        <label>输入 12 个词（用空格分隔，自动识别文字）<textarea rows={5} style={{ width: '100%', boxSizing: 'border-box' }} autoComplete="off" autoCapitalize="none" spellCheck={false} value={phrase} onChange={event => setPhrase(event.target.value)} /></label>
+        <label>输入 12 个词（中文可连写，英文用空格或标点分隔，自动识别文字）<textarea rows={5} style={{ width: '100%', boxSizing: 'border-box' }} autoComplete="off" autoCapitalize="none" spellCheck={false} value={phrase} onChange={event => setPhrase(event.target.value)} /></label>
         <button type="submit">校验并恢复</button>
       </form>}
       {step === 'done' && identity && <>

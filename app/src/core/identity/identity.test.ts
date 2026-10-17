@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { HDKey } from '@scure/bip32'
-import { mnemonicToSeedSync } from '@scure/bip39'
+import { entropyToMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39'
+import { wordlist as simplified } from '@scure/bip39/wordlists/simplified-chinese.js'
+import { wordlist as traditional } from '@scure/bip39/wordlists/traditional-chinese.js'
+import { wordlist as english } from '@scure/bip39/wordlists/english.js'
 import { privateKeyFromSeedWords } from 'nostr-tools/nip06'
 import { createIdentity, restoreIdentity, generatePhrase, languages } from './index'
 import { beginBackup, checkBackup } from './backup'
@@ -24,6 +27,36 @@ describe('M1-01 identity acceptance', () => {
     expect(restoreIdentity(vectors[0][0]).publicKey).toBe(restoreIdentity(vectors[0][0]).publicKey)
     expect(() => restoreIdentity(vectors[0][0].replace('leader', 'invalidword'))).toThrow()
     expect(() => restoreIdentity(vectors[1][0])).toThrow()
+  })
+  // Synthetic fixture from library-generated zero entropy, not an official Chinese vector.
+  const chinesePhrase = entropyToMnemonic(new Uint8Array(16), simplified)
+  it.each([
+    ['Chinese with spaces', chinesePhrase],
+    ['Chinese with full-width spaces', chinesePhrase.replaceAll(' ', '\u3000')],
+    ['Chinese without spaces', chinesePhrase.replaceAll(' ', '')],
+    ['Chinese with Chinese commas', chinesePhrase.replaceAll(' ', '，')],
+    ['capitalized English', vectors[0][0].replace(/\b[a-z]/g, letter => letter.toUpperCase())],
+  ])('restores mobile input: %s', (_name, input) => {
+    const canonical = /[a-z]/i.test(input) ? vectors[0][0] : chinesePhrase
+    expect(restoreIdentity(input).publicKey).toBe(restoreIdentity(canonical).publicKey)
+  })
+  it('accepts uppercase English during backup verification', () => {
+    const challenge = beginBackup(vectors[0][0])
+    expect(checkBackup(challenge, challenge.positions.map(i => challenge.words[i].toUpperCase()))).toBe(true)
+  })
+  it.each([' ', '\u3000', '\n', '，', ',', '、', '。', '.', '；', ';'])('accepts separator %j', separator => {
+    expect(restoreIdentity(` ${chinesePhrase.replaceAll(' ', separator)} `).publicKey).toBe(restoreIdentity(chinesePhrase).publicKey)
+    expect(restoreIdentity(vectors[0][0].replaceAll(' ', separator)).publicKey).toBe(vectors[0][2])
+  })
+  it('restores traditional Chinese without spaces without converting characters', () => {
+    const phrase = entropyToMnemonic(new Uint8Array(16).fill(255), traditional)
+    expect(restoreIdentity(phrase.replaceAll(' ', '')).publicKey).toBe(createIdentity(phrase, 'traditional').publicKey)
+  })
+  it('rejects a fixed in-wordlist replacement with an invalid checksum', () => {
+    const changed = vectors[0][0].replace('leader', 'abandon')
+    expect(english).toContain('abandon')
+    expect(validateMnemonic(changed, english)).toBe(false)
+    expect(() => restoreIdentity(changed)).toThrow()
   })
   it.each(languages)('round trips %s and cross-checks both derivations', language => {
     const phrase = generatePhrase(language)

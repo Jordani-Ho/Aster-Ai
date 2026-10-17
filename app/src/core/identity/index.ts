@@ -17,7 +17,13 @@ export interface Identity {
   language: Language
   account: number
 }
-export const normalizePhrase = (phrase: string) => phrase.normalize('NFKD').trim().split(/\s+/u).join(' ')
+export function normalizePhrase(phrase: string): string {
+  const normalized = phrase.normalize('NFKD').toLowerCase().replace(/[\s，,、。.;；]+/gu, ' ').trim()
+  const compact = normalized.replaceAll(' ', '')
+  // Chinese BIP-39 words are single characters. Never translate simplified/traditional.
+  if (/^\p{Script=Han}{12}$/u.test(compact)) return [...compact].join(' ')
+  return normalized
+}
 export function generatePhrase(language: Language = 'simplified'): string {
   return generateMnemonic(wordlists[language], 128)
 }
@@ -32,7 +38,7 @@ export function createIdentity(input: string, language: Language, account = 0): 
 }
 export function restoreIdentity(input: string, account = 0): Identity {
   const phrase = normalizePhrase(input)
-  if (phrase.split(' ').length !== 12) throw new Error('请输入 12 个助记词，用空格分隔')
+  if (phrase.split(' ').length !== 12) throw new Error('请输入 12 个助记词；中文可连写，英文请用空格或标点分隔')
   const language = languages.find(candidate => validateMnemonic(phrase, wordlists[candidate]))
   if (!language) throw new Error('助记词校验失败，请检查文字及顺序；请用生成时的同一种文字恢复')
   return createIdentity(phrase, language, account)
