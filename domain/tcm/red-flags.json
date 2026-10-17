@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "policy": "只增不减。任何条目的增删改都属于 C 类决策，须经发起人确认。条目 id 一旦发布不得复用。",
+  "categories": [
+    {
+      "id": "RF-01",
+      "name": "胸痛胸闷",
+      "action": "emergency",
+      "keywords": ["胸痛", "胸口痛", "心口痛", "胸闷", "胸口闷", "胸口压着", "心绞痛"],
+      "aggravators": ["出汗", "冒冷汗", "放射", "左臂", "肩膀", "下巴", "喘不上气", "持续"],
+      "rule": "keyword AND (aggravator OR duration>=15min)"
+    },
+    {
+      "id": "RF-02",
+      "name": "疑似中风",
+      "action": "emergency",
+      "keywords": ["半边身子", "一侧无力", "手脚没劲", "口角歪", "嘴歪", "说话不清", "口齿不清", "突然看不见", "一只眼看不见"],
+      "rule": "any keyword"
+    },
+    {
+      "id": "RF-03",
+      "name": "呼吸困难与意识改变",
+      "action": "emergency",
+      "keywords": ["喘不上气", "呼吸困难", "憋气", "昏倒", "晕过去", "叫不醒", "神志不清", "抽搐", "抽筋不停"],
+      "rule": "any keyword"
+    },
+    {
+      "id": "RF-04",
+      "name": "高热、剧烈疼痛",
+      "action": "emergency",
+      "keywords": ["高烧不退", "烧到40", "39度以上", "剧烈头痛", "头痛欲裂", "从来没这么痛", "剧烈腹痛", "肚子痛得打滚"],
+      "rule": "any keyword"
+    },
+    {
+      "id": "RF-05",
+      "name": "出血与外伤",
+      "action": "emergency",
+      "keywords": ["大出血", "血止不住", "吐血", "便血很多", "黑便", "怀孕出血", "孕期出血", "严重外伤", "摔得很重"],
+      "rule": "any keyword"
+    },
+    {
+      "id": "RF-06",
+      "name": "自伤或轻生念头",
+      "action": "crisis",
+      "keywords": ["不想活", "想死", "活着没意思", "结束生命", "自杀", "伤害自己"],
+      "rule": "any keyword"
+    }
+  ],
+  "contacts": {
+    "_note": "上线前必须逐条核实号码；verified 为 false 的号码不得显示给用户。",
+    "CN": { "emergency": "120", "crisis": "12356", "verified": false },
+    "US": { "emergency": "911", "crisis": "988", "verified": false },
+    "HK": { "emergency": "999", "crisis": null, "verified": false },
+    "TW": { "emergency": "119", "crisis": null, "verified": false },
+    "SG": { "emergency": "995", "crisis": null, "verified": false }
+  }
+}
