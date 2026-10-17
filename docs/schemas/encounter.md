@@ -93,7 +93,7 @@ export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: st
 ## 3. 三条硬规则（写进代码，不只写进提示词）
 
 1. **签字前，判断和处理部分不能留有 `ai_draft`。** 签字界面要求老师逐项确认：接受时，来源改为 `teacher`，并在 `note` 里写 `ai_accepted`；修改时，来源改为 `teacher`。只要 `judgment`、`plan`、`fourExams` 里还有一项是 `ai_draft`，签字按钮就不可用，签名函数也直接拒绝。`plan.homework` 里的每一条作业同样适用：接受或修改后来源改为 `teacher`，还有一条是 `ai_draft` 就不能签字。
-2. **`intake` 只能来自学生。** 老师智能体起草时不得改写 `intake` 和 `profile`。
+2. **`intake` 只能来自学生。** 老师智能体起草时不得改写 `intake` 和 `profile`。唯一例外是面诊（`kind: 'in_person'`）：学生在老师面前，主诉由老师代录，来源为 `teacher`、`note` 为 `in_person`，学生端标“老师代录”（2026-10-17，M1-12）。
 3. **学生端只显示有有效签名的病历和医嘱**，并且签名人必须是这位学生自己的老师。
 
 ## 4. 问诊包（学生发给老师）
