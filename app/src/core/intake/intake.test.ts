@@ -13,6 +13,7 @@ import {
 import { fixedQuestions, organizeIntake } from './followup'
 import {
   INTAKE_COLLECTIONS,
+  addPhoto,
   addUtterance,
   buildConsultPackage,
   canConfirm,
@@ -320,5 +321,38 @@ describe('M1-09 学生采集验收', () => {
     })
     expect(outcome.fields.presentIllness).toEqual({ value: null, source: 'unknown' })
     expect(outcome.questions.length).toBeLessThanOrEqual(2)
+  })
+
+  it('9 确认页把字段改成急症描述后不能发送，send 不会被调用；发送前再查一遍', async () => {
+    const store = new MemoryStore()
+    const state = await confirmedOffline()
+    const risky = updateField(state, 'chiefComplaint', '胸口压着疼，出冷汗')
+    expect(risky.emergency?.hit).toBe(true)
+    expect(canConfirm(risky).ok).toBe(false)
+    const send = vi.fn().mockResolvedValue(undefined)
+    await expect(confirmAndSend(store, risky, emptyProfile(), [], [], send)).rejects.toThrow()
+    expect(send).not.toHaveBeenCalled()
+    // 纵深防御：即使状态里没有 emergency，buildConsultPackage 也会重新检查 intake 全字段。
+    const tampered: IntakeSession = { ...risky, emergency: null, reviewed: true }
+    expect(() => buildConsultPackage(tampered, emptyProfile(), [], [])).toThrow('急症')
+  })
+
+  it('10 附件必须与确认页逐个一致（id、sha256、bytes），否则拒绝', async () => {
+    const state = await confirmedOffline()
+    const data = new Uint8Array([1, 2, 3, 4])
+    const ref = { id: 'att-1', type: 'photo' as const, sha256: 'a'.repeat(64), bytes: data.length }
+    const withPhoto = addPhoto(state, { ref, data })
+    const pkg = buildConsultPackage(withPhoto, emptyProfile(), [], [{ ref, data }])
+    expect(pkg.encounter.intake.attachments).toEqual([ref])
+    const mismatched = [
+      [{ ref: { ...ref, id: 'att-2' }, data }],
+      [{ ref: { ...ref, sha256: 'b'.repeat(64) }, data }],
+      [{ ref: { ...ref, bytes: data.length + 1 }, data }],
+      [{ ref, data: new Uint8Array([9, 9, 9, 9, 9]) }],
+    ]
+    for (const attachments of mismatched) {
+      expect(() => buildConsultPackage(withPhoto, emptyProfile(), [], attachments)).toThrow('附件')
+    }
+    expect(() => buildConsultPackage(withPhoto, emptyProfile(), [], [])).toThrow('附件')
   })
 })

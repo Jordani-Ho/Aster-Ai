@@ -188,7 +188,11 @@ export function updateField(state: IntakeSession, key: IntakeKey, value: string)
   if (state.phase !== 'confirm') throw new Error('还在采集中，暂时不能修改')
   const trimmed = value.trim()
   if (trimmed.length > 2000) throw new Error('这一项太长了，请精简一下')
-  return { ...state, fields: { ...state.fields, [key]: textField(trimmed === '' ? null : trimmed) } }
+  const fields = { ...state.fields, [key]: textField(trimmed === '' ? null : trimmed) }
+  // 学生在确认页改写的文字同样过本地急症红线；命中就中断，不能再发送。
+  const result = check(trimmed)
+  if (result.hit) return { ...state, fields, emergency: result, reviewed: false }
+  return { ...state, fields }
 }
 
 export function addPhoto(state: IntakeSession, photo: PhotoResult): IntakeSession {
@@ -249,10 +253,23 @@ export function buildConsultPackage(
 ): ConsultPackage {
   const checkResult = canConfirm(state)
   if (!checkResult.ok) throw new Error(checkResult.reason)
+  // 纵深防御：发送前把 intake 全部字段再过一遍急症红线，不只依赖状态里的 emergency。
+  for (const key of INTAKE_KEYS) {
+    const value = state.fields[key].value
+    if (value !== null && value !== '' && check(value).hit) throw new Error('问诊包里还有急症描述，请先处理急症提示')
+  }
   for (const candidate of history) {
     if (candidate.teacher !== state.teacher) throw new Error('附带的病历不是这位老师的')
   }
   if (attachments.length !== state.attachments.length) throw new Error('附件与确认页不一致')
+  for (const [index, expected] of state.attachments.entries()) {
+    const given = attachments[index]
+    if (!given || given.ref.id !== expected.id || given.ref.sha256 !== expected.sha256
+      || given.ref.bytes !== expected.bytes || given.ref.type !== expected.type
+      || given.data.length !== expected.bytes) {
+      throw new Error('附件与确认页不一致')
+    }
+  }
   const unknown = <T,>(): Field<T> => ({ value: null, source: 'unknown' })
   const encounter: Encounter = {
     id: state.encounterId,
