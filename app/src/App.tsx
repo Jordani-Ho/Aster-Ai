@@ -5,20 +5,15 @@ import { createIdentity, generatePhrase, languages, languageLabels, restoreIdent
 import type { Identity, Language } from './core/identity'
 import { beginBackup, checkBackup } from './core/identity/backup'
 import type { BackupChallenge } from './core/identity/backup'
-import { check, detectRegion } from './core/redflags'
-import type { RedFlagResult } from './core/redflags'
 import { openStore, resumeStore, type LocalStore } from './core/store'
 import { persistenceLabels, requestPersistence, type PersistenceStatus } from './core/store/persistence'
-import { RedFlagAlert } from './RedFlagAlert'
 
 const HomeworkPage = lazy(() => import('./HomeworkPage').then(module => ({ default: module.HomeworkPage })))
-
-function recordId(): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(12)), byte => byte.toString(16).padStart(2, '0')).join('')
-}
+const IntakePage = lazy(() => import('./IntakePage').then(module => ({ default: module.IntakePage })))
 
 export function App() {
   const [homeworkPage, setHomeworkPage] = useState(false)
+  const [intakePage, setIntakePage] = useState(false)
   const [language, setLanguage] = useState<Language>('simplified')
   const [step, setStep] = useState<'start' | 'write' | 'check' | 'restore' | 'done'>('start')
   const [phrase, setPhrase] = useState('')
@@ -29,12 +24,8 @@ export function App() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [persistence, setPersistence] = useState<PersistenceStatus>('requesting')
-  const [talk, setTalk] = useState('')
-  const [alert, setAlert] = useState<RedFlagResult | null>(null)
-  const [notice, setNotice] = useState('')
   const storeRef = useRef<LocalStore | null>(null)
   const identityRef = useRef<Identity | null>(null)
-  const region = detectRegion(navigator.language)
   useEffect(() => {
     let cancelled = false
     void requestPersistence(navigator.storage).then(status => { if (!cancelled) setPersistence(status) })
@@ -51,7 +42,7 @@ export function App() {
   const reset = () => {
     storeRef.current?.close(); storeRef.current = null; identityRef.current = null
     identity?.privateKey.fill(0)
-    setIdentity(null); setPhrase(''); setChallenge(null); setAnswers(['', '', '']); setError(''); setStep('start'); setTalk(''); setAlert(null); setNotice('')
+    setIdentity(null); setPhrase(''); setChallenge(null); setAnswers(['', '', '']); setError(''); setStep('start')
   }
   const complete = async (result: Identity) => {
     setBusy(true)
@@ -62,24 +53,8 @@ export function App() {
     } catch (cause) { result.privateKey.fill(0); setError(cause instanceof Error ? cause.message : '无法保存身份，请重试') }
     finally { setBusy(false) }
   }
-  const runCheck = () => {
-    const result = check(talk)
-    if (!result.hit) { setAlert(null); setNotice('没有发现急症信号。这是本地筛查，不能替代医生判断。'); return }
-    setNotice(''); setAlert(result)
-  }
-  const notifyTeacher = () => {
-    const category = alert?.category
-    if (!category) return
-    setNotice('已记录，等中继接通后再发送。')
-    void storeRef.current?.put('redflag-notify', recordId(), { categoryId: category.id, action: category.action, at: new Date().toISOString() })
-  }
-  const dismissAlert = () => {
-    const category = alert?.category
-    setAlert(null); setNotice('')
-    if (!category) return
-    void storeRef.current?.put('redflag-log', recordId(), { categoryId: category.id, action: category.action, at: new Date().toISOString(), region: region ?? 'unknown' })
-  }
   if (homeworkPage && storeRef.current && identity) return <Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={storeRef.current} onBack={()=>setHomeworkPage(false)} /></Suspense>
+  if (intakePage && storeRef.current && identity) return <Suspense fallback={<p>正在打开采集页…</p>}><IntakePage store={storeRef.current} identity={identity} onBack={()=>setIntakePage(false)} /></Suspense>
   return (
     <main style={{ fontFamily: 'system-ui, sans-serif', padding: '24px 16px', maxWidth: 480, margin: '0 auto' }}>
       <h1>知衡 · 身份</h1>
@@ -124,15 +99,12 @@ export function App() {
         <p style={{ overflowWrap: 'anywhere' }}>公钥 npub：{identity.npub}</p>
         <p style={{ overflowWrap: 'anywhere' }}>公钥十六进制：{identity.publicKey}</p>
         <section>
-          <h2>急症自检</h2>
-          <p>写下现在的感受。检查只在本地进行：不联网、不调用大模型，结果可以复现。M1-09 接入采集流程后，这个临时入口会被替换。</p>
-          <label>现在的感受<textarea rows={3} style={{ width: '100%', boxSizing: 'border-box' }} value={talk} onChange={event => setTalk(event.target.value)} /></label>
-          <p><button type="button" onClick={runCheck} disabled={!talk.trim()}>检查</button></p>
-          {notice && <p role="status">{notice}</p>}
+          <h2>看诊前采集</h2>
+          <p>用输入法的语音输入，把不舒服说清楚。急症筛查只在本地进行；点“确认发送”之前，没有任何数据离开手机。M1-05 接通中继后才会真正交给老师。</p>
+          <p><button type="button" onClick={() => setIntakePage(true)}>开始采集</button></p>
         </section>
       </>}
       {step !== 'start' && <p><button disabled={busy} onClick={reset}>{step === 'done' ? '返回首页' : '取消并返回'}</button></p>}
-      {alert && <RedFlagAlert result={alert} region={region} status={notice} onNotifyTeacher={notifyTeacher} onDismiss={dismissAlert} />}
     </main>
   )
 }

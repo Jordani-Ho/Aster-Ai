@@ -40,6 +40,12 @@ const session = await resumeStore() // { identity, store }；全新数据库返�
 | :-- | :-- | :-- | :-- |
 | `redflag-log` | 用户点“我已知晓”关闭急症提示后的本地日志 | `categoryId`（红线类别 id）、`action`（emergency / crisis）、`at`（ISO 时间）、`region`（地区代码或 `unknown`） | 只记录类别、时间与地区，**不含对话原文** |
 | `redflag-notify` | “通知老师”的本地待发送记录，等 M1-05 接通中继后发送 | `categoryId`、`action`、`at` | 只记录类别与时间，**不含对话原文**；目前尚未真正发送 |
+| `intake-draft` | 学生还没确认发送的采集草稿 | 键为病历 id，值为采集会话（学生原话、追问回答、整理字段、照片引用、轮次） | 确认发送或被替换后删除；**不外发** |
+| `intake-sent` | 学生确认发送后自己的问诊包副本 | 键为病历 id，值为 `{ encounter, history, attachments }`（附件引用；字节在 `intake-attachments`） | 只留在本人手机 |
+| `intake-outbox` | M1-05 未接通时暂存、待发送的问诊包 | 同上 | 中继接通后由发送流程取走；**不自动外发** |
+| `intake-attachments` | 采集照片处理后的字节（已缩到长边 ≤1600、去掉 EXIF、≤500 KB） | 键为附件 id，值为 JPEG 字节 | 随问诊包副本或待发件一起保存 |
+| `profile` | 学生本机常驻档案：称呼、性别、年龄、八字、居住城市 | 键 `self`，值为 `Encounter['profile']` 的五个 Field | 随问诊包给老师；**只在本机** |
+| `student-records` | 学生收到的签名病历（历史病历来源，M1-11/M1-05 写入） | `id`、`teacher`（老师公钥）、`createdAt`、`eventJson`（签名事件 JSON 字符串） | 确认页默认附带同一位老师近 3 次；**只在本机** |
 
 键名使用 `crypto.getRandomValues` 生成的随机十六进制 ID，不含个人信息。
 ## 加密格式
