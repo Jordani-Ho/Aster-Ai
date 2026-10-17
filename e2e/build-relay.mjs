@@ -2,13 +2,15 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, writeFile, copyFile, rename, rm, chmod } from 'node:fs/promises'
 import path from 'node:path'
+import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { command, root, linuxPath } from './process.mjs'
 export const UPSTREAM = 'b5c1f642e4f4c3b9c54f5d18d66f4c53642076b4'
 const RUST = '1.90.0', PROTOC = '31.1'
 const PROTOC_SHA256 = '96553041f1a91ea0efee963cb16f462f5985b4d65365f3907414c360044d8065'
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
-const cache = path.join(root, '.cache/e2e')
+export const cache = process.platform === 'linux' && process.argv.includes('--native-cache')
+  ? path.join(homedir(), '.cache/aster-e2e', sha(root).slice(0, 12)) : path.join(root, '.cache/e2e')
 async function protoc() {
   try { if (process.env.E2E_PRIVATE_PROTOC === '1') throw Error('private compiler requested'); await command('protoc', ['--version'], { quiet: true }); return 'protoc' } catch { /* use pinned private fallback */ }
   if (process.arch !== 'x64') throw Error('Install protoc on this architecture; the private fallback supports Linux x64 only')
@@ -30,15 +32,15 @@ async function protoc() {
 export async function buildRelay() {
   if (process.platform === 'win32') {
     const script = await linuxPath(fileURLToPath(import.meta.url))
-    const output = await command('wsl.exe', ['-d', 'Ubuntu', '--exec', 'node', script, '--json'])
+    const output = await command('wsl.exe', ['-d', 'Ubuntu', '--exec', 'node', script, '--json', '--native-cache'])
     const result = JSON.parse(output.replace(/^\uFEFF/, ''))
     return { ...result, command: 'wsl.exe', args: ['-d', 'Ubuntu', '--exec', result.binary] }
   }
   if (process.platform !== 'linux') throw Error('Relay build requires Linux; Windows uses Ubuntu/WSL. See e2e/README.md')
-  const started = Date.now(), privateRustup = path.join(cache, 'tools/cargo/bin/rustup')
+  const started = Date.now(), privateRustup = path.join(root, '.cache/e2e/tools/cargo/bin/rustup')
   const rustup = existsSync(privateRustup) ? privateRustup : 'rustup'
   const env = { ...process.env, CARGO_HOME: path.join(cache, 'cargo') }
-  if (existsSync(privateRustup)) env.RUSTUP_HOME = path.join(cache, 'tools/rustup')
+  if (existsSync(privateRustup)) env.RUSTUP_HOME = path.join(root, '.cache/e2e/tools/rustup')
   let rustVersion
   try { rustVersion = await command(rustup, ['run', RUST, 'rustc', '-vV'], { env, quiet: true }); await command('cmake', ['--version'], { quiet: true }) }
   catch { throw Error('Install Rust 1.90.0 via rustup plus C/C++ and cmake first; see e2e/README.md. No fake relay fallback is permitted.') }

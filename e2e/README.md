@@ -21,6 +21,8 @@ Chromium 缺系统库时先运行 `npx playwright install --with-deps chromium`�
 
 Windows 使用已有的 **Ubuntu/WSL** 编译与运行中继，其余 Node 与 Chromium 保持 Windows 原生；
 通过控制管道关闭 WSL 内真实进程，避免只结束 wsl.exe 遗留中继。需要 WSL 的 localhost 转发。
+WSL 的 Cargo/二进制缓存放 Linux 用户目录的 .cache/aster-e2e/仓库路径摘要，避免 /mnt/c 的大量小文件 I/O；
+Linux 原生/CI 仍在工作区 .cache/e2e，方便 actions/cache。
 WSL 内也需上述构建前提及 Node >=22；默认发行版固定为 Ubuntu。可选私有 Rustup 位于
 `.cache/e2e/tools/cargo/bin/rustup`，对应 RUSTUP_HOME 为 `.cache/e2e/tools/rustup`；不要求改 Windows PATH。
 macOS 原生构建不在本轮验证范围，可在 Linux/CI 运行。
@@ -36,7 +38,7 @@ macOS 原生构建不在本轮验证范围，可在 Linux/CI 运行。
   Rust 编译器信息、protoc 版本及 OS/架构；命中时重算二进制 SHA256。失败不产生可用 manifest。
   Cargo 下载与中间产物也在 `.cache/e2e/`。CI 缓存成品和 crates 下载；改补丁/编译器会重新构建。
 - 首次 release 构建可能数分钟至数十分钟（取决于下载、磁盘和核数），默认两条编译任务。
-  脚本输出本次耗时及是否缓存命中；本轮实测数据见任务卡完成记录/PR。可用
+  脚本输出本次耗时及是否缓存命中；首次 CI 实测 release 编译约 3 分 54 秒，完整结果见任务卡/PR。可用
   `npm run e2e:build-relay` 单独编译。被强行终止遗留 build.lock 时先确认编译进程已结束再删除该锁目录。
 
 ## 验证边界

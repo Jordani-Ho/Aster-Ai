@@ -65,7 +65,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends build-essential cmake pkg-config python3
           rustup toolchain install 1.90.0 --profile minimal
       - name: Cache relay binaries and Cargo downloads
-        uses: actions/cache@v4
+        id: relay-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             .cache/e2e/relay
@@ -80,7 +81,19 @@ jobs:
       - name: Install matching Chromium and system libraries
         run: npx playwright install --with-deps chromium
       - run: npm run test:e2e-env
-      - name: Build patched relay and run browser environment smoke
+      - name: Build patched relay
+        run: npm run e2e:build-relay
+      - name: Save successful build before browser probes
+        if: steps.relay-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .cache/e2e/relay
+            .cache/e2e/cargo/registry
+            .cache/e2e/cargo/git
+            .cache/e2e/tools/protoc-31.1
+          key: ${{ runner.os }}-relay-rust190-${{ hashFiles('relay/Dockerfile', 'relay/*.patch', 'e2e/build-relay.mjs') }}
+      - name: Run browser environment smoke using the verified cached relay
         run: npm run e2e
       - name: Retain synthetic-only browser failure evidence
         if: always()

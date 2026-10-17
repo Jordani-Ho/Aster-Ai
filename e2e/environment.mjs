@@ -57,7 +57,7 @@ export async function startEnvironment(build) {
     const app = await createVite({ configFile: false, root: path.join(root, 'app'), plugins: [react()],
       define: { 'import.meta.env.VITE_COMMUNITY_RELAYS': JSON.stringify(relayUrl) },
       resolve: { dedupe: ['lunar-typescript', 'timezonecomplete', 'tzdata'] },
-      server: { host: '127.0.0.1', port: await port(), strictPort: true, fs: { allow: [root] }, proxy: { '/v1': gateway.url, '/push': gateway.url } },
+      server: { host: '127.0.0.1', port: await port(), strictPort: true, fs: { allow: [root] }, proxy: { '/v1': { target: gateway.url, changeOrigin: false }, '/push': { target: gateway.url, changeOrigin: false } } },
     })
     closers.push(() => app.close())
     await app.listen()
