@@ -255,6 +255,38 @@ describe('M1-04 急症红线引擎', () => {
     expect(contactsForAlert(result, 'ZZ')).toEqual([])
   })
 
+
+  it('durationWords：清单里的持续说法按 15 分钟以上处理', () => {
+    for (const sentence of ['胸口闷了十几分钟', '胸口闷，好一会儿了', '胸口闷，一直不舒服']) {
+      expect(check(sentence).category?.id, sentence).toBe('RF-01')
+    }
+  })
+
+  it('审核探测句：14 句必须命中，单独“心口痛”不命中', () => {
+    const probes: { text: string; categoryId: string | null }[] = [
+      { text: '胸口疼得厉害，出了一身冷汗', categoryId: 'RF-01' },
+      { text: '心口疼，左边胳膊也疼，冒虚汗', categoryId: 'RF-01' },
+      { text: '胸口很闷，喘不过气来', categoryId: 'RF-01' },
+      { text: '头疼得像要裂开一样', categoryId: 'RF-04' },
+      { text: '肚子疼得在床上打滚', categoryId: 'RF-04' },
+      { text: '我爸突然说不出话，嘴也歪了', categoryId: 'RF-02' },
+      { text: '一边手抬不起来', categoryId: 'RF-02' },
+      { text: '孩子烧到三十九度八，一直不退', categoryId: 'RF-04' },
+      { text: '拉的大便是黑的', categoryId: 'RF-05' },
+      { text: '心口痛', categoryId: null },
+      { text: '頭痛欲裂', categoryId: 'RF-04' },
+      { text: '說話不清楚，嘴歪了', categoryId: 'RF-02' },
+      { text: '最近真的不想活了', categoryId: 'RF-06' },
+      { text: '活著沒意思', categoryId: 'RF-06' },
+      { text: '覺得自己是個負擔，想一了百了', categoryId: 'RF-06' },
+    ]
+    for (const probe of probes) {
+      const result = check(probe.text)
+      expect(result.hit, probe.text).toBe(probe.categoryId !== null)
+      expect(result.category?.id ?? null, probe.text).toBe(probe.categoryId)
+    }
+  })
+
   it('清单里出现未实现的规则时直接报错，不静默放过', async () => {
     const { validateDocument } = await import('./index')
     expect(() => validateDocument({
