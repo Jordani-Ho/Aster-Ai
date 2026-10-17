@@ -1,0 +1,143 @@
+import { describe, expect, it } from 'vitest'
+import { generateSecretKey, getPublicKey } from 'nostr-tools/pure'
+import { append, balance, createLedger, declarePricing, overdueSince, signEvent, verify, type Ledger } from './index'
+
+const DAY = 24 * 60 * 60 * 1000
+// 合成时间轴：2026-01-01 起第 n 天（UTC）。
+const day = (n: number) => new Date(Date.UTC(2026, 0, 1) + n * DAY).toISOString()
+
+// 合成密钥，运行时生成，不对应任何真实身份。
+const teacherKey = generateSecretKey()
+const teacher = getPublicKey(teacherKey)
+const studentKey = generateSecretKey()
+const student = getPublicKey(studentKey)
+
+function emptyLedger(): Ledger {
+  return createLedger(teacher, student)
+}
+
+function tamper(ledger: Ledger, index: number, change: (fields: Record<string, unknown>) => void): Ledger {
+  const events = ledger.events.map((event, position) => {
+    if (position !== index) return event
+    const fields = JSON.parse(event.content) as Record<string, unknown>
+    change(fields)
+    return { ...event, content: JSON.stringify(fields) }
+  })
+  return { ...ledger, events }
+}
+
+describe('M1-14a 康币账本核心验收', () => {
+  it('1 依次记充值 100、赠送 20、扣费 50、退款 10，余额为 60；两次计算一致', () => {
+    let ledger = emptyLedger()
+    ledger = append(ledger, teacherKey, { type: 'topup', amount: 100, memo: '合成充值', at: day(1) })
+    ledger = append(ledger, teacherKey, { type: 'gift', amount: 20, memo: '合成赠送', at: day(1) })
+    ledger = append(ledger, teacherKey, { type: 'charge', amount: 50, chargeReason: 'consult', at: day(2) })
+    ledger = append(ledger, teacherKey, { type: 'refund', amount: 10, refundFor: ledger.events[0].id, at: day(3) })
+    expect(balance(ledger)).toBe(60)
+    expect(balance(ledger)).toBe(60)
+    expect(verify(ledger)).toEqual([])
+  })
+
+  it('2 改动金额或删掉中间一条事件，verify 都报出出错的位置', () => {
+    let ledger = emptyLedger()
+    ledger = append(ledger, teacherKey, { type: 'topup', amount: 100, at: day(1) })
+    ledger = append(ledger, teacherKey, { type: 'gift', amount: 20, at: day(1) })
+    ledger = append(ledger, teacherKey, { type: 'charge', amount: 50, chargeReason: 'consult', at: day(2) })
+
+    const amountIssues = verify(tamper(ledger, 1, fields => { fields.amount = 200 }))
+    expect(amountIssues.some(issue => issue.index === 1)).toBe(true)
+    expect(amountIssues.some(issue => issue.code === 'bad-signature')).toBe(true)
+
+    const removed = { ...ledger, events: ledger.events.filter((_, index) => index !== 1) }
+    const removalIssues = verify(removed)
+    expect(removalIssues.some(issue => issue.index === 1)).toBe(true)
+    expect(removalIssues.some(issue => issue.code === 'broken-chain')).toBe(true)
+  })
+
+  it('3 学生签发的 charge、老师签发的 dispute 都校验不通过', () => {
+    const wrongCharge = signEvent(emptyLedger(), studentKey, { type: 'charge', amount: 10, chargeReason: 'consult', at: day(1) })
+    const chargeLedger: Ledger = { ...emptyLedger(), events: [wrongCharge] }
+    expect(verify(chargeLedger).some(issue => issue.code === 'wrong-issuer' && issue.index === 0)).toBe(true)
+
+    const wrongDispute = signEvent(emptyLedger(), teacherKey, { type: 'dispute', disputeFor: 'a'.repeat(64), memo: '合成理由', at: day(1) })
+    const disputeLedger: Ledger = { ...emptyLedger(), events: [wrongDispute] }
+    expect(verify(disputeLedger).some(issue => issue.code === 'wrong-issuer' && issue.index === 0)).toBe(true)
+
+    expect(() => append(emptyLedger(), studentKey, { type: 'charge', amount: 10, chargeReason: 'consult', at: day(1) })).toThrow()
+    expect(() => append(emptyLedger(), teacherKey, { type: 'dispute', disputeFor: 'a'.repeat(64), memo: '合成理由', at: day(1) })).toThrow()
+  })
+
+  it('4 扣费后第 7 天的异议通过，第 8 天的不通过', () => {
+    let ledger = emptyLedger()
+    ledger = append(ledger, teacherKey, { type: 'charge', amount: 10, chargeReason: 'consult', at: day(1) })
+    const charge = ledger.events[0]
+
+    const onDay7 = append(ledger, studentKey, {
+      type: 'dispute',
+      disputeFor: charge.id,
+      memo: '合成异议理由',
+      at: new Date(Date.parse(day(1)) + 7 * DAY).toISOString(),
+    })
+    expect(verify(onDay7).filter(issue => issue.index === 1)).toEqual([])
+    expect(balance(onDay7)).toBe(balance(ledger))
+
+    const onDay8 = append(ledger, studentKey, {
+      type: 'dispute',
+      disputeFor: charge.id,
+      memo: '合成异议理由',
+      at: new Date(Date.parse(day(1)) + 8 * DAY).toISOString(),
+    })
+    expect(verify(onDay8).some(issue => issue.code === 'dispute-too-late' && issue.index === 1)).toBe(true)
+  })
+
+  it('5 退款金额超过“累计充值 − 累计退款”时校验不通过（L2）', () => {
+    let over = emptyLedger()
+    over = append(over, teacherKey, { type: 'topup', amount: 20, at: day(1) })
+    over = append(over, teacherKey, { type: 'refund', amount: 30, at: day(2) })
+    expect(verify(over).some(issue => issue.code === 'refund-exceeds-topups' && issue.index === 1)).toBe(true)
+
+    let allowed = emptyLedger()
+    allowed = append(allowed, teacherKey, { type: 'topup', amount: 20, at: day(1) })
+    allowed = append(allowed, teacherKey, { type: 'refund', amount: 20, at: day(2) })
+    expect(verify(allowed)).toEqual([])
+  })
+
+  it('6 余额持续为负时 overdueSince 返回起始时间，补交回正后返回 null', () => {
+    let ledger = emptyLedger()
+    ledger = append(ledger, teacherKey, { type: 'topup', amount: 10, at: day(1) })
+    ledger = append(ledger, teacherKey, { type: 'charge', amount: 20, chargeReason: 'consult', at: day(3) })
+    ledger = append(ledger, teacherKey, { type: 'charge', amount: 5, chargeReason: 'herbs', at: day(4) })
+    expect(overdueSince(ledger)).toBe(day(3))
+
+    const recovered = append(ledger, teacherKey, { type: 'topup', amount: 30, at: day(5) })
+    expect(overdueSince(recovered)).toBeNull()
+  })
+
+  it('7 金额为 0、负数或小数时校验不通过', () => {
+    for (const amount of [0, -5, 1.5]) {
+      const ledger = append(emptyLedger(), teacherKey, { type: 'charge', amount, chargeReason: 'other', at: day(1) })
+      expect(verify(ledger).some(issue => issue.code === 'invalid-amount' && issue.index === 0), String(amount)).toBe(true)
+    }
+  })
+
+  it('8 测试只使用合成公钥和整数金额，账本里不出现真实货币金额', () => {
+    expect(teacher).toMatch(/^[0-9a-f]{64}$/)
+    expect(student).toMatch(/^[0-9a-f]{64}$/)
+    expect(teacher).not.toBe(student)
+
+    let ledger = emptyLedger()
+    ledger = append(ledger, teacherKey, { type: 'topup', amount: 100, at: day(1) })
+    ledger = append(ledger, teacherKey, { type: 'charge', amount: 50, chargeReason: 'consult', at: day(2) })
+    for (const event of ledger.events) {
+      const fields = JSON.parse(event.content) as Record<string, unknown>
+      expect(Number.isSafeInteger(fields.amount)).toBe(true)
+      expect(Number(fields.amount)).toBeGreaterThan(0)
+      expect(event.content).not.toMatch(/CNY|USD|金额/)
+    }
+
+    // 计价写在老师资料里，不进账本。
+    expect(declarePricing({ currency: 'CNY', perCoin: 1 })).toEqual({ currency: 'CNY', perCoin: 1 })
+    expect(() => declarePricing({ currency: 'cny', perCoin: 1 })).toThrow()
+    expect(() => declarePricing({ currency: 'CNY', perCoin: 0 })).toThrow()
+  })
+})
