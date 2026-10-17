@@ -14,7 +14,8 @@ function base64(text: string): string {
 
 // NIP-98: kind 27235，带 u（完整 URL）、method、payload（请求体 SHA-256）三个标签。
 export async function nip98Authorization(secretKey: Uint8Array, url: string, method: string, body: string): Promise<string> {
-  const tags: string[][] = [['u', url], ['method', method]]
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
+  const tags: string[][] = [['u', url], ['method', method], ['nonce', nonce]]
   if (body) tags.push(['payload', await sha256Hex(body)])
   const event = finalizeEvent({ kind: 27235, created_at: Math.floor(Date.now() / 1000), tags, content: '' }, secretKey)
   return 'Nostr ' + base64(JSON.stringify(event))
