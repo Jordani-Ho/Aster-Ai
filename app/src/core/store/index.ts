@@ -1,0 +1,173 @@
+import { getPublicKey } from 'nostr-tools/pure'
+import { npubEncode } from 'nostr-tools/nip19'
+import { languages, type Identity, type Language } from '../identity'
+import { base64, bytes, decryptRecord, deriveKey, encryptRecord, INFO, random, unbase64, validateAddress, validateRecord, type EncryptedRecord, type StoreValue } from './crypto'
+import { openDatabase, readMeta, requestResult, transaction, writeMeta, type StoreOptions } from './database'
+export type { StoreValue, JsonValue } from './crypto'
+export type { StoreOptions } from './database'
+
+interface Header { version: 1; owner: string; kdf: { alg: 'HKDF-SHA256'; salt: string; info: typeof INFO } }
+interface WrappedIdentity { iv: string; ct: string; language: Language; account: number }
+export interface EncryptedExport {
+  format: 'aster-store-export'; version: 1; createdAt: string; owner: string
+  kdf: Header['kdf']; cipher: 'AES-256-GCM'; includesBinary: boolean; records: EncryptedRecord[]
+}
+const recoveryMessage = '设备密钥不可用或身份数据损坏，请用助记词恢复'
+const deviceAAD = (owner: string, language: Language, account: number) => new TextEncoder().encode(`aster/device-identity/v1\u0000${owner}\u0000${language}\u0000${account}`)
+function validateHeader(input: unknown): Header {
+  if (!input || typeof input !== 'object') throw new Error('存储格式或版本无效')
+  const h = input as Header
+  if (h.version !== 1 || !/^[0-9a-f]{64}$/.test(h.owner) || h.kdf?.alg !== 'HKDF-SHA256' || h.kdf.info !== INFO) throw new Error('存储格式或版本无效')
+  unbase64(h.kdf.salt, 16)
+  return { version: 1, owner: h.owner, kdf: { alg: 'HKDF-SHA256', salt: h.kdf.salt, info: INFO } }
+}
+function parseExport(input: unknown): EncryptedExport {
+  const candidate = typeof input === 'string' ? JSON.parse(input) : input
+  if (!candidate || typeof candidate !== 'object') throw new Error('导入格式无效')
+  const a = candidate as EncryptedExport
+  if (a.format !== 'aster-store-export' || a.version !== 1 || a.cipher !== 'AES-256-GCM') throw new Error('导入格式或版本不受支持')
+  const header = validateHeader(a)
+  if (typeof a.createdAt !== 'string' || !Number.isFinite(Date.parse(a.createdAt)) || typeof a.includesBinary !== 'boolean' || !Array.isArray(a.records)) throw new Error('导入格式无效')
+  const records = a.records.map(validateRecord)
+  const seen = new Set<string>()
+  for (const r of records) {
+    const address = `${r.c}\u0000${r.k}`
+    if (seen.has(address) || (!a.includesBinary && r.bin)) throw new Error('导入记录重复或类型不符')
+    seen.add(address)
+  }
+  return { format: 'aster-store-export', version: 1, createdAt: a.createdAt, owner: header.owner, kdf: header.kdf, cipher: 'AES-256-GCM', includesBinary: a.includesBinary, records }
+}
+
+export class LocalStore {
+  private pending: Promise<unknown> = Promise.resolve()
+  private closed = false
+  constructor(private db: IDBDatabase, private header: Header, private storageKey: CryptoKey, private privateKey: Uint8Array) {}
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.pending.then(() => {
+      if (this.closed) throw new Error('存储已关闭，请重新打开')
+      return operation()
+    })
+    this.pending = result.catch(() => {})
+    return result
+  }
+  private async assertCurrent(tx: IDBTransaction): Promise<void> {
+    const current = validateHeader(await readMeta(tx, 'header'))
+    if (current.owner !== this.header.owner || current.kdf.salt !== this.header.kdf.salt) throw new Error('存储状态已变化，请重新打开应用')
+  }
+  private async snapshot(): Promise<EncryptedRecord[]> {
+    return transaction(this.db, ['meta', 'records'], 'readonly', async tx => {
+      const recordsRequest = requestResult(tx.objectStore('records').getAll())
+      await this.assertCurrent(tx)
+      return (await recordsRequest).map(validateRecord)
+    })
+  }
+  put(collection: string, key: string, value: StoreValue): Promise<void> {
+    return this.enqueue(async () => {
+      validateAddress(collection, key)
+      const encrypted = await encryptRecord(this.storageKey, collection, key, value)
+      await transaction(this.db, ['meta', 'records'], 'readwrite', async tx => {
+        await this.assertCurrent(tx); tx.objectStore('records').put(encrypted)
+      })
+    })
+  }
+  get(collection: string, key: string): Promise<StoreValue | undefined> {
+    return this.enqueue(async () => {
+      validateAddress(collection, key)
+      const record = await transaction(this.db, ['meta', 'records'], 'readonly', async tx => {
+        const requested = requestResult(tx.objectStore('records').get([collection, key]))
+        await this.assertCurrent(tx); return requested
+      })
+      return record === undefined ? undefined : decryptRecord(this.storageKey, record)
+    })
+  }
+  list(collection: string): Promise<{ key: string; value: StoreValue }[]> {
+    return this.enqueue(async () => {
+      validateAddress(collection, 'validation')
+      const result = []
+      for (const record of await this.snapshot()) if (record.c === collection) result.push({ key: record.k, value: await decryptRecord(this.storageKey, record) })
+      return result
+    })
+  }
+  delete(collection: string, key: string): Promise<void> {
+    return this.enqueue(async () => {
+      validateAddress(collection, key)
+      await transaction(this.db, ['meta', 'records'], 'readwrite', async tx => { await this.assertCurrent(tx); tx.objectStore('records').delete([collection, key]) })
+    })
+  }
+  exportEncrypted(options: { includeBinary?: boolean } = {}): Promise<EncryptedExport> {
+    return this.enqueue(async () => {
+      const records = await this.snapshot()
+      // Verify the public bin flag against the authenticated encrypted type byte.
+      for (const record of records) await decryptRecord(this.storageKey, record)
+      return {
+        format: 'aster-store-export', version: 1, createdAt: new Date().toISOString(), owner: this.header.owner,
+        kdf: { ...this.header.kdf }, cipher: 'AES-256-GCM', includesBinary: options.includeBinary === true,
+        records: records.filter(r => options.includeBinary === true || !r.bin),
+      }
+    })
+  }
+  importEncrypted(input: unknown, options: { replace?: boolean } = {}): Promise<void> {
+    return this.enqueue(async () => {
+      // Snapshot caller-owned input before awaiting crypto.
+      const archive = parseExport(input)
+      if (archive.owner !== this.header.owner) throw new Error('导入公钥与当前身份不一致')
+      const importedKey = await deriveKey(this.privateKey, archive.kdf.salt)
+      for (const record of archive.records) await decryptRecord(importedKey, record)
+      const importedHeader: Header = { version: 1, owner: archive.owner, kdf: archive.kdf }
+      await transaction(this.db, ['meta', 'records'], 'readwrite', async tx => {
+        await this.assertCurrent(tx)
+        const records = tx.objectStore('records')
+        if (options.replace !== true && await requestResult(records.count()) > 0) throw new Error('已有本地数据，必须显式传入 replace: true')
+        records.clear()
+        for (const record of archive.records) records.put(record)
+        writeMeta(tx, 'header', importedHeader)
+      })
+      // Switch salt/key only after the replacement transaction commits.
+      this.header = importedHeader; this.storageKey = importedKey
+    })
+  }
+  close(): void {
+    this.closed = true
+    void this.pending.finally(() => { this.privateKey.fill(0); this.db.close() })
+  }
+}
+
+export async function openStore(identity: Identity, options: StoreOptions = {}): Promise<LocalStore> {
+  if (getPublicKey(identity.privateKey) !== identity.publicKey) throw new Error('身份与私钥不匹配')
+  const db = await openDatabase(options)
+  try {
+    const proposed: Header = { version: 1, owner: identity.publicKey, kdf: { alg: 'HKDF-SHA256', salt: base64(random(16)), info: INFO } }
+    const deviceKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+    const iv = random(12)
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: deviceAAD(identity.publicKey, identity.language, identity.account), tagLength: 128 }, deviceKey, bytes(identity.privateKey))
+    const wrapped: WrappedIdentity = { iv: base64(iv), ct: base64(new Uint8Array(ct)), language: identity.language, account: identity.account }
+    const header = await transaction(db, ['meta'], 'readwrite', async tx => {
+      const existing = await readMeta(tx, 'header')
+      const selected = existing === undefined ? proposed : validateHeader(existing)
+      if (selected.owner !== identity.publicKey) throw new Error('本地存储属于其他身份，请使用对应的助记词恢复')
+      writeMeta(tx, 'header', selected); writeMeta(tx, 'deviceKey', deviceKey); writeMeta(tx, 'identity', wrapped)
+      return selected
+    })
+    return new LocalStore(db, header, await deriveKey(identity.privateKey, header.kdf.salt), bytes(identity.privateKey))
+  } catch (cause) { db.close(); throw cause }
+}
+
+export async function resumeStore(options: StoreOptions = {}): Promise<{ identity: Identity; store: LocalStore } | null> {
+  const db = await openDatabase(options)
+  let secret: Uint8Array<ArrayBuffer> | undefined
+  try {
+    const state = await transaction(db, ['meta'], 'readonly', async tx => {
+      const [header, deviceKey, wrapped] = await Promise.all([readMeta<Header>(tx, 'header'), readMeta<CryptoKey>(tx, 'deviceKey'), readMeta<WrappedIdentity>(tx, 'identity')])
+      return { header, deviceKey, wrapped }
+    })
+    if (!state.header && !state.deviceKey && !state.wrapped) { db.close(); return null }
+    const header = validateHeader(state.header)
+    if (!state.deviceKey || state.deviceKey.extractable !== false || state.deviceKey.algorithm.name !== 'AES-GCM' || !state.wrapped) throw new Error(recoveryMessage)
+    const wrapped = state.wrapped
+    if (!languages.includes(wrapped.language) || !Number.isSafeInteger(wrapped.account) || wrapped.account < 0 || wrapped.account >= 2 ** 31) throw new Error(recoveryMessage)
+    secret = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unbase64(wrapped.iv, 12), additionalData: deviceAAD(header.owner, wrapped.language, wrapped.account), tagLength: 128 }, state.deviceKey, unbase64(wrapped.ct)))
+    if (secret.length !== 32 || getPublicKey(secret) !== header.owner) throw new Error(recoveryMessage)
+    const identity: Identity = { privateKey: secret, publicKey: header.owner, npub: npubEncode(header.owner), language: wrapped.language, account: wrapped.account }
+    return { identity, store: new LocalStore(db, header, await deriveKey(secret, header.kdf.salt), bytes(secret)) }
+  } catch { secret?.fill(0); db.close(); throw new Error(recoveryMessage) }
+}
