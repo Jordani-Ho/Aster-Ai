@@ -23,3 +23,4 @@
 .sign-editor textarea { width: 100%; box-sizing: border-box; font-size: 14px; }
 .sign-foot { margin-top: 16px; }
 .sign-foot p { font-size: 13px; color: #444; }
+.sign-error { color: #b91c1c !important; font-weight: 600; }

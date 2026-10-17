@@ -94,6 +94,7 @@ export function SignEncounterPage({ initial, onConfirm, onCancel }: SignEncounte
   const [encounter, setEncounter] = useState(initial)
   const [editing, setEditing] = useState<{ path: string; text: string; original: unknown } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [deliveryError, setDeliveryError] = useState<string | null>(null)
   const pending = pendingDraftFields(encounter)
   const beginEdit = (descriptor: Descriptor) => {
     setEditing({
@@ -150,11 +151,20 @@ export function SignEncounterPage({ initial, onConfirm, onCancel }: SignEncounte
       )}
       <footer className="sign-foot">
         <p role="status">{pending.length === 0 ? '所有 AI 草稿均已确认，可以签字。' : '还有 ' + pending.length + ' 项 AI 草稿未确认：' + pending.join('、')}</p>
+        {deliveryError && <p role="alert" className="sign-error">{deliveryError}</p>}
         <div className="sign-actions">
           <button type="button" className="sign-primary" disabled={pending.length > 0 || busy} onClick={async () => {
             setBusy(true)
-            try { await onConfirm(encounter) } finally { setBusy(false) }
-          }}>确认无误，签字</button>
+            setDeliveryError(null)
+            try {
+              await onConfirm(encounter)
+            } catch (error) {
+              // 交还失败时本地资料未销毁，签名事件已暂存；再点一次即重发。
+              setDeliveryError(error instanceof Error && error.message ? error.message : '未送达，可重发')
+            } finally {
+              setBusy(false)
+            }
+          }}>{deliveryError ? '重发交还' : '确认无误，签字'}</button>
           {onCancel && <button type="button" onClick={onCancel}>返回</button>}
         </div>
       </footer>

@@ -23,6 +23,15 @@ export interface SignedEncounter {
   encounter: Encounter
 }
 
+// 老师端签字后只保留这条索引，不留病历内容（事件 content 里是学生原话与附件索引）。
+export interface SignedEncounterIndex {
+  eventId: string
+  encounterId: string
+  version: number
+  student: string
+  createdAt: string
+}
+
 export interface CaseBookEntry {
   gender: Encounter['profile']['gender']['value']
   ageBand: string | null
@@ -39,12 +48,14 @@ export interface ModificationLogEntry {
 
 const FOUR_EXAM_KEYS = ['look', 'listenSmell', 'ask', 'pulse'] as const
 const JUDGMENT_KEYS = ['symptomSummary', 'pattern', 'mechanism', 'rationale'] as const
+const OUTCOME_KEYS = ['change', 'adverse', 'next'] as const
+const INTAKE_KEYS = ['chiefComplaint', 'presentIllness', 'history', 'medsAllergies'] as const
 
 function isField(value: unknown): value is Field<unknown> {
   return typeof value === 'object' && value !== null && 'source' in value
 }
 
-// 返回仍是 AI 草稿的字段路径；有一条就不能签字。
+// 返回仍是 AI 草稿的字段路径；有一条就不能签字。学生端也用它做纵深防御。
 export function pendingDraftFields(encounter: Encounter): string[] {
   const pending: string[] = []
   for (const key of FOUR_EXAM_KEYS) if (encounter.fourExams[key].source === 'ai_draft') pending.push('fourExams.' + key)
@@ -55,7 +66,20 @@ export function pendingDraftFields(encounter: Encounter): string[] {
   encounter.plan.homework.forEach((item, index) => {
     if (item.source === 'ai_draft') pending.push('plan.homework[' + index + ']')
   })
+  if (encounter.outcome) {
+    for (const key of OUTCOME_KEYS) if (encounter.outcome[key].source === 'ai_draft') pending.push('outcome.' + key)
+  }
   return pending
+}
+
+// 病历格式第 3 节第 2 条硬规则：intake 只能来自学生（或未知），老师端不得改写。
+export function studentIntakeSources(encounter: Encounter): string[] {
+  const wrong: string[] = []
+  for (const key of INTAKE_KEYS) {
+    const source = encounter.intake[key]?.source
+    if (source !== 'student' && source !== 'unknown') wrong.push('intake.' + key)
+  }
+  return wrong
 }
 
 function validateEncounter(encounter: Encounter): void {
@@ -65,8 +89,13 @@ function validateEncounter(encounter: Encounter): void {
 }
 
 export function signEncounter(encounter: Encounter, privateKey: Uint8Array): SignedEncounterEvent {
+  if (!encounter || typeof encounter !== 'object' || !encounter.fourExams || !encounter.judgment || !encounter.plan) {
+    throw new Error('病历结构无效')
+  }
   const pending = pendingDraftFields(encounter)
   if (pending.length > 0) throw new Error('还有未确认的 AI 草稿字段：' + pending.join('、'))
+  const wrongIntake = studentIntakeSources(encounter)
+  if (wrongIntake.length > 0) throw new Error('intake 只能来自学生，不能签字：' + wrongIntake.join('、'))
   validateEncounter(encounter)
   if (getPublicKey(privateKey) !== encounter.teacher) throw new Error('签名人不是病历里的老师')
   const created = Date.parse(encounter.createdAt)
@@ -86,6 +115,7 @@ export interface VerifyOptions {
 }
 
 // 学生端校验：签名有效、签名人是自己的老师、p 标签是自己，才接受。
+// 纵深防御：即使签名有效，intake 来源不对或仍带 ai_draft 的病历也拒绝。
 export function verifySignedEncounter(event: SignedEncounterEvent, options: VerifyOptions): Encounter {
   if (!event || typeof event !== 'object') throw new Error('签名病历格式无效')
   if (event.kind !== SIGNED_ENCOUNTER_KIND) throw new Error('不是签字病历事件')
@@ -105,6 +135,7 @@ export function verifySignedEncounter(event: SignedEncounterEvent, options: Veri
     throw new Error('病历内容不是合法 JSON')
   }
   if (!encounter || typeof encounter !== 'object') throw new Error('病历内容无效')
+  if (!encounter.fourExams || !encounter.judgment || !encounter.plan || !encounter.intake) throw new Error('病历结构无效')
   if (encounter.student !== options.student) throw new Error('这份病历不属于当前学生')
   if (event.pubkey !== options.teacher) throw new Error('签名人不是这位学生的老师')
   if (encounter.teacher !== event.pubkey) throw new Error('病历里的老师与签名人不一致')
@@ -114,6 +145,10 @@ export function verifySignedEncounter(event: SignedEncounterEvent, options: Veri
   if (!encounterTag || encounterTag[1] !== encounter.id || encounterTag[2] !== String(encounter.version)) {
     throw new Error('encounter 标签与病历内容不一致')
   }
+  const pending = pendingDraftFields(encounter)
+  if (pending.length > 0) throw new Error('签名病历里还有未确认的 AI 草稿：' + pending.join('、'))
+  const wrongIntake = studentIntakeSources(encounter)
+  if (wrongIntake.length > 0) throw new Error('intake 来源不是学生，拒绝接收：' + wrongIntake.join('、'))
   return encounter
 }
 
@@ -149,26 +184,29 @@ function plainValue(value: unknown): unknown {
   return isField(value) ? value.value : value
 }
 
-// “草案 → 定稿”修改记录：逐字段保留 AI 原文和老师定稿（思想指纹，白皮书 §6.2）。
+// “草案 → 定稿”修改记录：只留 judgment 与 plan 的字段。
+// fourExams 常转述学生原话，与去标识医案的范围保持一致，不记录。
 export function modificationLog(draft: Encounter, final: Encounter): ModificationLogEntry[] {
-  return pendingDraftFields(draft).map(path => ({
-    path,
-    aiDraft: plainValue(valueAt(draft, path)),
-    final: plainValue(valueAt(final, path)),
-  }))
+  return pendingDraftFields(draft)
+    .filter(path => path.startsWith('judgment.') || path.startsWith('plan.'))
+    .map(path => ({
+      path,
+      aiDraft: plainValue(valueAt(draft, path)),
+      final: plainValue(valueAt(final, path)),
+    }))
 }
 
-// 修改已签字病历：生成 version + 1 的新病历，supersedes 指向旧版签名事件 id。
+// 修改已签字病历：同一份病历共用 id（靠 version 区分），只把 version + 1，
+// supersedes 指向上一版的签名事件 id。
 export function nextVersion(
   previous: Encounter,
   previousEventId: string,
   updates: { createdAt?: string; judgment?: Encounter['judgment']; plan?: Encounter['plan']; outcome?: Encounter['outcome'] } = {},
 ): Encounter {
+  if (!HEX32.test(previous.id)) throw new Error('病历 id 格式无效')
   if (!HEX64.test(previousEventId)) throw new Error('上一版签名事件 id 格式无效')
-  const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
   return {
     ...previous,
-    id,
     version: previous.version + 1,
     supersedes: previousEventId,
     createdAt: updates.createdAt ?? new Date().toISOString(),

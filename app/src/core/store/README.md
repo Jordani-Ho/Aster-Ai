@@ -41,9 +41,10 @@ const session = await resumeStore() // { identity, store }；全新数据库返�
 | `redflag-log` | 用户点“我已知晓”关闭急症提示后的本地日志 | `categoryId`（红线类别 id）、`action`（emergency / crisis）、`at`（ISO 时间）、`region`（地区代码或 `unknown`） | 只记录类别、时间与地区，**不含对话原文** |
 | `redflag-notify` | “通知老师”的本地待发送记录，等 M1-05 接通中继后发送 | `categoryId`、`action`、`at` | 只记录类别与时间，**不含对话原文**；目前尚未真正发送 |
 
-| `consult-package` | 老师端临时收到的问诊包（主诉等原文） | 键为病历 id，值为整份问诊包 | 签字后立即删除；**不得长期保留** |
-| `attachments` | 问诊包里的照片/语音附件 | 键为附件 id，值为字节 | 签字后立即删除 |
-| `signed-encounters` | 老师端保存的签名病历事件 | 键为 `病历id-v版本`，值为 kind 2730 事件 | 旧版本保留，不覆盖 |
+| `consult-package` | 老师端临时收到的问诊包（主诉等原文） | 键为病历 id，值为整份问诊包 | 交还学生成功后立即删除；**不得长期保留** |
+| `attachments` | 问诊包里的照片/语音附件 | 键为附件 id，值为字节 | 交还学生成功后立即删除 |
+| `signed-encounters` | 老师端保存的签名病历索引（不含病历内容） | 键为 `病历id-v版本`，值为 `{ eventId, encounterId, version, student, createdAt }` | 只留索引，**不留 content**；旧版本索引不覆盖 |
+| `pending-handover` | 交还学生失败时暂存的待发签名病历 | 键为签名事件 id，值为 `{ event, encounter, draft, attachmentIds }` | 送达并写完后立即删除；正常流程下应短暂存在 |
 | `case-book` | 去标识医案与“草案→定稿”修改记录 | `sourceEventId`、`deidentified`（性别、年龄段、判断、处理、结果）、`modifications` | 不含学生公钥、称呼、intake 原文、附件 |
 | `record-log` | 诊毕即还的本地日志 | `at`（ISO 时间）、`encounterId` | 只记时间和病历 id，**不含内容** |
 键名使用 `crypto.getRandomValues` 生成的随机十六进制 ID，不含个人信息。
