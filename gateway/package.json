@@ -1,0 +1,17 @@
+{
+  "name": "aster-gateway",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "无状态模型网关：转发 OpenAI 兼容请求，不记录内容。",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "nostr-tools": "2.25.2"
+  }
+}
