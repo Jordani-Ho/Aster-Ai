@@ -12,3 +12,4 @@ push/：标准网页推送（Web Push + VAPID）的 Service Worker 注册、订�
 不包含中医逻辑或中继通信。
 
 transport/：社区中继NIP-42连接、NIP-17/44/59私信、过期及会话内重连去重。
+backup/：NIP-78三槽加密备份、本地文件导入导出、每日检查与恢复，独立备份中继适配器。

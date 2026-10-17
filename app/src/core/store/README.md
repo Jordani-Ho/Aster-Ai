@@ -130,3 +130,5 @@ store.test.ts 在 fake-indexeddb 中覆盖全部 12 项验收，另覆盖未知�
 CI 的现有 npm test 会自动执行这些用例，不需要浏览器或额外服务。
 
 M1-13集合登记：`homework`保存`{homework, startsOn}`（共用Homework及生效日期）；`checkins`保存`{homeworkId, at, note?}`。两个集合均使用随机ID键、AES-GCM加密，只保存在本人手机，不上传或同步。
+
+M1-06集合：backup-status保存result、lastAttempt、lastSuccess、lastFile、lastRestore和固定error；backup-config保存relays。均为随机UUID键及加密JSON，仅必要配置随加密备份恢复。

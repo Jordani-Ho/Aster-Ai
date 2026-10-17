@@ -13,3 +13,5 @@ src/core/ledger/ 包含康币账本核心（单一写入者记账链、异议列
 身份完成后“今日作业”进入学生打卡页；本地加密保存，不发网络。详见 src/core/homework/README.md。
 M1-08：网页提醒见 app/src/core/push/README.md；gateway/push 为唯一有状态组件。
 src/SignEncounterPage.tsx 是老师端审改、签字界面；docs/screenshots/sign-encounter-375.png 为 375px 截图。
+
+M1-06：身份就绪后的“备份状态”默认检查每日备份；部署用VITE_COMMUNITY_RELAYS提供公开中继列表，未配置会明确提示。支持含照片加密文件导出与助记词恢复后的中继恢复。详见src/core/backup/README.md及relay/backup.md。

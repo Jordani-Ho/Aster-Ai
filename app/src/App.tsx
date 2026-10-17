@@ -1,3 +1,4 @@
+import { BackupSettings } from './BackupSettings'
 import './homework.css'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { PushSettings } from './PushSettings'
@@ -79,13 +80,13 @@ export function App() {
     if (!category) return
     void storeRef.current?.put('redflag-log', recordId(), { categoryId: category.id, action: category.action, at: new Date().toISOString(), region: region ?? 'unknown' })
   }
-  if (homeworkPage && storeRef.current && identity) return <Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={storeRef.current} onBack={()=>setHomeworkPage(false)} /></Suspense>
+  if (homeworkPage && storeRef.current && identity) return <><div hidden><BackupSettings identity={identity} store={storeRef.current} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={storeRef.current} onBack={()=>setHomeworkPage(false)} /></Suspense></>
   return (
     <main style={{ fontFamily: 'system-ui, sans-serif', padding: '24px 16px', maxWidth: 480, margin: '0 auto' }}>
       <h1>知衡 · 身份</h1>
       <p>请用生成时的同一种文字恢复</p>
       <p>身份由设备密钥加密保存在本机，重新打开可自动解锁。浏览器数据被清空后，请用助记词恢复；业务数据还需从备份恢复。请妥善抄写，不要交给他人。</p>
-      <details><summary>设置</summary><h2>存储状态</h2><p role="status">{persistenceLabels[persistence]}</p><p>持久化存储不能替代备份。备份功能尚未接入。</p></details>
+      <details><summary>设置</summary><h2>存储状态</h2><p role="status">{persistenceLabels[persistence]}</p><p>持久化存储不能替代备份。</p>{identity && storeRef.current && <BackupSettings identity={identity} store={storeRef.current} />}</details>
       {loading && <p>正在解锁本地身份…</p>}
       {error && <p role="alert">{error}</p>}
       {!loading && step === 'start' && <>
