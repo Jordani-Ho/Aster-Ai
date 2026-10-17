@@ -65,13 +65,30 @@ test('backup policy permits own 30078 events and does not deliver them to the ot
       return entries[0].id
     } finally { manager.close(); channel.close(); session.store.close() }
   }, { phrase: actors.teacher.phrase, relay: runtime.relayUrl })
-  const others = await people.student.page.evaluate(async ({ phrase, relay }) => {
+  const probe = await people.student.page.evaluate(async ({ phrase, relay, teacher }) => {
     const identityModule = '/src/core/identity/index.ts', relayModule = '/src/core/backup/relay.ts'
     const { restoreIdentity } = await import(identityModule), { communityBackupRelay } = await import(relayModule)
-    const identity = restoreIdentity(phrase), channel = communityBackupRelay(identity, [relay])
-    try { return (await channel.list(identity.publicKey)).map((event: any) => event.id) } finally { channel.close() }
-  }, { phrase: actors.student.phrase, relay: runtime.relayUrl })
-  expect(others).not.toContain(id)
+    const identity = restoreIdentity(phrase)
+    let queriedOtherOwner = false
+    const channel = communityBackupRelay(identity, [relay], (url: string) => {
+      const socket = new WebSocket(url), send = socket.send.bind(socket)
+      // Keep the student's actual AUTH, but deliberately request the teacher's backups.
+      socket.send = data => {
+        const frame = JSON.parse(String(data))
+        if (frame[0] === 'REQ') { frame[2].authors = [teacher]; queriedOtherOwner = true }
+        send(JSON.stringify(frame))
+      }
+      return socket
+    })
+    try { return { ids: (await channel.list(identity.publicKey)).map((event: any) => event.id), queriedOtherOwner } }
+    catch (error) {
+      if (!(error instanceof Error) || error.message !== '备份中继拒绝读取') throw error
+      return { ids: [], queriedOtherOwner }
+    } finally { channel.close() }
+  }, { phrase: actors.student.phrase, relay: runtime.relayUrl, teacher: actors.teacher.pubkey })
+  expect(probe.queriedOtherOwner).toBe(true)
+  expect(probe.ids).toEqual([])
+  expect(probe.ids).not.toContain(id)
 })
 test('browser reaches the actual signed gateway through same-origin proxy and receives local synthetic output', async ({ people }) => {
   const result = await people.teacher.page.evaluate(async key => {
