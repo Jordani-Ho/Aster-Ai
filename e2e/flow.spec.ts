@@ -121,8 +121,10 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   await intake(student,'SYNTHETIC_FOLLOWUP')
   await student.getByRole('button',{name:'发给老师',exact:true}).click()
   await expect(student.getByRole('heading',{name:'已发给老师',exact:true})).toBeVisible()
-  await expect.poll(async()=> (await stored(teacher,'consult-package')).length).toBe(1)
-  const followup=(await stored(teacher,'consult-package'))[0].value
+  // V2-01：第一份问诊包不再销毁，第二份追问会并存（删除由 V2-05 保留期限处理）。
+  await expect.poll(async()=> (await stored(teacher,'consult-package')).length).toBe(2)
+  const packages=(await stored(teacher,'consult-package')).map(row=>row.value)
+  const followup=packages.find(value=>Array.isArray(value.history)&&value.history.length===1)??packages[0]
   expect(followup.history).toHaveLength(1);expect(JSON.parse(followup.history[0]).id).toBe(records[0].key)
 })
 
