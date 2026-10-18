@@ -10,7 +10,7 @@ import type { Homework } from '../record/types'
 const handles: LocalStore[] = []
 const factory = new IDBFactory()
 function open(): Promise<LocalStore> {
-  return openStore(createIdentity('leader monkey parrot ring guide accident before fence cannon height naive bean', 'english'), { name: crypto.randomUUID(), factory })
+  return openStore(createIdentity(), { name: crypto.randomUUID(), factory })
     .then(store => { handles.push(store); return store })
 }
 function habit(anchor = '拖地时', extra: Partial<Homework> = {}): Homework {

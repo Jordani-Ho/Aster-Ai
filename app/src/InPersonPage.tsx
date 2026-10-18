@@ -10,21 +10,20 @@ import type { Identity } from './core/identity'
 import { MAX_PHOTOS, processPhoto } from './core/intake/photo'
 import type { LlmClient } from './core/llm'
 import { contactsForAlert, detectRegion, type RedFlagResult } from './core/redflags'
-import { RECORD_COLLECTIONS } from './core/record/handover'
 import {
+  IN_PERSON_COLLECTIONS,
   IN_PERSON_INTAKE_KEYS,
-  InPersonUndeliveredError,
   addInPersonPhoto,
   inPersonConsultPackage,
   knownStudents,
   loadInPersonDraft,
   recordIntakeField,
   removeInPersonPhoto,
-  retryInPersonHandover,
   saveInPersonDraft,
   signAndHandoverInPerson,
   startInPersonEncounter,
   type InPersonIntakeKey,
+  type SendSignedRecord,
 } from './core/record/in-person'
 import { sendInPersonRecord, type SendEnvelope } from './core/inbox'
 import type { Encounter } from './core/record/types'
@@ -66,7 +65,6 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [pendingEventId, setPendingEventId] = useState<string | null>(null)
   const [utterance,setUtterance]=useState('')
   const [questionIndex,setQuestionIndex]=useState(0)
   const [template,setTemplate]=useState<TeacherTemplate>(defaultTemplate)
@@ -78,7 +76,7 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
     void knownStudents(store).then(rows => { if (!cancelled) setKnown(rows) }).catch(() => {})
     void loadInPersonDraft(store).then(saved => {
       if (cancelled || !saved) return
-      // 恢复草稿时把代录文字再过一遍红线，避免上次会话漏掉的提示。
+      // 读回草稿时把代录文字再过一遍红线，避免上次会话漏掉的提示。
       let current = saved
       let hit: RedFlagResult | null = null
       for (const key of IN_PERSON_INTAKE_KEYS) {
@@ -92,7 +90,7 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
       setEncounter(current)
       setRedFlag(hit)
       setPhase('intake')
-      setStatus('已恢复上次未签字的面诊草稿，都还在本机。')
+      setStatus('已读回上次未签字的面诊草稿，都还在本机。')
     }).catch(() => setError('本机草稿读取失败，可以重新新建。'))
     return () => { cancelled = true }
   }, [store])
@@ -124,11 +122,11 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
         if (next.intake.attachments.length >= MAX_PHOTOS) break
         const bytes = new Uint8Array(await file.arrayBuffer())
         const result = await processPhoto({ bytes, type: file.type || 'image/jpeg' }, { existingCount: next.intake.attachments.length })
-        // 处理后的字节单独存，签字交还成功后由 handover 一并删除。
-        await store.put(RECORD_COLLECTIONS.attachments, result.ref.id, result.data)
+        // 处理后的字节单独存；删除按保留期限统一处理。
+        await store.put(IN_PERSON_COLLECTIONS.attachments, result.ref.id, result.data)
         next = addInPersonPhoto(next, result.ref)
       }
-      apply(next, '照片已在本机缩小，并去掉了位置等 EXIF 信息。')
+      apply(next, '照片已在本机缩小。')
     } catch (cause) { setError(message(cause)) } finally {
       setBusy(false)
       if (fileInput.current) fileInput.current.value = ''
@@ -139,7 +137,7 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
     if (!encounter || busy) return
     setBusy(true); setError('')
     try {
-      await store.delete(RECORD_COLLECTIONS.attachments, refId)
+      await store.delete(IN_PERSON_COLLECTIONS.attachments, refId)
       apply(removeInPersonPhoto(encounter, refId))
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
@@ -162,7 +160,7 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
 
-  const send: import('./core/record/handover').SendSignedRecord = async (_type, payload) => {
+  const send: SendSignedRecord = async (_type, payload) => {
     if (!sendEnvelope || !encounter) throw Error('暂未连接社区，请稍后重试，资料仍在本机。')
     await sendInPersonRecord(store, sendEnvelope, encounter.student, payload)
   }
@@ -195,26 +193,15 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
     if (!draftEncounter) return
     setError('')
     try {
-      if (pendingEventId) {
-        await retryInPersonHandover(store, pendingEventId, send)
-        setPendingEventId(null)
-      } else {
-        await signAndHandoverInPerson({
-          store,
-          encounter: finalEncounter,
-          draft: draftEncounter,
-          privateKey: identity.privateKey,
-          send,
-        })
-      }
+      await signAndHandoverInPerson({
+        encounter: finalEncounter,
+        privateKey: identity.privateKey,
+        send,
+      })
       setPhase('sent')
     } catch (cause) {
-      if (cause instanceof InPersonUndeliveredError) {
-        setPendingEventId(cause.eventId)
-        setError('未送达，可重发：原始资料仍在本机，签名事件已暂存。')
-      } else {
-        setError(message(cause))
-      }
+      // 发送失败只提示；照片与代录原文原样保留，老师可再试。
+      setError(message(cause))
       throw cause
     }
   }
@@ -242,8 +229,8 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
     return <main className="in-person-page">
       <header className="in-person-head"><h1>已签字交还</h1></header>
       <section className="in-person-card in-person-done">
-        <p>签名病历已加密发给学生。</p>
-        <p className="in-person-note">按诊毕即还：这次的照片和代录原文已从老师端删除，只保留时间、病历 id 与去标识医案。</p>
+        <p>签名病历已发给学生。</p>
+        <p className="in-person-note">照片与代录内容仍在本机；记录删除按老师设定的保留期限统一处理。</p>
         <div className="in-person-actions"><button onClick={onBack}>返回</button></div>
       </section>
     </main>
@@ -285,7 +272,7 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
     </section>
     <section className="in-person-card">
       <h2>当面拍照（舌象等，最多 {MAX_PHOTOS} 张）</h2>
-      <p className="in-person-note">在本机缩小到长边 ≤1600 像素、去掉位置等 EXIF 信息后放进病历；签字交还后老师端删除。</p>
+      <p className="in-person-note">在本机缩小到长边 ≤1600 像素、重新编码为 JPEG 后放进病历；记录按保留期限统一清理。</p>
       {photos.length > 0 && <ul className="in-person-photos">
         {photos.map(item => <li key={item.id}><span>照片 · {Math.ceil(item.bytes / 1024)} KB</span><button type="button" onClick={() => void removePhoto(item.id)}>移除</button></li>)}
       </ul>}

@@ -21,7 +21,7 @@ export async function connectModel(page:Page){
  await expect(page.getByText('✓ 连接成功',{exact:true})).toBeVisible()
  await page.getByRole('button',{name:'进入首页',exact:true}).click()
 }
-async function actualActor(page:Page){return page.evaluate(async()=>{const p='/src/core/store/index.ts',{resumeStore}=await import(p),session=await resumeStore();try{const value=await session.store.get('recovery-words','self');return {phrase:value?.words??'',pubkey:session.identity.publicKey,key:[...session.identity.privateKey]}}finally{session.store.close();session.identity.privateKey.fill(0)}})}
+async function actualActor(page:Page){return page.evaluate(async()=>{const p='/src/core/store/index.ts',{resumeStore}=await import(p),session=await resumeStore();try{return {pubkey:session.identity.publicKey,key:[...session.identity.privateKey]}}finally{session.store.close();session.identity.privateKey.fill(0)}})}
 export const test=base.extend<{people:{teacher:Person;student:Person};seedLedger:boolean;communityOpen:boolean}>({
  seedLedger:[false,{option:true}],communityOpen:[true,{option:true}],
  people:async({browser,baseURL,request,seedLedger,communityOpen},use)=>{

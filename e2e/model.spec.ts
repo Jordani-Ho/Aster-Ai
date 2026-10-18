@@ -9,7 +9,7 @@ test('M1-21 role then mandatory real account test; 401/402/network plain errors 
  try{
  await page.goto('/');await page.getByRole('button',{name:'我是学生',exact:true}).click();await expect(page.getByRole('heading',{name:'接入您的大模型',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'镜子',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'进入首页',exact:true})).toHaveCount(0)
  await form(page)
- for(const [status,text] of [[401,'接入凭证不对'],[402,'账户余额不足'],[0,'网络暂时不通']] as const){mode=status;await page.getByRole('button',{name:'测试连接',exact:true}).click();await expect(page.getByRole('alert')).toContainText(text);await expect(page.getByRole('button',{name:'进入首页',exact:true})).toHaveCount(0);expect(await page.locator('body').innerText()).not.toMatch(/SYNTHETIC_RAW|密钥|助记词|公钥/)}
+ for(const [status,text] of [[401,'接入凭证不对'],[402,'账户余额不足'],[0,'网络暂时不通']] as const){mode=status;await page.getByRole('button',{name:'测试连接',exact:true}).click();await expect(page.getByRole('alert')).toContainText(text);await expect(page.getByRole('button',{name:'进入首页',exact:true})).toHaveCount(0);expect(await page.locator('body').innerText()).not.toMatch(/SYNTHETIC_RAW|密钥|公钥/)}
  expect(house).toBe(0)
  await context.unroute('https://model.synthetic.example/**');await context.route('https://model.synthetic.example/**',fulfillFromModel)
  await page.getByRole('button',{name:'测试连接',exact:true}).click();await expect(page.getByText('✓ 连接成功',{exact:true})).toBeVisible()

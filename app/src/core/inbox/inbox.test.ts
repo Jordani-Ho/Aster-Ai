@@ -45,9 +45,8 @@ import { createWiring } from '../wiring'
 import { startInPersonEncounter, recordIntakeField } from '../record/in-person'
 
 // 只用合成身份、合成病历与内存中继；不连真实 relay/gateway，不发真实推送。
-const phrase = 'leader monkey parrot ring guide accident before fence cannon height naive bean'
-const teacherId = createIdentity(phrase, 'english')
-const studentId = createIdentity(phrase, 'english', 1)
+const teacherId = createIdentity()
+const studentId = createIdentity()
 const teacherPub = teacherId.publicKey
 const studentPub = studentId.publicKey
 const closers: (() => void)[] = []
@@ -262,7 +261,7 @@ it('2 老师起草、签字、填扣费 3：学生病历页、作业、账本余
   const draft = await draftEncounter(draftPackage(consult), template as TeacherTemplate, [], fakeLlm(), { level: 'prescription' })
   const final = acceptDraft(draft)
   await completeConsultSigning({
-    identity: teacherId, store: teacherStore, consult, draft, final,
+    identity: teacherId, consult, final,
     send: teacher.send, ledger: teacher.ledger, charge: 3,
   })
 
@@ -369,7 +368,7 @@ it('7 加固：急症后重启会删除旧草稿；intake-outbox 改为真实发
 
 it('8 陌生成员签发的病历不显示、作业不进 homework；旧数据也按“我的老师”过滤', async () => {
   const relay = new MemoryRelay()
-  const strangerId = createIdentity(phrase, 'english', 2)
+  const strangerId = createIdentity()
   relay.members.add(strangerId.publicKey)
   const studentNode = await openNode(studentId, relay)
   const strangerNode = await openNode(strangerId, relay)
@@ -435,7 +434,7 @@ it('6 375px 截图：学生病历页、老师问诊箱', () => {
   expect(existsSync(new URL('../../inbox.css', import.meta.url))).toBe(true)
 })
 
-it('completed consultation replay cannot resurrect teacher raw package or photo', async () => {
+it('signed consultation keeps teacher raw package for V2-05 retention; replay does not change it', async () => {
   const { teacher, student, teacherStore } = await nodes()
   const pkg = await syntheticPackage(1)
   await student.sendConsult(pkg)
@@ -444,11 +443,18 @@ it('completed consultation replay cannot resurrect teacher raw package or photo'
     if (rows.length !== 1) return null
     return (await consultReadiness(teacherStore, rows[0].encounter.id)).ready ? rows[0] : null
   })
-  await completeConsultSigning({ identity:teacherId,store:teacherStore,consult,draft:consult.encounter,final:consult.encounter,send:teacher.send })
+  await completeConsultSigning({ identity:teacherId,consult,final:consult.encounter,send:teacher.send })
+  // V2-01：签字发送成功后问诊包与附件仍在本机，不再写索引/日志/医案。
+  expect(await teacherStore.list('consult-package')).toHaveLength(1)
+  expect(await teacherStore.get('attachments', pkg.attachments[0].ref.id)).toEqual(pkg.attachments[0].data)
+  expect(await teacherStore.list('signed-encounters')).toHaveLength(0)
+  expect(await teacherStore.list('record-log')).toHaveLength(0)
+  expect(await teacherStore.list('case-book')).toHaveLength(0)
+  // 中继重放同一问诊包与照片不会改变已保存的内容。
   await teacher.inbox.receive({ id:crypto.randomUUID(),sender:studentPub,at:Math.floor(Date.now()/1000),envelope:consultEnvelope(pkg) })
   await teacher.inbox.receive({ id:crypto.randomUUID(),sender:studentPub,at:Math.floor(Date.now()/1000),envelope:{type:'consult.attachment',version:1,payload:{encounterId:pkg.encounter.id,ref:pkg.attachments[0].ref,data:toBase64(pkg.attachments[0].data)}} })
-  expect(await teacherStore.list('consult-package')).toHaveLength(0)
-  expect(await teacherStore.list('attachments')).toHaveLength(0)
+  expect(await teacherStore.list('consult-package')).toHaveLength(1)
+  expect(await teacherStore.get('attachments', pkg.attachments[0].ref.id)).toEqual(pkg.attachments[0].data)
 })
 
 it('invited student opens only their book; teacher first signing opens empty counterpart before existing charge rules',async()=>{
@@ -458,7 +464,7 @@ it('invited student opens only their book; teacher first signing opens empty cou
  await student.sendConsult(await syntheticPackage(0))
  const consult=await waitFor(async()=>{const rows=await listConsults(teacherStore);return rows[0]??null})
  const draft=await draftEncounter(draftPackage(consult),template as TeacherTemplate,[],fakeLlm(),{level:'prescription'}),final=acceptDraft(draft)
- const result=await completeConsultSigning({identity:teacherId,store:teacherStore,consult,draft,final,send:teacher.send,ledger:teacher.ledger,charge:3})
+ const result=await completeConsultSigning({identity:teacherId,consult,final,send:teacher.send,ledger:teacher.ledger,charge:3})
  expect(result.chargeError).toBe(null)
  const paired=await waitFor(async()=>{const a=await teacher.ledger.view(teacherPub,studentPub),b=await student.ledger.view(teacherPub,studentPub);return a.balance===-3&&b.balance===-3&&a.code===b.code?true:null})
  expect(paired).toBe(true);expect(await studentStore.list('student-records')).toHaveLength(1)

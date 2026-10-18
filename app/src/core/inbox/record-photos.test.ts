@@ -2,12 +2,11 @@ import { it, expect, vi } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { createIdentity } from '../identity'
 import { openStore } from '../store'
-import { startInPersonEncounter, addInPersonPhoto, saveInPersonDraft, signAndHandoverInPerson, retryInPersonHandover, InPersonUndeliveredError } from '../record/in-person'
+import { startInPersonEncounter, addInPersonPhoto, saveInPersonDraft, signAndHandoverInPerson } from '../record/in-person'
 import { signEncounter } from '../record/sign'
 import { addTeacher, createInbox, sendInPersonRecord, sha256Hex, toBase64 } from './index'
-const words='leader monkey parrot ring guide accident before fence cannon height naive bean'
 async function setup() {
- const teacher=createIdentity(words,'english'),student=createIdentity(words,'english',1)
+ const teacher=createIdentity(),student=createIdentity()
  const source=await openStore(teacher,{factory:new IDBFactory()}),target=await openStore(student,{factory:new IDBFactory()})
  const data=new Uint8Array([1,2,3]),ref={id:'synthetic-photo',type:'photo' as const,sha256:await sha256Hex(data),bytes:data.length}
  const encounter=addInPersonPhoto(startInPersonEncounter({teacher:teacher.publicKey,student:student.publicKey}),ref)
@@ -16,14 +15,15 @@ async function setup() {
  const deliver=async(envelope:any)=>inbox.receive({id:crypto.randomUUID(),at:1,sender:teacher.publicKey,envelope})
  return {teacher,student,source,target,data,ref,encounter,deliver,close(){source.close();target.close();teacher.privateKey.fill(0);student.privateKey.fill(0)}}
 }
-it('面诊照片与签名病历加密发出后才删除老师原件；照片先到也能验签入学生本机',async()=>{
+it('面诊照片与签名病历加密发出后老师原件仍在本机；照片先到也能验签入学生本机',async()=>{
  const f=await setup(),packets:any[]=[]
  try{
-  await signAndHandoverInPerson({store:f.source,encounter:f.encounter,draft:f.encounter,privateKey:f.teacher.privateKey,send:async(_type,event)=>sendInPersonRecord(f.source,async(_to,envelope)=>{packets.push(envelope)},f.student.publicKey,event)})
+  await signAndHandoverInPerson({encounter:f.encounter,privateKey:f.teacher.privateKey,send:async(_type,event)=>sendInPersonRecord(f.source,async(_to,envelope)=>{packets.push(envelope)},f.student.publicKey,event)})
   expect(packets.map(p=>p.type)).toEqual(['record.signed','record.attachment'])
   for(const packet of [...packets].reverse())await f.deliver(packet)
-  expect(await f.source.get('attachments',f.ref.id)).toBeUndefined()
-  expect(await f.source.list('in-person-draft')).toEqual([])
+  // V2-01：签字发送成功后不再删除老师原件，删除交给 V2-05 的保留期限。
+  expect(await f.source.get('attachments',f.ref.id)).toEqual(f.data)
+  expect(await f.source.list('in-person-draft')).toHaveLength(1)
   expect(await f.target.list('student-records')).toHaveLength(1)
   const index=(await f.target.list('record-photo-index'))[0]
   expect(index.key).toMatch(/^[0-9a-f-]{36}$/)
@@ -31,15 +31,18 @@ it('面诊照片与签名病历加密发出后才删除老师原件；照片先�
   expect(await f.target.get('record-photos',(index.value as any).dataKey)).toEqual(f.data)
  }finally{f.close()}
 })
-it('照片传输失败保留老师原件和同一签名，重发成功后才清理',async()=>{
- const f=await setup();let fail=true,pending='';const ids:string[]=[]
+it('照片传输失败保留老师原件；再试一次发送成功后原件仍在本机',async()=>{
+ const f=await setup();let fail=true;const ids:string[]=[]
  const send=async(_type:'record.signed',event:any)=>sendInPersonRecord(f.source,async(_to,envelope)=>{if(envelope.type==='record.attachment'&&fail)throw Error('offline');if(envelope.type==='record.signed')ids.push((envelope.payload as any).id);await f.deliver(envelope)},f.student.publicKey,event)
  try{
-  try{await signAndHandoverInPerson({store:f.source,encounter:f.encounter,draft:f.encounter,privateKey:f.teacher.privateKey,send})}catch(cause){expect(cause).toBeInstanceOf(InPersonUndeliveredError);pending=(cause as InPersonUndeliveredError).eventId}
+  await expect(signAndHandoverInPerson({encounter:f.encounter,privateKey:f.teacher.privateKey,send})).rejects.toThrow('offline')
   expect(await f.source.get('attachments',f.ref.id)).toEqual(f.data)
   expect(await f.target.list('record-photos')).toEqual([])
-  fail=false;await retryInPersonHandover(f.source,pending,send)
-  expect(ids).toEqual([pending,pending]);expect(await f.source.get('attachments',f.ref.id)).toBeUndefined()
+  // 老师再试一次：重新签出同一事件，发送成功后照片与草稿都还在（V2-05 再管保留）。
+  fail=false;await signAndHandoverInPerson({encounter:f.encounter,privateKey:f.teacher.privateKey,send})
+  expect(ids).toHaveLength(2);expect(new Set(ids).size).toBe(1)
+  expect(await f.source.get('attachments',f.ref.id)).toEqual(f.data)
+  expect(await f.source.list('in-person-draft')).toHaveLength(1)
   expect(await f.target.list('record-photos')).toHaveLength(1)
  }finally{f.close()}
 })

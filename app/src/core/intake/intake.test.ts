@@ -6,7 +6,6 @@ import {
   MAX_BYTES,
   planResize,
   processPhoto,
-  stripJpegMetadata,
   assertPhotoCount,
   type PhotoCodec,
 } from './photo'
@@ -163,24 +162,16 @@ describe('M1-09 学生采集验收', () => {
     expect(pkg.redFlag).toEqual({ hit: true, crisis: false })
   })
 
-  it('4 带 GPS EXIF 的合成 JPEG 处理后没有 EXIF、不超过 500 KB，长边 ≤1600', async () => {
-    // 纯函数：段扫描去掉 APP1。
+  it('4 带 GPS EXIF 的合成 JPEG 重编码后为不含原 EXIF 的 JPEG，不超过 500 KB，长边 ≤1600', async () => {
+    // 原图字节里带合成 EXIF/GPS 标记。
     const dirty = syntheticJpeg({ exif: true })
     expect(Buffer.from(dirty).includes(Buffer.from('GPS'))).toBe(true)
-    const clean = stripJpegMetadata(dirty)
-    expect(Buffer.from(clean).includes(Buffer.from('Exif'))).toBe(false)
-    expect(Buffer.from(clean).includes(Buffer.from('GPS'))).toBe(false)
-    expect(clean[0]).toBe(0xff)
-    expect(clean[1]).toBe(0xd8)
-    expect(clean[clean.length - 2]).toBe(0xff)
-    expect(clean[clean.length - 1]).toBe(0xd9)
-    expect(clean.length).toBeLessThan(dirty.length)
 
     // 尺寸规划。
     expect(planResize(3000, 2000)).toEqual({ width: 1600, height: 1067 })
     expect(planResize(800, 600)).toEqual({ width: 800, height: 600 })
 
-    // 浏览器编码器即使漏掉 EXIF，处理管线也会再剥一次；0.8 仍超限时降到 0.6。
+    // canvas 重编码会生成新的 JPEG，不携带原图元数据；0.8 仍超限时降到 0.6。
     const qualities: number[] = []
     const draws: { width: number; height: number }[] = []
     const codec: PhotoCodec = {
@@ -190,7 +181,8 @@ describe('M1-09 学生采集验收', () => {
         return {
           async toJpeg(quality) {
             qualities.push(quality)
-            return syntheticJpeg({ exif: true, scanBytes: quality === 0.8 ? MAX_BYTES + 500 : 1200 })
+            // 模拟浏览器 canvas：重新编码出的 JPEG 没有原图的 EXIF/GPS 段。
+            return syntheticJpeg({ scanBytes: quality === 0.8 ? MAX_BYTES + 500 : 1200 })
           },
         }
       },
@@ -202,7 +194,13 @@ describe('M1-09 学生采集验收', () => {
     expect(result.ref.type).toBe('photo')
     expect(result.ref.bytes).toBe(result.data.length)
     expect(result.ref.sha256).toMatch(/^[0-9a-f]{64}$/)
+    // 输出是 JPEG，且不含原图的 EXIF 标记字节。
+    expect(result.data[0]).toBe(0xff)
+    expect(result.data[1]).toBe(0xd8)
+    expect(result.data[result.data.length - 2]).toBe(0xff)
+    expect(result.data[result.data.length - 1]).toBe(0xd9)
     expect(Buffer.from(result.data).includes(Buffer.from('Exif'))).toBe(false)
+    expect(Buffer.from(result.data).includes(Buffer.from('GPS'))).toBe(false)
 
     // 最多 4 张。
     expect(() => assertPhotoCount(4)).toThrow('最多只能添加 4 张照片')

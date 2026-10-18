@@ -67,7 +67,7 @@ test('M1-20 in person uses conversational intake, same drafting/revision/signatu
  await teacher.getByRole('button',{name:'加入这一句',exact:true}).click()
  const jpeg=await teacher.evaluate(()=>{const c=document.createElement('canvas');c.width=40;c.height=30;const ctx=c.getContext('2d')!;ctx.fillStyle='#369';ctx.fillRect(0,0,40,30);return c.toDataURL('image/jpeg').split(',')[1]})
  await teacher.locator('input[type=file][accept="image/*"]').setInputFiles({name:'synthetic-face.jpg',mimeType:'image/jpeg',buffer:Buffer.from(jpeg,'base64')})
- await expect(teacher.getByText('照片已在本机缩小，并去掉了位置等 EXIF 信息。',{exact:true})).toBeVisible()
+ await expect(teacher.getByText('照片已在本机缩小。',{exact:true})).toBeVisible()
  await teacher.getByRole('button',{name:'生成病历',exact:true}).click()
  await teacher.getByRole('textbox',{name:'说说怎么改'}).fill('SYNTHETIC_REMOVE_HERB')
  await teacher.getByRole('button',{name:'按意见改稿',exact:true}).click()

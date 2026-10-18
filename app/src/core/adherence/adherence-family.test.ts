@@ -7,8 +7,6 @@ import { checkIn, type Assignment } from '../homework'
 import { addFamilyMember, memberIdentity, memberStore } from '../family'
 import { adherenceReport, rankStudentAdherence, weekStart } from './index'
 
-const OWNER_PHRASE = 'leader monkey parrot ring guide accident before fence cannon height naive bean'
-const TEACHER_PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
 const handles: LocalStore[] = []
 const factory = new IDBFactory()
 function open(who: ReturnType<typeof createIdentity>): Promise<LocalStore> {
@@ -21,13 +19,12 @@ afterEach(() => { handles.splice(0).forEach(store => store.close()) })
 
 describe('M1-23a 第 6 条：家人账户同样适用坚持率', () => {
   it('家长替孩子打卡写进家人分片；家人身份上报的周坚持率与老师端排序一致', async () => {
-    const owner = createIdentity(OWNER_PHRASE, 'english')
-    const teacher = createIdentity(TEACHER_PHRASE, 'english')
+    const owner = createIdentity()
+    const teacher = createIdentity()
     const ownerStore = await open(owner), teacherStore = await open(teacher)
-    await ownerStore.put('recovery-words', 'self', { words: OWNER_PHRASE })
     await addTeacher(ownerStore, teacher.publicKey)
     const kid = await addFamilyMember(ownerStore, owner, { alias: '孩子', relation: 'child', gender: 'female', birthDate: '2016-06-01', city: '北京市' })
-    const kidIdentity = memberIdentity(kid, 'english')
+    const kidIdentity = memberIdentity(kid)
     const kidStore = memberStore(ownerStore, kid.account)
     // 家长替孩子把作业与打卡都放在家人分片里（f{编号}- 前缀）。
     const today = '2026-10-18'
@@ -48,7 +45,7 @@ describe('M1-23a 第 6 条：家人账户同样适用坚持率', () => {
     expect(stored).toHaveLength(1)
     expect(stored[0]).toMatchObject({ student: kidIdentity.publicKey, weekStart: report.weekStart, weeklyRate: report.weeklyRate, practiceDays: 5 })
     // 老师端排序：家人这条 <50% 的排在另一位高坚持率学生前面。
-    const other = createIdentity(OWNER_PHRASE, 'english', 6)
+    const other = createIdentity()
     await createInbox({ identity: teacher, store: teacherStore }).receive(message(other.publicKey, adherenceEnvelope({ ...report, weeklyRate: 0.9, practiceDays: 7 })))
     const ranked = rankStudentAdherence(await listStudentAdherence(teacherStore), today)
     expect(ranked.map(row => row.student)).toEqual([kidIdentity.publicKey, other.publicKey])

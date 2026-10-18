@@ -64,7 +64,7 @@ name = "知衡内测中继"
 address = "0.0.0.0"
 port = 8080
 [limits]
-event_kind_allowlist = [1059, 30078]
+event_kind_allowlist = [1059]
 [authorization]
 community_open = true
 nip42_auth = true

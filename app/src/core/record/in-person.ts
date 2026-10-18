@@ -1,22 +1,25 @@
 import { check, type RedFlagResult } from '../redflags'
 import type { AttachmentRef, ConsultPackage, Encounter, Field } from './types'
-import { signEncounter, type SignedEncounterIndex } from './sign'
-import {
-  RECORD_COLLECTIONS,
-  UndeliveredError,
-  completeSigning,
-  retryHandover,
-  type RecordStore,
-  type SendSignedRecord,
-} from './handover'
+import { signEncounter, type SignedEncounterEvent } from './sign'
 
 // M1-12 面诊记录：老师当面看诊时，在自己手机上新建 kind: 'in_person' 的病历。
 // 主诉等 intake 由老师代录，这是病历格式第 3 节第 2 条的唯一例外（来源 teacher、note 为 in_person）；
-// 起草、签字、诊毕即还全部复用 M1-10 的 drafting 与 M1-11 的 sign.ts / handover.ts，不另写一套。
+// 起草、签字复用 M1-10 的 drafting 与 M1-11 的 sign.ts，不另写一套。
+// V2-01：签字后只发送，不再删除本机资料；删除交给 V2-05 的保留期限统一处理。
 export const IN_PERSON_COLLECTIONS = {
   draft: 'in-person-draft',
-  outbox: 'record-outbox',
+  attachments: 'attachments',
+  consultPackage: 'consult-package',
 } as const
+
+export interface RecordStore {
+  put(collection: string, key: string, value: unknown): Promise<void>
+  get(collection: string, key: string): Promise<unknown>
+  delete(collection: string, key: string): Promise<void>
+  list(collection: string): Promise<{ key: string; value: unknown }[]>
+}
+
+export type SendSignedRecord = (type: 'record.signed', payload: SignedEncounterEvent) => Promise<void>
 
 export const IN_PERSON_NOTE = 'in_person'
 export const IN_PERSON_INTAKE_LABEL = '老师代录'
@@ -145,7 +148,7 @@ export function inPersonConsultPackage(
   }
 }
 
-// 老师端本地保存进行中的面诊草稿（含代录原文与附件索引），签字交还成功后删除。
+// 老师端本地保存进行中的面诊草稿（含代录原文与附件索引）；删除交给 V2-05 的保留期限。
 export async function saveInPersonDraft(store: RecordStore, encounter: Encounter): Promise<void> {
   assertInPerson(encounter)
   await store.put(IN_PERSON_COLLECTIONS.draft, encounter.id, encounter)
@@ -173,9 +176,9 @@ export async function deleteInPersonDraft(store: RecordStore, encounterId: strin
   await store.delete(IN_PERSON_COLLECTIONS.draft, encounterId)
 }
 
-// 老师已有的学生索引（signed-encounters 只含公钥与时间），供新建面诊时选择。
+// 老师已有的学生（本机面诊草稿与收到的问诊包），供新建面诊时选择。
 export async function knownStudents(store: RecordStore): Promise<string[]> {
-  const rows = [...await store.list(RECORD_COLLECTIONS.signedEncounters), ...await store.list(RECORD_COLLECTIONS.consultPackage)]
+  const rows = [...await store.list(IN_PERSON_COLLECTIONS.draft), ...await store.list(IN_PERSON_COLLECTIONS.consultPackage)]
   const students = new Set<string>()
   for (const row of rows) {
     const value = row.value as { student?: unknown; encounter?: {student?:unknown} } | undefined
@@ -185,54 +188,17 @@ export async function knownStudents(store: RecordStore): Promise<string[]> {
   return [...students].sort()
 }
 
-// 未送达时抛出带签名事件 id 的错误，界面据此重发同一条签名事件（不重复签字）。
-export class InPersonUndeliveredError extends UndeliveredError {
-  readonly eventId: string
-  constructor(eventId: string) {
-    super()
-    this.name = 'InPersonUndeliveredError'
-    this.eventId = eventId
-  }
-}
-
 export interface SignInPersonOptions {
-  store: RecordStore
   encounter: Encounter
-  draft: Encounter
   privateKey: Uint8Array
   send: SendSignedRecord
 }
 
-// 签字并交还：signEncounter + completeSigning（先送达再销毁问诊资料、写索引与医案），
-// 成功后删除本机面诊草稿；发送失败时资料全部保留，只暂存签名事件。
-export async function signAndHandoverInPerson(options: SignInPersonOptions): Promise<SignedEncounterIndex> {
+// 签字并交还：signEncounter 后立即把 record.signed 发给学生。
+// V2-01：成功后不再删除照片、草稿或写本地索引/日志；失败只把错误交给界面提示，资料原样保留，老师可再试。
+export async function signAndHandoverInPerson(options: SignInPersonOptions): Promise<SignedEncounterEvent> {
   assertInPerson(options.encounter)
   const signed = signEncounter(options.encounter, options.privateKey)
-  const attachmentIds = options.encounter.intake.attachments.map(item => item.id)
-  try {
-    const index = await completeSigning({
-      store: options.store,
-      encounter: options.encounter,
-      draft: options.draft,
-      signed,
-      attachmentIds,
-      send: options.send,
-    })
-    await deleteInPersonDraft(options.store, options.encounter.id)
-    return index
-  } catch (error) {
-    if (error instanceof UndeliveredError) throw new InPersonUndeliveredError(signed.id)
-    throw error
-  }
-}
-
-// 重发暂存的签名病历；送达成功后才继续销毁与落库，并删除面诊草稿。
-export async function retryInPersonHandover(
-  store: RecordStore,
-  eventId: string,
-  send: SendSignedRecord,
-): Promise<SignedEncounterIndex> {
-  const index = await retryHandover(store, eventId, send)
-  await deleteInPersonDraft(store, index.encounterId)
-  return index
+  await options.send('record.signed', signed)
+  return signed
 }

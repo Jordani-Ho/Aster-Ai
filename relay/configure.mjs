@@ -13,7 +13,7 @@ port = 8080
 max_event_bytes = 2097152
 max_ws_message_bytes = 2098176
 max_ws_frame_bytes = 2098176
-event_kind_allowlist = [1059, 30078]
+event_kind_allowlist = [1059]
 [authorization]
 community_open = ${communityOpen}
 nip42_auth = true

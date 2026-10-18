@@ -2,8 +2,7 @@ import type { Identity } from '../identity'
 import type { LocalStore, StoreValue } from '../store'
 import type { Envelope, Message } from '../transport'
 import type { ChainEventDraft } from '../ledger/types'
-import { RECORD_COLLECTIONS, UndeliveredError, completeSigning, retryHandover } from '../record/handover'
-import { signEncounter, verifySignedEncounter, type SignedEncounterEvent, type SignedEncounterIndex } from '../record/sign'
+import { signEncounter, verifySignedEncounter, type SignedEncounterEvent } from '../record/sign'
 import type { AttachmentRef, ConsultPackage, Encounter, Homework } from '../record/types'
 import { CARE_PLAN_TYPE, parseSignedCarePlanEvent, storeCarePlan, verifySignedCarePlan } from '../careplan'
 import { verifyFamilyProof } from '../family/proof'
@@ -22,7 +21,7 @@ export const ADHERENCE_COLLECTION = 'student-adherence'
 
 export const INBOX_COLLECTIONS = {
   consult: 'consult-package',
-  attachments: RECORD_COLLECTIONS.attachments,
+  attachments: 'attachments',
   records: 'student-records',
   homework: 'homework',
   settings: 'settings',
@@ -417,8 +416,7 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
       manager = value.manager
     } catch { managerInvalid = true }
   }
-  // Already handed back: relay replay must not resurrect deleted raw material.
-  if (await store.get(RECORD_COLLECTIONS.signedEncounters, value.encounter.id + '-v' + value.encounter.version)) return
+  // 已交还的问诊包不再从老师端删除；中继重放同一问诊包只会覆盖为相同内容。
   if (!Array.isArray(value.attachments) || value.attachments.length > MAX_PHOTOS || !value.attachments.every(isRef)) return
   const history = Array.isArray(value.history) ? value.history : []
   const checked = validHistory({ ...value, history }, identity)
@@ -513,7 +511,7 @@ export async function sendInPersonRecord(store: LocalStore, send: SendEnvelope, 
   if (encounter.kind !== 'in_person') throw Error('不是面诊病历')
   const photos = []
   for (const ref of encounter.intake.attachments) {
-    const data = await store.get(RECORD_COLLECTIONS.attachments, ref.id)
+    const data = await store.get(INBOX_COLLECTIONS.attachments, ref.id)
     if (ref.type !== 'photo' || !(data instanceof Uint8Array) || data.length !== ref.bytes || await sha256Hex(data) !== ref.sha256) {
       throw Error('照片缺失或校验失败，资料仍在本机，请检查后重发。')
     }
@@ -641,9 +639,7 @@ export function groupReceivedRecords(records: readonly ReceivedRecord[]): Groupe
 
 export interface ConsultSigningOptions {
   identity: Identity
-  store: LocalStore
   consult: StoredConsult
-  draft: Encounter
   final: Encounter
   send: SendEnvelope
   ledger?: LedgerRecorder
@@ -653,18 +649,8 @@ export interface ConsultSigningOptions {
 }
 
 export interface ConsultSigningResult {
-  index: SignedEncounterIndex
+  signed: SignedEncounterEvent
   chargeError: string | null
-}
-
-// 未送达时带回签名事件 id，老师端据此重发同一条事件，避免重复签字。
-export class ConsultUndeliveredError extends UndeliveredError {
-  readonly eventId: string
-  constructor(eventId: string) {
-    super()
-    this.name = 'ConsultUndeliveredError'
-    this.eventId = eventId
-  }
 }
 
 async function recordCharge(
@@ -693,53 +679,16 @@ async function recordCharge(
   }
 }
 
-// 老师签字交还：先送达再销毁（M1-11 的 completeSigning），送达成功后再按需记一笔扣费。
+// 老师签字交还：签字 → 发送 record.signed → 按需记一笔扣费。
+// V2-01：发送成功后不再删除问诊包/附件，也不写索引、日志与医案；记录删除由 V2-05 的保留期限统一处理。
 export async function completeConsultSigning(options: ConsultSigningOptions): Promise<ConsultSigningResult> {
   if (options.charge !== undefined && (!Number.isSafeInteger(options.charge) || options.charge <= 0)) throw new Error('扣费金额必须是正整数')
   const bookStudent = options.chargeBook?.student ?? options.final.student
   if (options.chargeBook?.student !== undefined && (typeof options.chargeBook.student !== 'string' || !HEX64.test(options.chargeBook.student))) throw new Error('代管人公钥格式无效')
   const signed = signEncounter(options.final, options.identity.privateKey)
-  const send = (type: 'record.signed', payload: SignedEncounterEvent) => options.send(options.consult.sender, { type, version: 1, payload })
-  try {
-    const index = await completeSigning({
-      store: options.store,
-      encounter: options.final,
-      draft: options.draft,
-      signed,
-      attachmentIds: options.consult.attachments.map(ref => ref.id),
-      send: async (type, payload) => { await send(type, payload) },
-    })
-    const chargeError = await recordCharge(options.ledger, options.final.teacher, bookStudent, index.eventId, options.charge, options.chargeBook?.forMember)
-    return { index, chargeError }
-  } catch (error) {
-    if (error instanceof UndeliveredError) throw new ConsultUndeliveredError(signed.id)
-    throw error
-  }
-}
-
-// 重发暂存的签名病历；送达成功后再补记扣费。
-export async function retryConsultHandover(options: {
-  store: LocalStore
-  eventId: string
-  send: SendEnvelope
-  ledger?: LedgerRecorder
-  charge?: number
-  teacher: string
-  student: string
-  chargeBook?: { student: string; forMember?: string }
-}): Promise<ConsultSigningResult> {
-  if (options.charge !== undefined && (!Number.isSafeInteger(options.charge) || options.charge <= 0)) throw new Error('扣费金额必须是正整数')
-  const bookStudent = options.chargeBook?.student ?? options.student
-  try {
-    const index = await retryHandover(options.store, options.eventId, async (type, payload) => {
-      await options.send(options.student, { type, version: 1, payload })
-    })
-    const chargeError = await recordCharge(options.ledger, options.teacher, bookStudent, index.eventId, options.charge, options.chargeBook?.forMember)
-    return { index, chargeError }
-  } catch (error) {
-    if (error instanceof UndeliveredError) throw new ConsultUndeliveredError(options.eventId)
-    throw error
-  }
+  await options.send(options.consult.sender, { type: 'record.signed', version: 1, payload: signed })
+  const chargeError = await recordCharge(options.ledger, options.final.teacher, bookStudent, signed.id, options.charge, options.chargeBook?.forMember)
+  return { signed, chargeError }
 }
 
 // 急症中断后，学生点“我已知晓并重新开始”时先删掉旧草稿（含急症原文），再开新的一次采集。

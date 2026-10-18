@@ -50,7 +50,7 @@ index f2d9aa3..b84a04a 100644
 +                                    ws_stream.send(make_notice_message(&Notice::restricted(e.id, "auth-required: member authentication required"))).await.ok();
 +                                    continue;
 +                                }
-+                                // Only expiring gift wraps in M1; backup policy extends this separately.
++                                // Only expiring gift wraps in M1; no other wrapped kind is accepted.
 +                                if e.kind != 1059 || e.expiration().is_none() {
 +                                    ws_stream.send(make_notice_message(&Notice::invalid(e.id, "expiring gift wrap required"))).await.ok();
 +                                    continue;

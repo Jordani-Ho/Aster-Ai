@@ -4,22 +4,13 @@ import { join } from 'node:path'
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import type { Encounter, Field } from './types'
 import {
-  deidentifiedCaseBook,
   modificationLog,
   nextVersion,
   pendingDraftFields,
   signEncounter,
   verifySignedEncounter,
   type SignedEncounterEvent,
-  type SignedEncounterIndex,
 } from './sign'
-import {
-  RECORD_COLLECTIONS,
-  completeSigning,
-  retryHandover,
-  saveSignedIndex,
-  type RecordStore,
-} from './handover'
 
 // 合成身份与合成病历，不使用任何真实资料。
 const teacherKey = generateSecretKey()
@@ -90,29 +81,6 @@ function confirmAll(draft: Encounter, pattern = '老师定稿证候'): Encounter
   return final
 }
 
-class MemoryStore implements RecordStore {
-  private data = new Map<string, Map<string, unknown>>()
-  async put(collection: string, key: string, value: unknown) {
-    if (!this.data.has(collection)) this.data.set(collection, new Map())
-    this.data.get(collection)!.set(key, value)
-  }
-  async get(collection: string, key: string) {
-    return this.data.get(collection)?.get(key)
-  }
-  async delete(collection: string, key: string) {
-    this.data.get(collection)?.delete(key)
-  }
-  async list(collection: string) {
-    return [...(this.data.get(collection)?.entries() ?? [])].map(([key, value]) => ({ key, value }))
-  }
-}
-
-async function signedPair(draft = draftEncounter()) {
-  const final = confirmAll(draft)
-  const signed = signEncounter(final, teacherKey)
-  return { draft, final, signed }
-}
-
 function forgeSigned(content: Encounter): SignedEncounterEvent {
   return finalizeEvent({
     kind: 2730,
@@ -122,7 +90,7 @@ function forgeSigned(content: Encounter): SignedEncounterEvent {
   }, teacherKey) as SignedEncounterEvent
 }
 
-describe('M1-11 签字与交还验收', () => {
+describe('M1-11 签字验收（V2-01 起交还不再销毁本机资料）', () => {
   it('1 还有 ai_draft 时签字抛错，全部确认后可以签字', () => {
     const draft = draftEncounter()
     expect(pendingDraftFields(draft)).toContain('fourExams.look')
@@ -161,77 +129,28 @@ describe('M1-11 签字与交还验收', () => {
     expect(() => verifySignedEncounter(wrongPTag, { student, teacher })).toThrow('p 标签')
   })
 
-  it('4 签字后问诊包和附件被删除，日志只有时间与病历 id，老师端只留索引', async () => {
-    const store = new MemoryStore()
-    const { draft, final, signed } = await signedPair()
-    await store.put(RECORD_COLLECTIONS.consultPackage, final.id, { chiefComplaint: 'SYNTHETIC_CHIEF_COMPLAINT' })
-    await store.put(RECORD_COLLECTIONS.attachments, 'att-1', { bytes: new Uint8Array([1, 2, 3]) })
-    const sent: { type: string; payload: SignedEncounterEvent }[] = []
-    const index = await completeSigning({
-      store, encounter: final, draft, signed, attachmentIds: ['att-1'],
-      send: async (type, payload) => { sent.push({ type, payload }) },
-    })
-    expect(await store.get(RECORD_COLLECTIONS.consultPackage, final.id)).toBeUndefined()
-    expect(await store.get(RECORD_COLLECTIONS.attachments, 'att-1')).toBeUndefined()
-    const logs = await store.list(RECORD_COLLECTIONS.recordLog)
-    expect(logs).toHaveLength(1)
-    const log = logs[0].value as Record<string, unknown>
-    expect(Object.keys(log).sort()).toEqual(['at', 'encounterId'])
-    expect(JSON.stringify(log)).not.toContain('SYNTHETIC')
-    expect(sent).toHaveLength(1)
-    expect(sent[0].type).toBe('record.signed')
-    expect(sent[0].payload.id).toBe(signed.id)
-    // 老师端只留索引，不留签名病历内容。
-    expect(index).toEqual({ eventId: signed.id, encounterId: final.id, version: 1, student, createdAt: final.createdAt })
-    const stored = await store.get(RECORD_COLLECTIONS.signedEncounters, final.id + '-v1') as Record<string, unknown>
-    expect(Object.keys(stored).sort()).toEqual(['createdAt', 'encounterId', 'eventId', 'student', 'version'])
-    expect(JSON.stringify(stored)).not.toContain('SYNTHETIC')
-    expect(JSON.stringify(stored)).not.toContain('content')
-    // 送达后暂存已删除。
-    expect(await store.list(RECORD_COLLECTIONS.pendingHandover)).toHaveLength(0)
-  })
+  // 4、5、11 是旧的多步交还（销毁问诊包、写日志/医案/索引、pending 重发）测试；
+  // V2-01 删掉 handover.ts 后这些行为不存在，交还流程由 core/inbox 的签字发送测试覆盖。
 
-  it('5 去标识医案不含公钥、称呼、主诉和附件，年龄只保留年龄段', async () => {
-    const store = new MemoryStore()
-    const { draft, final, signed } = await signedPair()
-    await completeSigning({ store, encounter: final, draft, signed, attachmentIds: [], send: async () => {} })
-    const stored = await store.get(RECORD_COLLECTIONS.caseBook, final.id + '-v1') as { deidentified: Record<string, unknown>; modifications: { path: string }[] }
-    const text = JSON.stringify(stored.deidentified)
-    expect(text).not.toContain(student)
-    expect(text).not.toContain('合成称呼')
-    expect(text).not.toContain('SYNTHETIC_CHIEF_COMPLAINT')
-    expect(text).not.toContain('b'.repeat(64))
-    expect(stored.deidentified.ageBand).toBe('30-39 岁')
-    expect(Object.keys(stored.deidentified).sort()).toEqual(['ageBand', 'gender', 'judgment', 'plan'])
-    expect(stored.modifications.length).toBeGreaterThan(0)
-    expect(stored.modifications.every(entry => !entry.path.startsWith('fourExams.'))).toBe(true)
-  })
-
-  it('6 修改记录里保留 AI 原文和老师定稿，且不记四诊', async () => {
-    const store = new MemoryStore()
-    const { draft, final, signed } = await signedPair()
-    await completeSigning({ store, encounter: final, draft, signed, attachmentIds: [], send: async () => {} })
-    const stored = await store.get(RECORD_COLLECTIONS.caseBook, final.id + '-v1') as { modifications: { path: string; aiDraft: unknown; final: unknown }[] }
-    const pattern = stored.modifications.find(entry => entry.path === 'judgment.pattern')
+  it('6 修改记录里保留 AI 原文和老师定稿，且不记四诊', () => {
+    const draft = draftEncounter()
+    const final = confirmAll(draft)
+    const stored = modificationLog(draft, final)
+    const pattern = stored.find(entry => entry.path === 'judgment.pattern')
     expect(pattern).toEqual({ path: 'judgment.pattern', aiDraft: 'AI 合成证候', final: '老师定稿证候' })
-    expect(stored.modifications.some(entry => entry.path === 'plan.homework[0]')).toBe(true)
-    expect(stored.modifications.some(entry => entry.path === 'fourExams.look')).toBe(false)
+    expect(stored.some(entry => entry.path === 'plan.homework[0]')).toBe(true)
+    expect(stored.some(entry => entry.path === 'fourExams.look')).toBe(false)
   })
 
-  it('7 修改已签字病历生成第 2 版：id 不变、version+1、supersedes 指向旧事件，旧版索引仍可读', async () => {
-    const store = new MemoryStore()
-    const { draft, final, signed } = await signedPair()
-    await completeSigning({ store, encounter: final, draft, signed, attachmentIds: [], send: async () => {} })
+  it('7 修改已签字病历生成第 2 版：id 不变、version+1、supersedes 指向旧事件', () => {
+    const final = confirmAll(draftEncounter())
+    const signed = signEncounter(final, teacherKey)
     const next = nextVersion(final, signed.id, { createdAt: '2026-02-01T00:00:00.000Z' })
     expect(next.id).toBe(final.id)
     expect(next.version).toBe(2)
     expect(next.supersedes).toBe(signed.id)
     const nextSigned = signEncounter(next, teacherKey)
     expect(nextSigned.tags).toContainEqual(['encounter', final.id, '2'])
-    await saveSignedIndex(store, nextSigned, next)
-    expect((await store.list(RECORD_COLLECTIONS.signedEncounters)).length).toBe(2)
-    const first = await store.get(RECORD_COLLECTIONS.signedEncounters, final.id + '-v1') as SignedEncounterIndex
-    expect(first.eventId).toBe(signed.id)
     expect(verifySignedEncounter(nextSigned, { student, teacher }).version).toBe(2)
   })
 
@@ -256,41 +175,8 @@ describe('M1-11 签字与交还验收', () => {
     expect(() => verifySignedEncounter(forged, { student, teacher })).toThrow('AI 草稿')
   })
 
-  it('11 交还顺序：发送失败时不清资料、签名事件暂存；重发成功后才销毁并落库', async () => {
-    const store = new MemoryStore()
-    const { draft, final, signed } = await signedPair()
-    await store.put(RECORD_COLLECTIONS.consultPackage, final.id, { chiefComplaint: 'SYNTHETIC_CHIEF_COMPLAINT' })
-    await store.put(RECORD_COLLECTIONS.attachments, 'att-1', { bytes: new Uint8Array([1, 2, 3]) })
-    await expect(completeSigning({
-      store, encounter: final, draft, signed, attachmentIds: ['att-1'],
-      send: async () => { throw new Error('offline') },
-    })).rejects.toThrow('未送达，可重发')
-    // 发送失败：问诊包、附件都还在，没有销毁日志、医案和索引；签名事件已暂存。
-    expect(await store.get(RECORD_COLLECTIONS.consultPackage, final.id)).toEqual({ chiefComplaint: 'SYNTHETIC_CHIEF_COMPLAINT' })
-    expect(await store.get(RECORD_COLLECTIONS.attachments, 'att-1')).toEqual({ bytes: new Uint8Array([1, 2, 3]) })
-    expect(await store.list(RECORD_COLLECTIONS.recordLog)).toHaveLength(0)
-    expect(await store.list(RECORD_COLLECTIONS.caseBook)).toHaveLength(0)
-    expect(await store.list(RECORD_COLLECTIONS.signedEncounters)).toHaveLength(0)
-    const pending = await store.list(RECORD_COLLECTIONS.pendingHandover)
-    expect(pending).toHaveLength(1)
-    expect((pending[0].value as { event: SignedEncounterEvent }).event.id).toBe(signed.id)
-    // 重发成功后走完销毁与落库，暂存删除。
-    const resent: SignedEncounterEvent[] = []
-    await retryHandover(store, signed.id, async (_type, payload) => { resent.push(payload) })
-    expect(resent).toHaveLength(1)
-    expect(resent[0].id).toBe(signed.id)
-    expect(await store.get(RECORD_COLLECTIONS.consultPackage, final.id)).toBeUndefined()
-    expect(await store.get(RECORD_COLLECTIONS.attachments, 'att-1')).toBeUndefined()
-    expect(await store.list(RECORD_COLLECTIONS.recordLog)).toHaveLength(1)
-    expect(await store.list(RECORD_COLLECTIONS.caseBook)).toHaveLength(1)
-    expect(await store.list(RECORD_COLLECTIONS.signedEncounters)).toHaveLength(1)
-    expect(await store.list(RECORD_COLLECTIONS.pendingHandover)).toHaveLength(0)
-  })
-
-  it('替换/去标识函数本身不泄漏原文', () => {
+  it('替换函数本身不泄漏原文', () => {
     const final = confirmAll(draftEncounter(), '老师定稿证候')
-    const caseBook = deidentifiedCaseBook(final)
-    expect(JSON.stringify(caseBook)).not.toContain('SYNTHETIC_CHIEF_COMPLAINT')
     const log = modificationLog(draftEncounter(), final)
     expect(log.find(entry => entry.path === 'judgment.pattern')?.aiDraft).toBe('AI 合成证候')
     expect(log.some(entry => entry.path.startsWith('fourExams.'))).toBe(false)

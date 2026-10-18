@@ -1,15 +1,13 @@
-import { getPublicKey } from 'nostr-tools/pure'
-import { npubEncode } from 'nostr-tools/nip19'
-import { createIdentity, type Identity, type Language } from '../identity'
+import { createIdentity, identityFromPrivateKey, type Identity } from '../identity'
 import type { LocalStore, StoreValue } from '../store'
 import { loadTeachers, saveTeachers } from '../inbox'
 import { emptyProfile, loadProfile, saveProfile } from '../intake/session'
 import type { Encounter } from '../record/types'
 import { ageAt, cities, toBazi } from '../../../../domain/tcm/bazi'
 
-// M1-22 家人子账户：本人是根身份（account 0），家人在同一部手机上按 NIP-06 的 account 序号派生。
-// 每位家人的本机资料存进同一个加密库的独立分片（集合名加 `f编号-` 前缀），所以逻辑上互不可见，
-// 而根实例的导出/导入天然覆盖全家——一次备份、一次恢复全家。
+// M1-22 家人子账户：本人是根身份（account 0），每位家人在本机随机生成独立身份，
+// account 序号只用于展示与排序。每位家人的本机资料存进同一个库的独立分片
+// （集合名加 `f编号-` 前缀），所以逻辑上互不可见。
 export const FAMILY_COLLECTION = 'family'
 export const FAMILY_KEY = 'members'
 export const MAX_FAMILY_MEMBERS = 8
@@ -27,7 +25,7 @@ export interface FamilyMember {
   birthDate: string
   city: string | null
   publicKey: string
-  /** 派生出的家人私钥；与全库一样由本机设备密钥保护的 AES-GCM 加密后落盘，仅供本机代管使用。 */
+  /** 随机生成的家人私钥；仅供本机代管使用。 */
   privateKey: string
 }
 
@@ -52,10 +50,13 @@ export function memberStore(rootStore: LocalStore, account: number): LocalStore 
   return rootStore.scoped(familyPrefix(account))
 }
 
-export function memberIdentity(member: FamilyMember, language: Language): Identity {
-  const privateKey = hexBytes(member.privateKey)
-  if (getPublicKey(privateKey) !== member.publicKey) throw new Error('家人资料与本机记录不一致')
-  return { privateKey, publicKey: member.publicKey, npub: npubEncode(member.publicKey), language, account: member.account }
+export function memberIdentity(member: FamilyMember): Identity {
+  const identity = identityFromPrivateKey(hexBytes(member.privateKey))
+  if (identity.publicKey !== member.publicKey) {
+    identity.privateKey.fill(0)
+    throw new Error('家人资料与本机记录不一致')
+  }
+  return identity
 }
 
 export function hexBytes(value: string): Uint8Array {
@@ -150,17 +151,14 @@ async function memberProfile(rootStore: LocalStore, draft: ReturnType<typeof nor
   return profile
 }
 
-// 添加家人：派生身份 → 写本机家人清单 → 初始化这位家人的本机档案与“我的老师”（与本人同一批）。
+// 添加家人：随机生成身份 → 写本机家人清单 → 初始化这位家人的本机档案与“我的老师”（与本人同一批）。
 export async function addFamilyMember(rootStore: LocalStore, rootIdentity: Identity, draft: FamilyDraft): Promise<FamilyMember> {
   const value = normalizeDraft(draft)
   const members = await loadFamilyMembers(rootStore)
   if (members.length >= MAX_FAMILY_MEMBERS) throw new Error('最多添加 8 位家人')
   if (value.account !== undefined && members.some(member => member.account === value.account)) throw new Error('这个家人编号已经用过')
   const account = value.account ?? Math.max(0, ...members.map(member => member.account)) + 1
-  const words = (await rootStore.get('recovery-words', 'self')) as { words?: unknown } | undefined
-  const phrase = words && typeof words.words === 'string' ? words.words : ''
-  if (phrase === '') throw new Error('本机缺少生成家人所需的恢复词，请先用恢复词恢复一次再添加家人。')
-  const derived = createIdentity(phrase, rootIdentity.language, account)
+  const generated = createIdentity()
   const member: FamilyMember = {
     account,
     alias: value.alias,
@@ -168,11 +166,11 @@ export async function addFamilyMember(rootStore: LocalStore, rootIdentity: Ident
     gender: value.gender,
     birthDate: value.birthDate,
     city: value.city,
-    publicKey: derived.publicKey,
-    privateKey: hexString(derived.privateKey),
+    publicKey: generated.publicKey,
+    privateKey: hexString(generated.privateKey),
   }
-  derived.privateKey.fill(0)
-  if (member.publicKey === rootIdentity.publicKey || members.some(existing => existing.publicKey === member.publicKey)) throw new Error('家人身份派生重复，请重试')
+  generated.privateKey.fill(0)
+  if (member.publicKey === rootIdentity.publicKey || members.some(existing => existing.publicKey === member.publicKey)) throw new Error('家人身份生成重复，请重试')
   const scoped = memberStore(rootStore, account)
   await saveTeachers(scoped, await loadTeachers(rootStore))
   await saveProfile(scoped, await memberProfile(rootStore, value))

@@ -19,7 +19,7 @@
 
 - `sendConsultPackage(send, pkg)`：先发问诊包（只带引用），再每张照片单独一条 `consult.attachment`（base64），避开中继单条 2 MB 上限。
 - `flushIntakeOutbox(store, send)`：M1-05 接通后把 `intake-outbox` 里的替身待发件真实发出，成功后才删除。
-- `completeConsultSigning`：`signEncounter` + M1-11 的 `completeSigning`（先送达、成功后才销毁问诊包与照片），送达后按需记一笔 `charge`（`recordHash` 为签名事件 id）。未送达抛 `ConsultUndeliveredError`（带事件 id），`retryConsultHandover` 重发同一条事件，不重复签字。
+- `completeConsultSigning`：V2 简化为“签字 → 发送 → 成功提示”：`signEncounter(final)` 后把 `record.signed` 发给问诊包发件人，送达后按需记一笔 `charge`（`recordHash` 为签名事件 id）；**不再**暂存/重发、不删问诊包或照片、不写索引/日志/医案（删除由 V2-05 保留期限统一处理）。
 - `restartIntakeAfterEmergency(store, state)`：急症中断后学生点“我已知晓并重新开始”时，先删掉含急症原文的旧草稿，再开新的一次采集。
 
 ## 学生病历页
