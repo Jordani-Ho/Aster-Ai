@@ -14,7 +14,8 @@ import { searchCases } from '../drafting/cases'
 import { storeCarePlan } from '../careplan'
 import { recordSelfRating, last14DayTrend, listSelfRatings } from '../mirror/trend'
 import { checkIn } from '../homework'
-import { saveTonguePhoto } from '../tongue'
+import { saveTongue } from '../tongue'
+import { parseTongueAbstract, tongueSvg, type TongueFeatures } from '../../../../domain/tcm/tongue'
 import { localDay } from '../homework/schedule'
 import {
   latestTeacherRecord, listTeacherRecords, revisedEncounter,
@@ -33,6 +34,10 @@ const DAY = 86400000
 const NOW = new Date('2026-10-18T12:00:00.000Z')
 const closers: LocalStore[] = []
 afterEach(() => { while (closers.length) closers.pop()!.close() })
+
+// V2-03：舌象只存抽象记录（特征 + 本地重建示意图），不再存原图字节。
+const TONGUE_FEATURES: TongueFeatures = { color: 'unknown', coatingColor: 'unknown', coatingThickness: 'unknown', shape: 'unknown', teeth: null, cracks: null, confidence: 0.5 }
+const TONGUE = parseTongueAbstract({ kind: 'tongue', features: TONGUE_FEATURES, svg: tongueSvg(TONGUE_FEATURES), shichen: '辰', jieqi: '霜降', city: '北京市' })
 
 async function newStore(identity: Identity, role: 'teacher' | 'student'): Promise<LocalStore> {
   const store = await openStore(identity, { factory: new IDBFactory() })
@@ -223,9 +228,7 @@ describe('V2-05 验收 1：老师设定保留期限', () => {
     await recordSelfRating(studentStore, 5, fresh)
     await checkIn(studentStore, 'hw-synthetic', undefined, old)
     await checkIn(studentStore, 'hw-synthetic', undefined, fresh)
-    await saveTonguePhoto(studentStore, { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xda]), type: 'image/jpeg' }, {
-      now: () => old, codec: { decode: async () => ({ source: {}, width: 10, height: 10 }), draw: () => ({ toJpeg: async () => new Uint8Array([0xff, 0xd8]) }) },
-    })
+    await saveTongue(studentStore, TONGUE, old)
     // 长期保留的沉淀：调养方案。
     await storeCarePlan(studentStore, teacher.publicKey, { constitution: '平和质', points: ['早睡'], avoid: ['生冷'], updatedAt: NOW.toISOString(), version: 1 })
 
@@ -247,13 +250,36 @@ describe('V2-05 验收 1：老师设定保留期限', () => {
     const ratings = await listSelfRatings(studentStore)
     expect(ratings.map(rating => rating.score)).toEqual([5])
     expect(await studentStore.list('checkins')).toHaveLength(1)
-    expect(await studentStore.list('tongue-photos')).toHaveLength(0)
+    expect(await studentStore.list('tongue-records')).toHaveLength(0)
     // 长时间保留的调养方案还在。
     expect(await studentStore.get('care-plans', teacher.publicKey)).toBeDefined()
 
     // 列表/走势等读数据的地方不会因为删除而报错。
     expect(() => last14DayTrend([], ratings, [], NOW)).not.toThrow()
     expect(await studentStore.list(TEACHER_RECORDS)).toEqual([])
+  })
+
+  it('学生端收到的签名病历也按保留期限删：超期删掉、保留期内还在', async () => {
+    const teacher = createIdentity()
+    const student = createIdentity()
+    const studentStore = await newStore(student, 'student')
+    await addTeacher(studentStore, teacher.publicKey)
+    const inbox = createInbox({ identity: student, store: studentStore })
+    const old = new Date(NOW.getTime() - 40 * DAY), recent = new Date(NOW.getTime() - 5 * DAY)
+    const expired = signEncounter(startInPersonEncounter({ teacher: teacher.publicKey, student: student.publicKey, now: old, id: '7'.repeat(32) }), teacher.privateKey)
+    const keptRecord = signEncounter(startInPersonEncounter({ teacher: teacher.publicKey, student: student.publicKey, now: recent, id: '8'.repeat(32) }), teacher.privateKey)
+    for (const record of [expired, keptRecord]) {
+      await inbox.receive({ id: crypto.randomUUID(), at: Math.floor(NOW.getTime() / 1000), sender: teacher.publicKey, envelope: { type: 'record.signed', version: 1, payload: record } })
+    }
+    expect(await listReceivedRecords(studentStore, student)).toHaveLength(2)
+
+    // 老师设 30 天：学生端按收到的设置删自己的病历。
+    await inbox.receive({ id: crypto.randomUUID(), at: Math.floor(NOW.getTime() / 1000), sender: teacher.publicKey, envelope: retentionEnvelope(teacher.publicKey, 30) })
+    const result = await runRetentionOnce(studentStore, 'student', { now: NOW })
+    expect(result?.days).toBe(30)
+    expect(await studentStore.list('student-records')).toHaveLength(1)
+    const kept = await listReceivedRecords(studentStore, student)
+    expect(kept.map(record => record.event.id)).toEqual([keptRecord.id])
   })
 
   it('学生端按老师设置滚动删除多少天都可注入时间；保留期限非法值不入库', async () => {

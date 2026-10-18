@@ -38,7 +38,7 @@ V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`
 | `intake-outbox` | 中继未接通时暂存的问诊包 | `flushIntakeOutbox` 发送成功即删除 |
 | `intake-attachments` | 采集照片处理后的 JPEG 字节（长边 ≤1600、≤500 KB） | 键为附件 id |
 | `profile` | 学生本机档案：称呼、性别、年龄、八字、城市（键 `self`） | 城市用于天气与真太阳时/时区 |
-| `student-records` | 学生收到的签名病历索引 `{id,teacher,createdAt,eventJson,version}` | 显示前重新验签 |
+| `student-records` | 学生收到的签名病历索引 `{id,teacher,createdAt,eventJson,version}` | 显示前重新验签；按老师设定的保留期限删除（V2-05） |
 | `settings` | 键 `role`、`teachers`（老师公钥数组）、`time-display`、`mirror-shichen`、`retention-days`（老师设定的保留天数）、`last-retention-day`（上次清理日）、`last-backup-request`（上次备份请求日）、`restore-needed`（新进社区后待恢复） | 家人分片内复制同一“我的老师”名单 |
 | `homework` | 作业 `{homework, startsOn}` | M1-13；保留期限不删作业规则 |
 | `checkins` | 打卡 `{homeworkId, at, note?, shichen?, jieqi?, city?}` | 当日 00:00–00:59 的打卡算前一天（M1-23a 子时归日）；后三项为 V2-02 天时 |

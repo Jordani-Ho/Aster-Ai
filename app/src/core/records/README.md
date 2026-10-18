@@ -16,7 +16,7 @@
 - 随调养方案发给学生：`retention.setting` 信封，载荷 `{ teacher, days, updatedAt }`；学生端按老师公钥存在 `teacher-retention`。学生可能有多位老师，取最短的期限（最保守）。
 - `runRetention(store, role, { now, days })`：时间可注入，不依赖真实时钟。
   - 老师端：删超过期限的 `teacher-records`、`consult-package`、`in-person-draft`，再删不再被这些记录引用的 `attachments`。
-  - 学生端：删超过期限的 `self-ratings`、`self-stress`、`tongue-photos`、`checkins`、`intake-sent`、`intake-draft` 与不再被引用的 `intake-attachments`。
+  - 学生端：删超过期限的 `self-ratings`、`self-stress`、`tongue-records`（V2-03 起只存抽象舌象，不再有原图字节）、`checkins`、`intake-sent`、`intake-draft`、不再被引用的 `intake-attachments`，以及收到的签名病历 `student-records` 与随它的面诊照片索引/字节（`record-photo-index`/`record-photos`）。
 - `runRetentionOnce`：打开应用时每天只跑一次（`settings/last-retention-day` 去重），不做后台任务。
 - 长期保留的沉淀：`care-plans`（最新一版）、`homework`（作业规则）、`teacher-fingerprint`（改稿习惯摘要）不在删除范围。
 
@@ -39,10 +39,10 @@
 
 ## 边界
 
-- 第二版没有助记词/身份恢复：这里验证的是“本机记录被清空、身份还在”时的自动收回；身份本身怎么找回不在本卡。
-- 老师清空浏览器时，`teacher-students` 名单也会一起丢，此时无从知道向谁请求；名单在有问诊或签字时自动重建。
+- 第二版没有助记词/身份恢复：这里验证的是“本机记录被清空、身份还在”时的自动收回；身份找回另开 V2-07，不在本卡。
+- 老师清空浏览器时，`teacher-students` 名单也会一起丢，此时无从知道向谁请求；名单在有问诊或签字时自动重建，长期保留、不受保留期限影响。
 - 家人分片（`f{编号}-`）各自独立跑同一条保留期清理，规则一致。
 
 ## 验证
 
-`app/src/core/records/records.test.ts`（8 项，全部合成身份/病历与 fake-indexeddb）：验收 0 两条路径各存一份完整病历、起草检索、改方 `previousOf`、扣费 `recordHash`；验收 1 保留 30 天第 31 天两端删除而调养方案还在；验收 2 学生清空后自动收回；验收 3 老师医案丢失后从两位学生逐个收回；另加陌生发件人/回包校验与“代码里搜不到旧集合名”的扫描。
+`app/src/core/records/records.test.ts`（9 项，全部合成身份/病历与 fake-indexeddb）：验收 0 两条路径各存一份完整病历、起草检索、改方 `previousOf`、扣费 `recordHash`；验收 1 保留 30 天第 31 天两端删除而调养方案还在，学生端收到的签名病历也按期限删、保留期内还在；验收 2 学生清空后自动收回；验收 3 老师医案丢失后从两位学生逐个收回；另加陌生发件人/回包校验与“代码里搜不到旧集合名”的扫描。

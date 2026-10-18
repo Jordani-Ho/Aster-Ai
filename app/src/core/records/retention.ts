@@ -134,11 +134,12 @@ async function cleanTeacher(store: LocalStore, cutoff: number): Promise<Record<s
 }
 
 // 学生端：删超过保留期的镜子记录、问诊卡片、作业打卡与对应照片；调养方案和作业规则一律不动。
+// V2-03 起舌象只存抽象记录（tongue-records），不再存原图字节。
 async function cleanStudent(store: LocalStore, cutoff: number): Promise<Record<string, number>> {
   const cutoffDay = localDay(new Date(cutoff))
   const oldDay = (key: string) => !DATE.test(key) || key < cutoffDay
   const deleted: Record<string, number> = {}
-  for (const collection of ['self-ratings', 'self-stress', 'tongue-photos']) {
+  for (const collection of ['self-ratings', 'self-stress', 'tongue-records']) {
     deleted[collection] = await dropRows(store, collection, key => !oldDay(key))
   }
   deleted.checkins = await dropRows(store, 'checkins', (_key, value) => {
@@ -164,6 +165,19 @@ async function cleanStudent(store: LocalStore, cutoff: number): Promise<Record<s
     }
   }
   deleted['intake-attachments'] = await dropRows(store, 'intake-attachments', key => referenced.has(key))
+  // 学生端收到的签名病历也按保留期限删；长期只留调养方案、作业规则与老师的改稿摘要。
+  deleted['student-records'] = await dropRows(store, 'student-records', (_key, value) => {
+    const record = value as { createdAt?: unknown }
+    return !olderThan(record?.createdAt, cutoff)
+  })
+  // 病历删掉后，面诊照片索引与字节一并清掉，不留无主照片。
+  const keptEvents = new Set((await store.list('student-records')).map(row => row.key))
+  deleted['record-photo-index'] = await dropRows(store, 'record-photo-index', (_key, value) => {
+    const index = value as { eventId?: unknown }
+    return typeof index?.eventId === 'string' && keptEvents.has(index.eventId)
+  })
+  const keptPhotoKeys = new Set((await store.list('record-photo-index')).map(row => (row.value as { dataKey?: unknown })?.dataKey).filter((key): key is string => typeof key === 'string'))
+  deleted['record-photos'] = await dropRows(store, 'record-photos', key => keptPhotoKeys.has(key))
   return deleted
 }
 
