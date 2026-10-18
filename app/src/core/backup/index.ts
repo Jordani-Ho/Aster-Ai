@@ -41,7 +41,7 @@ export function createBackupManager({identity,store,relay}:{identity:Identity;st
   const prior=await status(),attempt=now.toISOString()
   try{
    const events=known??await snapshots(),archive=await store.exportEncrypted()
-   archive.records=archive.records.filter(record=>record.c!=='pilot-metrics')
+   archive.records=archive.records.filter(record=>record.c!=='pilot-metrics'&&record.c!=='recovery-words')
    active()
    const used=new Set(events.map(event=>Object.fromEntries(event.tags).d))
    const slot=BACKUP_SLOTS.find(value=>!used.has(value))??Object.fromEntries(events[events.length-1].tags).d
@@ -78,7 +78,7 @@ export function createBackupManager({identity,store,relay}:{identity:Identity;st
    if(prior.result!=='failed'&&prior.lastSuccess&&day(new Date(prior.lastSuccess))===day(now))return
    try{
     const events=await snapshots(),archive=await store.exportEncrypted({includeBinary:true})
-    const business=archive.records.filter(record=>!['backup-status','backup-config'].includes(record.c))
+    const business=archive.records.filter(record=>!['backup-status','backup-config','recovery-words'].includes(record.c))
     if(!business.length&&events.length){await restore(events,true);return}
     await backup(now,events)
    }catch(error){if(!closed&&(await status()).result!=='failed')await save({...prior,result:'failed',lastAttempt:now.toISOString(),error:'中继备份失败，下次打开应用会重试'});throw error}
@@ -86,6 +86,7 @@ export function createBackupManager({identity,store,relay}:{identity:Identity;st
   restoreLatest:(replace=false)=>exclusive(async()=>restore(await snapshots(),replace)),
   exportFile:()=>exclusive(async()=>{
    const archive=await store.exportEncrypted({includeBinary:true});active()
+   archive.records=archive.records.filter(record=>record.c!=='recovery-words')
    const file:BackupFile={format:'aster-backup',version:1,owner:who.publicKey,ciphertext:v2.encrypt(JSON.stringify(archive),v2.utils.getConversationKey(who.privateKey,who.publicKey))}
    const prior=await status();await save({...prior,lastFile:new Date().toISOString()})
    return JSON.stringify(file)

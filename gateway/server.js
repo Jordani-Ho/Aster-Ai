@@ -1,3 +1,5 @@
+import { MemberStore } from './members.js'
+import { INVITE_ROUTES, validInvite, seedAllowed } from './invite.js'
 import { createPushService, PUSH_ROUTES } from './push/index.js'
 import { createServer } from 'node:http'
 import { appendFileSync, readFileSync } from 'node:fs'
@@ -15,7 +17,7 @@ function loadConfig(path) {
 }
 
 export function createGateway(config) {
-  const members = new Set(JSON.parse(readFileSync(config.membersFile, 'utf8')))
+  const members = new MemberStore(config.membersFile)
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
   const upstreamTimeoutMs = config.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS
   const push = config.push ? createPushService({ file: config.push.subscriptionsFile ?? './push-subscriptions.json', endpointHosts: config.push.endpointHosts, send: config.push.send }) : null
@@ -60,7 +62,7 @@ export function createGateway(config) {
   }
 
   // NIP-98：签名、时间窗、u、method、payload，并拒绝 60 秒内重放的事件 id。
-  function authenticate(req, body) {
+  function authenticate(req, body, onboarding = false) {
     try {
       const header = req.headers.authorization
       if (typeof header !== 'string' || !header.startsWith('Nostr ')) return { status: 401 }
@@ -72,7 +74,7 @@ export function createGateway(config) {
       const valid = verifyEvent(event) && event.kind === 27235 && fresh &&
         tag('u') === url && tag('method') === req.method && tag('payload') === payloadHash
       if (!valid) return { status: 401 }
-      if (!members.has(event.pubkey)) return { status: 403 }
+      if (!onboarding && !members.has(event.pubkey)) return { status: 403 }
       const now = Date.now()
       for (const [id, expires] of seen) if (expires <= now) seen.delete(id)
       if (seen.has(event.id)) return { status: 401 }
@@ -144,7 +146,7 @@ export function createGateway(config) {
     }
     try {
       // 只放行一个路径：成员不能借用上游账户的微调、文件等接口。
-      if (req.url !== ROUTE && !PUSH_ROUTES.includes(req.url)) {
+      if (req.url !== ROUTE && !PUSH_ROUTES.includes(req.url) && !INVITE_ROUTES.includes(req.url)) {
         status = 404
         reject(404, 'not found')
       } else if (req.method !== 'POST') {
@@ -164,7 +166,7 @@ export function createGateway(config) {
         } else if (read.aborted) {
           status = 499
         } else {
-          const auth = authenticate(req, read.body)
+          const auth = authenticate(req, read.body, INVITE_ROUTES.includes(req.url))
           status = auth.status
           pubkey = auth.pubkey ?? ''
           if (status === 401) reply(res, 401, 'unauthorized')
@@ -172,7 +174,14 @@ export function createGateway(config) {
           else if (!allowed(pubkey)) {
             status = 429
             reply(res, 429, 'too many requests')
-           } else if (req.url === ROUTE) status = await forward(req, res, read.body)
+            } else if (INVITE_ROUTES.includes(req.url)) {
+            let body
+            try { body = JSON.parse(read.body) } catch { status = 400; reply(res,400,'invalid json'); return }
+            const url=(config.publicUrl ?? 'http://' + req.headers.host) + '/invite/redeem'
+            const valid=req.url==='/invite/redeem' ? validInvite(body?.invite,url,members) : seedAllowed(config,members,body?.token,pubkey)
+            if(!valid){status=403;reply(res,403,'invitation unavailable')}
+            else {members.add(pubkey);status=200;res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}')}
+          } else if (req.url === ROUTE) status = await forward(req, res, read.body)
           else if (!push) { status = 503; reply(res, 503, 'push unavailable') }
           else {
             let body

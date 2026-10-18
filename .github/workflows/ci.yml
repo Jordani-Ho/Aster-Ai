@@ -82,8 +82,9 @@ jobs:
         run: npx playwright install --with-deps chromium
       - run: npm run typecheck:e2e
       - run: npm run test:e2e-env
+      - run: npm run test:deployment
       - name: Build patched relay
-        run: npm run e2e:build-relay
+        run: npm run e2e:test-relay
       - name: Save successful build before browser probes
         if: steps.relay-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4

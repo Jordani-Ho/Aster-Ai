@@ -27,7 +27,7 @@ normalize_members() {
   printf '%s' "${MEMBER_PUBKEYS:-}" | tr ',' ' ' | tr -s '[:space:]' '\n' | awk 'NF'
 }
 MEMBERS="$(normalize_members)"
-[ -n "$MEMBERS" ] || die "MEMBER_PUBKEYS 为空：至少填一个 64 位十六进制成员公钥。"
+
 for key in $MEMBERS; do
   [[ "$key" =~ ^[0-9a-f]{64}$ ]] || die "MEMBER_PUBKEYS 里有非法公钥：$key（必须是 64 位小写十六进制）"
 done
@@ -66,6 +66,7 @@ port = 8080
 [limits]
 event_kind_allowlist = [1059, 30078]
 [authorization]
+community_open = true
 nip42_auth = true
 nip42_dms = true
 pubkey_whitelist = []
@@ -120,11 +121,19 @@ if [ -n "$VERIFY_MEMBER_PUBKEY" ]; then MEMBERS_ALL="$MEMBERS_ALL $VERIFY_MEMBER
 
 # ---- 7. 中继配置：用仓库里的 relay/configure.mjs，按成员公钥 + 当前中继地址生成 ----
 log "生成中继配置 data/relay-config.toml（relay_url=wss://$RELAY_DOMAIN/）…"
-( cd ../.. && RELAY_PUBLIC_URL="wss://${RELAY_DOMAIN}/" node relay/configure.mjs $MEMBERS_ALL )
+( cd ../.. && RELAY_COMMUNITY_OPEN="${RELAY_COMMUNITY_OPEN:-true}" RELAY_PUBLIC_URL="wss://${RELAY_DOMAIN}/" node relay/configure.mjs $MEMBERS_ALL )
 mv -f ../../relay/config.local.toml data/relay-config.toml
 
+# 一次性部署口令只留本机。重跑不覆盖口令、已认领记录或已加入成员。
+node --input-type=module <<'NODE'
+import {existsSync,writeFileSync,chmodSync} from 'node:fs';import {randomBytes,createHash} from 'node:crypto';
+if(!existsSync('data/gateway/seed.json')){const token=randomBytes(32).toString('base64url');writeFileSync('data/gateway/seed.json',JSON.stringify({tokenHash:createHash('sha256').update(token).digest('hex')}),{mode:0o600});writeFileSync('data/teacher-setup-code.txt',token+'\n',{mode:0o600})}
+if(existsSync('data/teacher-setup-code.txt'))chmodSync('data/teacher-setup-code.txt',0o600)
+NODE
+log "社区老师首次登记：在本机查看 data/teacher-setup-code.txt，把口令输入手机的‘我是这个社区的老师’。不要公开此文件。"
+
 # ---- 8. 网关配置与成员名单 ----
-log "生成网关配置 data/gateway-config.json 与成员名单 data/gateway-members.json…"
+log "生成网关配置 data/gateway-config.json 并保留成员名单 data/gateway/members.json…"
 APP_ORIGIN="https://${APP_DOMAIN}" MEMBERS_ALL="$MEMBERS_ALL" \
 UPSTREAM_BASE_URL="${UPSTREAM_BASE_URL:-https://api.deepseek.com}" \
 UPSTREAM_MODEL="${UPSTREAM_MODEL:-deepseek-chat}" \

@@ -16,6 +16,21 @@
 
 ---
 
+## M1-17：手机开通老师与邀请学生（当前入口）
+
+这一节替代下文旧版的手工复制成员步骤。`.env` 的 `MEMBER_PUBKEYS` 可留空，`SELF_TEST_MEMBER` 默认0；保持模型和域名等部署变量。运行现有 `./setup.sh` 后，再按原步骤启动；脚本只生成本机一次性部署口令，不把口令打印到日志。
+
+1. 在部署电脑本机查看 `deploy/home/data/teacher-setup-code.txt`，只交给发起人指定的第一位老师。
+2. 老师在手机打开应用，只点“我是老师”即到首页。展开“我是这个社区的老师”，输入部署口令，点“登记为社区老师”。看到“社区已建立，可以邀请学生”。口令只能认领到一个后台身份，重跑setup不重置；同一人失败重试可继续。
+3. 老师点“邀请学生”，把链接或二维码发给学生。7天内可重复使用；学生点开就到问诊首页，不输入后台编号。过期请老师重新生成。
+4. 学生登记写入 `data/gateway/members.json`，网关即时生效，无需重启。原 `data/gateway-members.json` 仅迁移旧名单时读取；重复setup不会丢失新成员。gateway挂载整个可写data/gateway目录，支持原子替换。
+5. 独立中继默认仍关闭开放模式；此内测部署通过 `RELAY_COMMUNITY_OPEN=true` 放行任意已认证连接，模型/推送网关仍只接受邀请成员。改成false恢复原白名单模式，需把成员明确写入配置；未认证连接仍不能读取消息或普通备份。
+6. 首页底部提醒换手机前备份。“设置 → 换手机时用（高级）”可保存恢复资料；可选“用刷脸保护并自动备份”需本机实际取到PRF。暂不支持的手机和微信内置浏览器仍能正常接受邀请和问诊。
+
+刷脸恢复需要同一个系统账户同步同一凭据、相同稳定应用域名；临时trycloudflare地址换域名会失效。照片仍需文件备份，不承诺换手机恢复未备份照片。只部署代码/配置不代表真实手机或家庭外网已完成本轮验证。
+
+---
+
 ## 0. 这台电脑的现状（2026-10-17 核对）
 
 | 项目 | 现状 |
@@ -87,15 +102,15 @@ docker run --rm hello-world
 
 ## 2. 第 2 步：准备仓库和 .env
 
-仓库在 `D:\projects\Aster-Ai`，WSL 里的路径是 `/mnt/d/projects/Aster-Ai`：
+仓库在 `D:\projects\aster-ai-codex`，WSL 里的路径是 `/mnt/d/projects/aster-ai-codex`：
 
 ```bash
-cd /mnt/d/projects/Aster-Ai/deploy/home
+cd /mnt/d/projects/aster-ai-codex/deploy/home
 cp .env.example .env
 chmod 600 .env
 ```
 
-用文本编辑器打开 `.env`，至少填写：
+用文本编辑器打开 `.env`，按M1-17入口填写模型与域名；成员一项可留空。其他配置：
 
 | 变量 | 填什么 |
 | :-- | :-- |
@@ -132,7 +147,7 @@ chmod 600 .env
 ### 3.2 第一次生成配置并构建（在 WSL 里）
 
 ```bash
-cd /mnt/d/projects/Aster-Ai/deploy/home
+cd /mnt/d/projects/aster-ai-codex/deploy/home
 ./setup.sh
 ```
 
@@ -152,7 +167,7 @@ VAPID 已生成并写入 .env（不要提交 .env）
 生成网关配置 data/gateway-config.json 与成员名单 data/gateway-members.json…
 gateway config: publicUrl=https://app.example.com members=3
 完成：
-  - 数据目录：/mnt/d/projects/Aster-Ai/deploy/home/data（已加入 .gitignore，备份就备份这个目录）
+  - 数据目录：/mnt/d/projects/aster-ai-codex/deploy/home/data（已加入 .gitignore，备份就备份这个目录）
   - 域名模式启动：./start.sh
   - 无域名自测：./quick-start.sh（会生成 trycloudflare 临时地址并写回 .env）
   - 验收探测：./verify.sh
@@ -203,7 +218,7 @@ PASS 日志里没有 IP 地址
 Cloudflare 临时隧道不需要域名和账号，但**地址每次重启都会变**，只适合自测，不能当作内测入口。
 
 ```bash
-cd /mnt/d/projects/Aster-Ai/deploy/home
+cd /mnt/d/projects/aster-ai-codex/deploy/home
 ./quick-start.sh
 ```
 
@@ -271,7 +286,7 @@ cd /mnt/d/projects/Aster-Ai/deploy/home
 - 只重启容器：`docker compose --profile domain down && ./start.sh`
 - 重启 WSL：在 Windows 终端执行 `wsl --shutdown`，再 `wsl -d Ubuntu`，然后
   ```bash
-  cd /mnt/d/projects/Aster-Ai/deploy/home && ./start.sh
+  cd /mnt/d/projects/aster-ai-codex/deploy/home && ./start.sh
   ```
 - 整机重启：开机后确认 Docker 服务已启动（`sudo systemctl status docker`），再执行上面的 `./start.sh`。
   （本卡用 `wsl --shutdown` 模拟整机重启，见 PR 说明。）
@@ -279,7 +294,7 @@ cd /mnt/d/projects/Aster-Ai/deploy/home
 ### 6.3 备份中继数据
 
 ```bash
-cd /mnt/d/projects/Aster-Ai/deploy/home
+cd /mnt/d/projects/aster-ai-codex/deploy/home
 docker compose --profile domain stop relay gateway
 tar czf ~/aster-home-backup-$(date +%F-%H%M).tar.gz data/
 docker compose --profile domain start relay gateway
@@ -340,7 +355,7 @@ WSL2 在最后一个会话退出约 1 分钟后会被 Windows 回收，容器和
    ```
 
    ```bash
-   wsl -d Ubuntu -- bash -lc "cd /mnt/d/projects/Aster-Ai/deploy/home && docker compose ps"
+   wsl -d Ubuntu -- bash -lc "cd /mnt/d/projects/aster-ai-codex/deploy/home && docker compose ps"
    ```
 
    容器起来后：无域名模式重跑 `./quick-start.sh`（临时地址会变），域名模式跑 `./start.sh`，最后 `./verify.sh` 六项全 PASS 即恢复在线。

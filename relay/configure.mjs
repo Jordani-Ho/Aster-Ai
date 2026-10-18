@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs'
-const members=process.argv.slice(2)
-if(!members.length||members.some(key=>!/^[0-9a-f]{64}$/.test(key)))throw Error('用法：node relay/configure.mjs <成员十六进制公钥> ...')
+const members=process.argv.slice(2),communityOpen=process.env.RELAY_COMMUNITY_OPEN==='true'
+if((!members.length&&!communityOpen)||members.some(key=>!/^[0-9a-f]{64}$/.test(key)))throw Error('用法：node relay/configure.mjs <成员十六进制公钥> ...')
 const url=process.env.RELAY_PUBLIC_URL??'ws://localhost:8080/'
 if(!/^wss?:\/\//.test(url))throw Error('RELAY_PUBLIC_URL 必须为 ws/wss URL')
 const config=`[info]
@@ -15,6 +15,7 @@ max_ws_message_bytes = 2098176
 max_ws_frame_bytes = 2098176
 event_kind_allowlist = [1059, 30078]
 [authorization]
+community_open = ${communityOpen}
 nip42_auth = true
 nip42_dms = true
 pubkey_whitelist = ${JSON.stringify(members)}

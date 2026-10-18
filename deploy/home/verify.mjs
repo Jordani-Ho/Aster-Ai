@@ -117,7 +117,8 @@ async function main() {
   // 3. 中继：非成员被拒、成员通过
   try {
     const result = await relayAuth(generateSecretKey())
-    if (result === 'rejected' || result === 'closed') pass('中继拒绝非成员 AUTH（' + result + '）')
+    if (process.env.RELAY_COMMUNITY_OPEN!=='false' && result==='ok') pass('中继开放模式接受已认证连接')
+    else if (process.env.RELAY_COMMUNITY_OPEN==='false' && (result === 'rejected' || result === 'closed')) pass('中继拒绝非成员 AUTH（' + result + '）')
     else fail('中继非成员 AUTH 期望被拒，实际 ' + result)
   } catch (error) { fail('中继非成员探测失败：' + error) }
 

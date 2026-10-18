@@ -1,5 +1,5 @@
 export const DEFAULT_DATABASE = 'aster-local-store'
-export interface StoreOptions { name?: string; factory?: IDBFactory }
+export interface StoreOptions { name?: string; factory?: IDBFactory; unlockKey?: CryptoKey }
 export function openDatabase(options: StoreOptions): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const factory = options.factory ?? globalThis.indexedDB

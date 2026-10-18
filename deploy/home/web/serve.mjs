@@ -11,7 +11,7 @@ import { extname, join, normalize, resolve, sep } from 'node:path'
 const ROOT = resolve(process.env.APP_DIST ?? '/srv/app/dist')
 const PORT = Number(process.env.PORT ?? 8080)
 const GATEWAY = process.env.GATEWAY_INTERNAL_URL ?? 'http://gateway:8787'
-const PROXY_PREFIXES = ['/push/', '/v1/']
+const PROXY_PREFIXES = ['/push/', '/v1/', '/invite/']
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',

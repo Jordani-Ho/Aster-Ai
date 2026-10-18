@@ -8,14 +8,10 @@ async function settings(page: Page) {
   const summary = page.locator('summary').filter({ hasText: /^设置$/ })
   if (await summary.locator('..').getAttribute('open') === null) await summary.click()
 }
-async function role(page: Page, value: '老师' | '学生') {
-  await settings(page); await page.getByRole('button', { name: '我是' + value, exact: true }).click()
-  await expect(page.getByText('中继：已连接', { exact: true })).toBeVisible()
-  await page.locator('summary').filter({ hasText: /^设置$/ }).click()
-}
+async function role(page:Page,value:'老师'|'学生') {await expect(page.getByRole('heading',{name:value==='老师'?'老师首页':'问诊首页',exact:true})).toBeVisible();await expect(page.getByText('中继：已连接',{exact:true})).toBeVisible()}
 async function stored(page: Page, collection: string) {
   return page.evaluate(async name => {
-    const module='/src/core/store/index.ts', { resumeStore }=await import(module), session=await resumeStore()
+    const module='/src/core/store/index.ts', { resumeStore }=await import(module), session=await resumeStore().catch(async()=>{const p='/src/core/onboarding/passkey.ts',{authenticatePasskey}=await import(p);return resumeStore({unlockKey:(await authenticatePasskey()).key})})
     try { return (await session.store.list(name)).map((row: any) => ({ key:row.key, value:row.value instanceof Uint8Array ? [...row.value] : row.value })) }
     finally { session.store.close();session.identity.privateKey.fill(0) }
   }, collection)
@@ -23,7 +19,7 @@ async function stored(page: Page, collection: string) {
 async function book(page: Page) {
   return page.evaluate(async ({teacher,student}) => {
     const storePath='/src/core/store/index.ts', syncPath='/src/core/ledger/sync.ts'
-    const { resumeStore }=await import(storePath), session=await resumeStore(), { createLedgerSync }=await import(syncPath)
+    const { resumeStore }=await import(storePath), session=await resumeStore().catch(async()=>{const p='/src/core/onboarding/passkey.ts',{authenticatePasskey}=await import(p);return resumeStore({unlockKey:(await authenticatePasskey()).key})}), { createLedgerSync }=await import(syncPath)
     // Read-only controller; never start a second transport or mutate the live book.
     const sync=createLedgerSync({ identity:session.identity,store:session.store,send:async()=>{throw Error('read only')} })
     try { const v=await sync.view(teacher,student);return { balance:v.balance,code:v.code } }
@@ -32,7 +28,6 @@ async function book(page: Page) {
 }
 async function intake(page: Page, quote: string) {
   await page.getByRole('button',{name:'开始采集',exact:true}).click()
-  await page.getByRole('textbox',{name:'老师的公钥（64 位十六进制）'}).fill(actors.teacher.pubkey)
   await page.getByRole('button',{name:'开始采集',exact:true}).click()
   await page.getByRole('textbox',{name:'用输入法的语音输入，或直接打字'}).fill(quote)
   await page.getByRole('button',{name:'加入这一句',exact:true}).click()
@@ -46,7 +41,7 @@ async function intake(page: Page, quote: string) {
 }
 async function decrypted(page: Page) {
   return page.evaluate(async () => {
-    const module='/src/core/store/index.ts', {resumeStore}=await import(module), session=await resumeStore()
+    const module='/src/core/store/index.ts', {resumeStore}=await import(module), session=await resumeStore().catch(async()=>{const p='/src/core/onboarding/passkey.ts',{authenticatePasskey}=await import(p);return resumeStore({unlockKey:(await authenticatePasskey()).key})})
     try {
       const archive=await session.store.exportEncrypted({includeBinary:true}), rows=[]
       for(const record of archive.records) {
@@ -57,7 +52,8 @@ async function decrypted(page: Page) {
     } finally {session.store.close();session.identity.privateKey.fill(0)}
   })
 }
-test('nine-step consultation: real relay/gateway, signing, erasure, ledger, homework, recovery, followup and numeric CSV', async ({ people }) => {
+for(const recovery of ['advanced','passkey'] as const){
+test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' recovery, followup and numeric CSV', async ({ people }) => {
   test.setTimeout(240000)
   const teacher=people.teacher.page,student=people.student.page,quote='SYNTHETIC_PRIVATE_QUOTE_15B'
   await role(teacher,'老师');await role(student,'学生')
@@ -100,7 +96,7 @@ test('nine-step consultation: real relay/gateway, signing, erasure, ledger, home
   expect(records).toHaveLength(1);expect(assignments).toHaveLength(1)
   await test.step('hard: teacher decrypted IndexedDB has no original quote or processed JPEG, including after relay replay',async()=>{
     await teacher.getByRole('button',{name:'返回首页',exact:true}).click()
-    await teacher.reload();await expect(teacher.getByRole('heading',{name:'身份已就绪'})).toBeVisible()
+    await teacher.reload();await expect(teacher.getByRole('heading',{name:'老师首页',exact:true})).toBeVisible()
     // Reconnect replays history; a completed consult must stay erased.
     await expect(teacher.getByText('中继：已连接',{exact:true})).toBeVisible()
     await teacher.getByRole('button',{name:'问诊箱',exact:true}).click()
@@ -128,22 +124,40 @@ test('nine-step consultation: real relay/gateway, signing, erasure, ledger, home
   expect(Number(cells[1])>0).toBe(true);expect(Math.abs(Number(cells[2])-1/6)<0.00001).toBe(true);expect(Number(cells[3])===3/8).toBe(true);expect(cells[4]==='5').toBe(true)
   for(const secret of [quote,actors.teacher.pubkey,actors.student.pubkey,'SYNTHETIC_FINAL_SUMMARY','SYNTHETIC_HOMEWORK'])expect(!csv.includes(secret)).toBe(true)
   await test.step('hard: clear student storage, restore with mnemonic and real relay backup, recover records/homework/book',async()=>{
+    let passkeySession:Awaited<ReturnType<typeof people.student.context.newCDPSession>>|undefined
+    if(recovery==='passkey'){
+      passkeySession=await people.student.context.newCDPSession(student)
+      await passkeySession.send('WebAuthn.enable',{enableUI:false})
+      await passkeySession.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',ctap2Version:'ctap2_1',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true,hasPrf:true}})
+      const toggle=student.getByRole('switch',{name:'用刷脸保护并自动备份',exact:true});await toggle.click();await expect(toggle).toHaveAttribute('aria-checked','true')
+    }
     await student.getByText('备份状态',{exact:true}).click()
     await student.getByRole('button',{name:'立即备份',exact:true}).click()
     await expect(student.getByText('中继备份成功',{exact:true})).toBeVisible()
     await student.goto('about:blank')
-    const cdp=await people.student.context.newCDPSession(student)
-    await cdp.send('Storage.clearDataForOrigin',{origin:runtime.baseURL,storageTypes:'all'});await cdp.detach()
+    const cdp=passkeySession??await people.student.context.newCDPSession(student)
+    await cdp.send('Storage.clearDataForOrigin',{origin:runtime.baseURL,storageTypes:'all'});if(!passkeySession)await cdp.detach()
     await student.goto('/')
-    await expect(student.getByRole('button',{name:'使用助记词恢复'})).toBeVisible()
-    await student.getByRole('button',{name:'使用助记词恢复'}).click()
-    await student.getByRole('textbox',{name:/输入 12 个词/}).fill(actors.student.phrase)
-    await student.getByRole('button',{name:'校验并恢复'}).click()
-    await expect(student.getByRole('heading',{name:'身份已就绪'})).toBeVisible()
-    await settings(student);await student.getByText('备份状态',{exact:true}).click()
-    await student.getByRole('checkbox',{name:'我已保存需要保留的本机资料，允许替换'}).check()
-    await student.getByRole('button',{name:'从中继恢复最新备份'}).click()
-    await expect(student.getByText('已从中继恢复',{exact:true})).toBeVisible()
+    await expect(student.getByRole('heading',{name:'您是老师还是学生？'})).toBeVisible()
+    if(recovery==='passkey'){
+      await student.getByText('换手机后找回备份',{exact:true}).click()
+      await student.getByLabel('允许用备份替换本机资料',{exact:true}).check()
+      await student.getByRole('button',{name:'用刷脸找回备份',exact:true}).click()
+      await expect(student.getByRole('heading',{name:'问诊首页',exact:true})).toBeVisible()
+      await student.reload();await expect(student.getByRole('button',{name:'刷脸解锁',exact:true})).toBeVisible()
+      await expect(student.getByRole('button',{name:'开始采集',exact:true})).toHaveCount(0)
+      await student.getByRole('button',{name:'刷脸解锁',exact:true}).click();await expect(student.getByRole('heading',{name:'问诊首页',exact:true})).toBeVisible()
+    }else{
+      await settings(student);await student.getByText('换手机时用（高级）',{exact:true}).click()
+      await student.getByLabel('输入12个词',{exact:true}).fill(actors.student.phrase)
+      await student.getByLabel('我已保存需要保留的资料，允许替换',{exact:true}).check()
+      await student.getByRole('button',{name:'恢复我的资料',exact:true}).click()
+      await expect.poll(async()=>{try{return(await book(student)).balance}catch{return null}}).toBe(7)
+      await settings(student);await student.getByText('备份状态',{exact:true}).click()
+      await student.getByRole('checkbox',{name:'我已保存需要保留的本机资料，允许替换'}).check()
+      await student.getByRole('button',{name:'从中继恢复最新备份'}).click()
+      await expect(student.getByText('已从中继恢复',{exact:true})).toBeVisible()
+    }
     expect((await stored(student,'student-records')).map((r: { key: string })=>r.key)).toEqual(records.map((r: { key: string })=>r.key))
     expect((await stored(student,'homework'))[0].value.homework.id).toBe(assignments[0].value.homework.id)
     expect((await book(student)).balance).toBe(7)
@@ -162,12 +176,11 @@ test('nine-step consultation: real relay/gateway, signing, erasure, ledger, home
   const followup=(await stored(teacher,'consult-package'))[0].value
   expect(followup.history).toHaveLength(1);expect(JSON.parse(followup.history[0]).id).toBe(records[0].key)
 })
+}
+
 test('hard: student displays only the valid signature after tampered then valid delivery',async({people})=>{
   const teacher=people.teacher.page,student=people.student.page
-  await role(student,'学生');await settings(student)
-  await student.getByRole('textbox',{name:'老师公钥（64 位十六进制）'}).fill(actors.teacher.pubkey)
-  await student.getByRole('button',{name:'添加老师',exact:true}).click()
-  await expect(student.getByText('已加入“我的老师”。',{exact:true})).toBeVisible()
+  await role(student,'学生')
   await teacher.evaluate(async({key,student,teacher,relay})=>{
     const signPath='/src/core/record/sign.ts', transportPath='/src/core/transport/index.ts'
     const {signEncounter}=await import(signPath),{createTransport}=await import(transportPath)
@@ -185,7 +198,6 @@ test('hard: student displays only the valid signature after tampered then valid 
 test('emergency screening interrupts collection before any consultation can be sent',async({people})=>{
   const page=people.student.page;await role(page,'学生')
   await page.getByRole('button',{name:'开始采集',exact:true}).click()
-  await page.getByRole('textbox',{name:'老师的公钥（64 位十六进制）'}).fill(actors.teacher.pubkey)
   await page.getByRole('button',{name:'开始采集',exact:true}).click()
   await page.getByRole('textbox',{name:'用输入法的语音输入，或直接打字'}).fill('胸口压着疼，出冷汗')
   await page.getByRole('button',{name:'加入这一句',exact:true}).click()

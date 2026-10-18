@@ -1,0 +1,28 @@
+import {test,expect,runtime} from './fixtures'
+import {actors} from './actors.mjs'
+const forbidden=/密钥|助记词|公钥|npub|十六进制/
+async function settings(page:import('@playwright/test').Page){const summary=page.locator('summary').filter({hasText:/^设置$/});if(await summary.locator('..').getAttribute('open')===null)await summary.click()}
+test('first open asks only role; invitation needs no student input and automatically adds teacher and book',async({people,browser})=>{
+ const fresh=await browser.newContext({baseURL:runtime.baseURL,viewport:{width:375,height:812}})
+ try{const page=await fresh.newPage();await page.goto('/');await expect(page.getByRole('heading',{name:'您是老师还是学生？'})).toBeVisible();expect(await page.locator('body').innerText()).not.toMatch(forbidden);await page.getByRole('button',{name:'我是老师',exact:true}).click();await expect(page.getByRole('heading',{name:'老师首页',exact:true})).toBeVisible();expect(await page.locator('input:visible,textarea:visible').count()).toBe(0);await settings(page);expect(await page.locator('body').innerText()).not.toMatch(forbidden)}finally{await fresh.close()}
+ const student=people.student.page
+ const state=await student.evaluate(async()=>{const p='/src/core/store/index.ts',session=await(await import(p)).resumeStore();try{return {teachers:await session.store.get('settings','teachers'),books:await session.store.list('ledger-index')}}finally{session.store.close();session.identity.privateKey.fill(0)}})
+ expect(state.teachers).toContain(actors.teacher.pubkey);expect(state.books.some((v:any)=>v.value.teacher===actors.teacher.pubkey)).toBe(true)
+ await settings(student);await expect(student.getByRole('region',{name:'我的老师'})).toBeVisible();expect(await student.locator('body').innerText()).not.toMatch(forbidden)
+ await people.teacher.page.getByRole('button',{name:'邀请学生',exact:true}).click();await expect(people.teacher.page.getByAltText('学生扫码即可加入')).toBeVisible()
+})
+test('expired and nonmember invitation links fail with plain explanation and no registration',async({people,browser})=>{
+ const links=await people.teacher.page.evaluate(async({outsider,base})=>{const p='/src/core/onboarding/index.ts',q='/src/core/store/index.ts',identity='/src/core/identity/index.ts',{makeInvite,inviteLink}=await import(p),session=await(await import(q)).resumeStore();try{const other=(await import(identity)).restoreIdentity(outsider),url=base+'/invite/redeem';return [inviteLink(base,makeInvite(session.identity,url,Math.floor(Date.now()/1000)-604801)),inviteLink(base,makeInvite(other,url))]}finally{session.store.close();session.identity.privateKey.fill(0)}},{outsider:actors.outsider.phrase,base:runtime.baseURL})
+ for(const link of links){const context=await browser.newContext();try{const page=await context.newPage();await page.goto(link);await expect(page.getByText('邀请已失效，请向老师要一个新链接',{exact:true})).toBeVisible();expect(await page.locator('body').innerText()).not.toMatch(forbidden);expect(await page.getByRole('heading',{name:'问诊首页',exact:true}).count()).toBe(0)}finally{await context.close()}}
+})
+test('community_open accepts any authenticated identity but rejects anonymous subscriptions',async({people})=>{
+ const result=await people.teacher.page.evaluate(async({key,url})=>{const p='/src/core/transport/index.ts',{createTransport}=await import(p);return new Promise(resolve=>{const transport=createTransport({privateKey:Uint8Array.from(key),relays:[url],onMessage:()=>{},onStatus:(status:string)=>{if(status==='ready'||status==='rejected'){transport.close();resolve(status)}}});transport.start()})},{key:actors.outsider.key,url:runtime.relayUrl});expect(result).toBe('ready')
+ const anonymous=await people.teacher.page.evaluate(url=>new Promise(resolve=>{const socket=new WebSocket(url);socket.onopen=()=>socket.send(JSON.stringify(['REQ','anonymous',{kinds:[1059]}]));socket.onmessage=({data})=>{const frame=JSON.parse(data);if(frame[0]==='CLOSED'){socket.close();resolve(frame[2])}}}),runtime.relayUrl);expect(anonymous).toContain('auth-required')
+})
+test('a virtual authenticator without actual PRF disables only enhancement',async({people})=>{
+ const page=people.student.page,cdp=await people.student.context.newCDPSession(page)
+ await cdp.send('WebAuthn.enable',{enableUI:false});await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',ctap2Version:'ctap2_1',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true,hasPrf:false}})
+ await settings(page);const toggle=page.getByRole('switch',{name:'用刷脸保护并自动备份',exact:true});await toggle.click();await expect(toggle).toBeDisabled();await expect(page.getByText('这台手机暂不支持',{exact:true})).toBeVisible()
+ expect(await page.locator('body').innerText()).not.toMatch(forbidden)
+ await page.getByRole('button',{name:'开始采集',exact:true}).click();await expect(page.getByRole('heading',{name:'说说哪里不舒服'})).toBeVisible();await expect(page.getByLabel('选择老师')).toHaveValue(actors.teacher.pubkey)
+})
