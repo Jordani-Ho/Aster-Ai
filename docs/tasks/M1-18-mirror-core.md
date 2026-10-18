@@ -27,5 +27,5 @@
 
 ## 完成记录
 
-- 合并请求：
-- 结果：
+- 合并请求：https://github.com/Jordani-Ho/Aster-Ai/pull/25
+- 结果：`core/careplan`（kind 2731 签发/验签 + `care.plan` 收件替换）、`domain/tcm/seasonal.json`+`seasonal.ts`（24 节气起居/饮食/情志 + currentJieqi）、`core/weather`（Open-Meteo 今明天气）、`core/mirror`（dailyMirror + 本机缓存 + 自评/打卡 14 天走势）、`core/tongue`（复用 photo.ts 每日一张）均已实现；6 条验收写成测试，typecheck/test（282 全绿）/build 全过；未改界面、未新增依赖。
