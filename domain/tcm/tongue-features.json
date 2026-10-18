@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "labels": {"pale":"淡白","pink":"淡红","red":"红","darkRed":"绛","purple":"紫","white":"白","yellow":"黄","gray":"灰","black":"黑","none":"无","thin":"薄","thick":"厚","narrow":"瘦","standard":"正常","wide":"胖","unknown":"未知"},
   "note": "仅描述看见的外观，不作诊断。unknown 表示未看清；标记 null 表示位置未知，[] 表示未见标记。",
   "color": {
     "pale": "#e7b8bd",

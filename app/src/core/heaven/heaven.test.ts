@@ -4,7 +4,8 @@ import { createIdentity } from '../identity'
 import { openStore } from '../store'
 import { checkIn } from '../homework'
 import { addDays, localDay } from '../homework/schedule'
-import { saveTonguePhoto, tongueRecord } from '../tongue'
+import { saveTongue, loadTongue } from '../tongue'
+import { parseTongueFeatures, tongueSvg } from '../../../../domain/tcm/tongue'
 import { listSelfRatings, last14DayTrend, mirrorShichenNotice, mirrorTrendNote, recordSelfRating } from '../mirror/trend'
 import {
   CITY_UNKNOWN_HINT, DEFAULT_MIRROR_SHICHEN, DEFAULT_TIME_DISPLAY,
@@ -167,9 +168,9 @@ describe('V2-02 第 5 条：每条新记录带上 { shichen, jieqi, city }', () 
     expect(checkin).toMatchObject(heaven)
     expect((await store.list('checkins'))[0].value).toMatchObject(heaven)
 
-    await saveTonguePhoto(store, { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xda]), type: 'image/jpeg' },
-      { now: () => at, heaven, codec: { decode: async () => ({ source: {}, width: 10, height: 10 }), draw: () => ({ toJpeg: async () => new Uint8Array([0xff, 0xd8]) }) } })
-    expect((await tongueRecord(store, day))?.heaven).toEqual(heaven)
+    const features=parseTongueFeatures({color:'pink',coatingColor:'white',coatingThickness:'thin',shape:'standard',teeth:[],cracks:[],confidence:0.7})
+    await saveTongue(store,{kind:'tongue',features,svg:tongueSvg(features),...heaven},at)
+    expect(await loadTongue(store, day)).toMatchObject(heaven)
     store.close()
   })
 

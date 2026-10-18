@@ -75,8 +75,8 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
     <div className="student-main">
       <p role="status" className="relay-status">中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : stackStatus === 'rejected' ? '连接未成功，请联系老师' : '尚未连接'}</p>
       {modelNotice}
-      {tab === 'mirror' && <MirrorPage key={active} store={pagesStore} llm={llm} family={family} active={active} onSwitch={onSwitch} member={activeMember} onCheckedIn={reportAdherence} />}
-      {tab === 'consult' && <ConsultPage key={active} store={pagesStore} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} />}
+      {tab === 'mirror' && <MirrorPage key={active} store={pagesStore} modelStore={store} llm={llm} family={family} active={active} onSwitch={onSwitch} member={activeMember} onCheckedIn={reportAdherence} />}
+      {tab === 'consult' && <ConsultPage key={active} store={pagesStore} modelStore={store} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} />}
       {tab === 'other' && <main className="other-page">
         <header><p className="eyebrow">知衡 · 学生</p><h1>其他</h1></header>
         <nav className="other-menu" aria-label="其他">

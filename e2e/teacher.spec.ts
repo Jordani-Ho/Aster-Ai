@@ -65,9 +65,8 @@ test('M1-20 in person uses conversational intake, same drafting/revision/signatu
  await expect(teacher.getByRole('textbox')).toHaveCount(1)
  await teacher.getByRole('textbox').fill('SYNTHETIC_FACE_RAW')
  await teacher.getByRole('button',{name:'加入这一句',exact:true}).click()
- const jpeg=await teacher.evaluate(()=>{const c=document.createElement('canvas');c.width=40;c.height=30;const ctx=c.getContext('2d')!;ctx.fillStyle='#369';ctx.fillRect(0,0,40,30);return c.toDataURL('image/jpeg').split(',')[1]})
- await teacher.locator('input[type=file][accept="image/*"]').setInputFiles({name:'synthetic-face.jpg',mimeType:'image/jpeg',buffer:Buffer.from(jpeg,'base64')})
- await expect(teacher.getByText('照片已在本机缩小。',{exact:true})).toBeVisible()
+ // V2 原图不留：面诊直接看本人，不再提供老师拍照落盘入口。
+ await expect(teacher.locator('input[type=file]')).toHaveCount(0)
  await teacher.getByRole('button',{name:'生成病历',exact:true}).click()
  await teacher.getByRole('textbox',{name:'说说怎么改'}).fill('SYNTHETIC_REMOVE_HERB')
  await teacher.getByRole('button',{name:'按意见改稿',exact:true}).click()
@@ -75,13 +74,12 @@ test('M1-20 in person uses conversational intake, same drafting/revision/signatu
  await teacher.getByRole('button',{name:'签字发出',exact:true}).click()
  await expect(teacher.getByRole('heading',{name:'已签字交还',exact:true})).toBeVisible()
  const result=await teacher.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return {drafts:await s.store.list('in-person-draft'),indices:await s.store.list('signed-encounters'),photos:await s.store.list('attachments')}}finally{s.store.close();s.identity.privateKey.fill(0)}})
- expect(result.drafts).toHaveLength(1);expect(JSON.stringify(result.drafts)).toContain('SYNTHETIC_FACE_RAW');expect(result.indices).toEqual([]);expect(result.photos).toHaveLength(1)
+ expect(result.drafts).toHaveLength(1);expect(JSON.stringify(result.drafts)).toContain('SYNTHETIC_FACE_RAW');expect(result.indices).toEqual([]);expect(result.photos).toHaveLength(0)
  const student=people.student.page
- await expect.poll(()=>student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return (await s.store.list('record-photos')).length}finally{s.store.close();s.identity.privateKey.fill(0)}})).toBe(1)
+ await expect.poll(()=>student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return (await s.store.list('student-records')).length}finally{s.store.close();s.identity.privateKey.fill(0)}})).toBeGreaterThan(0)
  await student.getByRole('button',{name:'其他',exact:true}).click()
  await student.getByRole('button',{name:'我的病历',exact:true}).click()
- const image=student.getByAltText('病历照片 1',{exact:true});await expect(image).toBeVisible()
- await expect.poll(()=>image.evaluate((node:HTMLImageElement)=>node.complete&&node.naturalWidth>0)).toBe(true)
+ await expect(student.getByAltText('病历照片 1',{exact:true})).toHaveCount(0)
 })
 
 test('M1-20 signed care plan reaches student mirror next day with fixed browser clock; self mirror uses same core',async({people})=>{

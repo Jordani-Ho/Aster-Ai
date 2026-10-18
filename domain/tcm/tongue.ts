@@ -1,4 +1,19 @@
 import table from './tongue-features.json'
+export interface TongueAbstract {kind:'tongue';features:TongueFeatures;svg:string;shichen:string;jieqi:string;city:string}
+export function tongueSummary(features:TongueFeatures):string {
+ const f=parseTongueFeatures(features),label=(key:keyof typeof table.labels)=>table.labels[key]
+ const marks=(items:string[]|null)=>items===null?'未知':items.length?'有':'未见'
+ return `舌色：${label(f.color)}；苔色：${label(f.coatingColor)}；苔厚薄：${label(f.coatingThickness)}；舌形：${label(f.shape)}；齿痕：${marks(f.teeth)}；裂纹：${marks(f.cracks)}；读取置信度：${Math.round(f.confidence*100)}%`
+}
+export function parseTongueAbstract(value:unknown):TongueAbstract {
+ if(!value||typeof value!=='object'||Array.isArray(value))throw Error('舌象记录无效')
+ const v=value as Record<string,unknown>
+ if(Object.keys(v).sort().join(',')!=='city,features,jieqi,kind,shichen,svg'||v.kind!=='tongue')throw Error('舌象记录字段无效')
+ for(const key of ['shichen','jieqi','city'])if(typeof v[key]!=='string'||!v[key].trim()||v[key].length>80||/[<>\r\n]|data:|https?:/i.test(v[key]))throw Error('舌象时地无效')
+ const features=parseTongueFeatures(v.features),svg=tongueSvg(features)
+ if(v.svg!==svg)throw Error('舌象示意图无效')
+ return {kind:'tongue',features,svg,shichen:v.shichen as string,jieqi:v.jieqi as string,city:v.city as string}
+}
 export interface TongueFeatures {
  color:keyof typeof table.color
  coatingColor:keyof typeof table.coatingColor

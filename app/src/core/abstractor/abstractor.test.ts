@@ -29,7 +29,7 @@ it('synthetic image -> features/SVG only; clears input and request references be
  expect(input.bytes).toBeNull();expect(original.every(x=>x===0)).toBe(true)
  expect(result).toEqual({kind:'tongue',features:parseTongueFeatures(features),svg:tongueSvg(features),...context})
  // Real current LocalStore over IndexedDB, not a Map substitute. It receives only the result.
- const store=await openStore(createIdentity('leader monkey parrot ring guide accident before fence cannon height naive bean','english'),{factory:new IDBFactory(),name:crypto.randomUUID()})
+ const store=await openStore(createIdentity(),{factory:new IDBFactory(),name:crypto.randomUUID()})
  try {
   await store.put('abstract-records','synthetic',result as never)
   const queue=[JSON.stringify(result)];cache.push(result)

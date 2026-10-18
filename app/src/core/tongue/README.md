@@ -1,7 +1,7 @@
-# 舌象日记（M1-18）
+# 舌象记录（V2-03）
 
-每天最多拍一张舌象，复用 `intake/photo.ts` 压缩（长边 ≤1600、JPEG、≤500 KB），存本机。V2 本机不加密；M1 只存与列，不做自动分析。
+镜子只把 `{kind,features,svg,shichen,jieqi,city}` 写入 V2-01 的普通 IndexedDB。每日重拍覆盖当天的抽象记录，模型失败不覆盖原记录；不存照片、缩略图或 data URL。
 
-- 集合 `tongue-photos`：键为 YYYY-MM-DD，值为 `{bytes, heaven}`——处理后的 JPEG 字节，以及拍这张时的天时 `{shichen, jieqi, city}`（V2-02；不传时为 null）。同一天再拍会覆盖当天早前那张。
-- `tongueRecord` 读整条记录，`tongueBytes` 只读字节；`listTongueDays` 按日期升序列出；`recentTongue(days=30)` 返回最近 30 天的字节，界面直接小图渲染作缩略列表（M1 不另存缩略图）。
+- 集合 `tongue-records`：键为 YYYY-MM-DD，值为严格校验的抽象记录。日期是本机记录日期；时辰与节气由居住城市决定。
+- `captureTongue` 抽象后才保存；`saveTongue`、`loadTongue` 校验特征与本地重建 SVG 一致；`listTongueDays` 按日期升序。
 - V2 不做中继备份；保留期限交给 V2-05。

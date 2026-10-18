@@ -1,3 +1,4 @@
+import { TongueFigure } from './TongueFigure'
 import { CarePlanStudentPicker } from './TeacherCarePlan'
 import { loadTeacherTemplate } from './core/drafting/template'
 import { reviseEncounter } from './core/drafting/revise'
@@ -175,7 +176,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
         {status && <p role="status" className="inbox-status">{status}</p>}
         {error && <p role="alert" className="inbox-error">{error}</p>}
       </div>
-      <section className="inbox-card">{selected.trend && <><h2>最近 14 天状态与压力</h2><MiniTrend trend={selected.trend} /></>}<h2>这位学生的调养方案</h2>{renderCarePlan ? renderCarePlan(selected.sender) : null}</section>
+      <section className="inbox-card">{selected.encounter.intake.tongues?.map((record,index)=><TongueFigure key={index} record={record}/>)}{selected.trend && <><h2>最近 14 天状态与压力</h2><MiniTrend trend={selected.trend} /></>}<h2>这位学生的调养方案</h2>{renderCarePlan ? renderCarePlan(selected.sender) : null}</section>
       <SignEncounterPage
         initial={draft}
         onConfirm={confirm}
