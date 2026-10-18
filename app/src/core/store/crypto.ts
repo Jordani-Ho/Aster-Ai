@@ -7,13 +7,17 @@ const decoder = new TextDecoder('utf-8', { fatal: true })
 export const bytes = (input: Uint8Array) => new Uint8Array(input)
 export const random = (length: number) => crypto.getRandomValues(new Uint8Array(length))
 export function base64(input: Uint8Array): string {
-  let binary = ''
-  for (const byte of input) binary += String.fromCharCode(byte)
-  return btoa(binary)
+  const chunks: string[] = []
+  for (let offset = 0; offset < input.length; offset += 8192) chunks.push(String.fromCharCode(...input.subarray(offset, offset + 8192)))
+  return btoa(chunks.join(''))
 }
 export function unbase64(input: unknown, length?: number): Uint8Array<ArrayBuffer> {
-  if (typeof input !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(input)) throw new Error('密文格式无效')
-  const decoded = Uint8Array.from(atob(input), char => char.charCodeAt(0))
+  // Avoid a repeated-group regexp and per-byte string ropes on camera-sized files.
+  if (typeof input !== 'string' || input.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(input)) throw new Error('密文格式无效')
+  let binary: string
+  try { binary = atob(input) } catch { throw new Error('密文格式无效') }
+  const decoded = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) decoded[i] = binary.charCodeAt(i)
   if ((length !== undefined && decoded.length !== length) || base64(decoded) !== input) throw new Error('密文长度或编码无效')
   return decoded
 }

@@ -1,4 +1,5 @@
 import type { Identity } from '../identity'
+import { receivePracticeMessage } from '../practice-video/review'
 import type { LocalStore, StoreValue } from '../store'
 import type { Envelope, Message } from '../transport'
 import type { ChainEventDraft } from '../ledger/types'
@@ -574,6 +575,10 @@ export function createInbox(options: InboxOptions) {
       if (!message || !message.envelope || message.sender === identity.publicKey) return
       const { type, version, payload } = message.envelope
       if (version !== 1) return
+      if (type === 'practice.submit' || type === 'practice.reply') {
+        await receivePracticeMessage(identity, store, message)
+        return
+      }
       if (type === CONSULT_TYPES.package) {
         if (object(payload)) await receiveConsult(identity, store, message, payload)
         return

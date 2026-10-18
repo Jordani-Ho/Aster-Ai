@@ -13,6 +13,7 @@ import { prioritizeConsults,urgentConsult } from './core/inbox/priority'
 import { TeacherInboxPage } from './TeacherInboxPage'
 import { InPersonPage } from './InPersonPage'
 import { InviteSettings } from './InviteSettings'
+import { TeacherPracticeInbox } from './PracticeVideo'
 import './teacher.css'
 type Tab='今天'|'面诊'|'远程'|'管理'
 export function TeacherWorkspace({identity,store,stack,llm,gateway,settings,status,ledgerPanel,mirror,renderCarePlan}:{identity:Identity;store:LocalStore;stack:Wiring|null;llm:LlmClient|null;gateway:string;settings:ReactNode;status:ReactNode;ledgerPanel:ReactNode;mirror?:ReactNode;renderCarePlan?:(student:string)=>ReactNode}){
@@ -36,7 +37,7 @@ export function TeacherWorkspace({identity,store,stack,llm,gateway,settings,stat
         <section className="teacher-card"><h2>我的镜子</h2>{mirror??<DailyMirrorCard store={store} llm={llm} teacher={identity.publicKey}/>}<details><summary>给自己定制调养方案</summary><TeacherCarePlan identity={identity} store={store} student={identity.publicKey} llm={llm}/></details></section>
       </main>}
       {tab==='面诊'&&<InPersonPage identity={identity} store={store} llm={llm} send={stack?.send} onBack={()=>setTab('今天')}/>}
-      {tab==='远程'&&(stack?<TeacherInboxPage renderCarePlan={renderCarePlan??(student=><TeacherCarePlan key={student} identity={identity} store={store} student={student} llm={llm} send={stack.send}/>)} identity={identity} store={store} llm={llm} send={stack.send} ledger={stack.ledger} onBack={()=>setTab('今天')}/>:<main><h1>远程工作台</h1><p>暂未连接社区，请在管理页检查设置。</p></main>)}
+      {tab==='远程'&&(stack?<><TeacherInboxPage renderCarePlan={renderCarePlan??(student=><TeacherCarePlan key={student} identity={identity} store={store} student={student} llm={llm} send={stack.send}/>)} identity={identity} store={store} llm={llm} send={stack.send} ledger={stack.ledger} onBack={()=>setTab('今天')}/><TeacherPracticeInbox identity={identity} store={store} send={stack.send}/></>:<main><h1>远程工作台</h1><p>暂未连接社区，请在管理页检查设置。</p></main>)}
       {tab==='管理'&&<main><h1>管理</h1><section className="teacher-card">{ledgerPanel}</section><section className="teacher-card"><h2>邀请学生</h2><InviteSettings identity={identity} gateway={gateway}/></section><section className="teacher-card"><TemplateSettings store={store}/></section></main>}
       <section hidden={tab!=='管理'} className="teacher-settings">{settings}</section>
     </div>

@@ -53,5 +53,5 @@
 
 ## 完成记录
 
-- 合并请求：
-- 结果：
+- 合并请求：M1-23a [#31](https://github.com/Jordani-Ho/Aster-Ai/pull/31)（已合并）；M1-23b [#33](https://github.com/Jordani-Ho/Aster-Ai/pull/33)（草稿，未合并）。
+- 结果：M1-23b 系统相机入口、密文文件服务、学生播放/回传、并排同步与文字回复已实现；app 341、gateway 33、中继 101、完整 E2E 22 项通过，后续改稿/循环/解码帧同步补测通过。真机矩阵待实测；main 新增的封存与下一版隐私决策是否取代本卡，待发起人确认，不标整卡验收完成。详见 docs/practice-video-validation.md。

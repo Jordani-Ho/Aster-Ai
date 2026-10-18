@@ -9,6 +9,7 @@ import { pathToFileURL } from 'node:url'
 import { actors } from './actors.mjs'
 import { startGatewayFixture, listen, closeServer } from './gateway-fixture.mjs'
 import { root, linuxPath, stopChild } from './process.mjs'
+import { createMediaServer } from '../gateway/media/server.js'
 
 async function port() {
   const socket = createServer()
@@ -80,25 +81,29 @@ export async function startEnvironment(build) {
     closers.push(() => closeServer(control))
     const gateway = await startGatewayFixture({ directory, members: [] })
     closers.push(() => gateway.close())
-    const app = await startWebApp({ gatewayUrl: gateway.url, relayUrl })
+    const mediaDirectory = path.join(directory, 'media')
+    const app = await startWebApp({ gatewayUrl: gateway.url, relayUrl, mediaDirectory, membersFile: path.join(directory, 'members.json') })
     closers.push(() => app.close())
     const baseURL = app.url
-    const runtime = { baseURL, upstreamUrl:gateway.upstreamUrl, relayUrl, controlURL, resetToken, gatewayUrl: gateway.url, build: { cached: build.cached, elapsedMs: build.elapsedMs, key: build.key }, phase: 'consultation-and-pilot' }
+    const runtime = { baseURL, mediaDirectory, upstreamUrl:gateway.upstreamUrl, relayUrl, controlURL, resetToken, gatewayUrl: gateway.url, build: { cached: build.cached, elapsedMs: build.elapsedMs, key: build.key }, phase: 'consultation-and-pilot' }
     const runtimeFile = path.join(directory, 'runtime.json'); await writeFile(runtimeFile, JSON.stringify(runtime))
     return { ...runtime, runtimeFile, close }
   } catch (error) { await close(); throw error }
 }
 
-export async function startWebApp({ gatewayUrl, relayUrl }) {
+export async function startWebApp({ gatewayUrl, relayUrl, mediaDirectory, membersFile }) {
   const requireApp = createRequire(new URL('../app/package.json', import.meta.url))
   const { createServer: createVite } = await import(pathToFileURL(requireApp.resolve('vite')).href)
   const { default: react } = await import(pathToFileURL(requireApp.resolve('@vitejs/plugin-react')).href)
   const webPort = await port()
+  const media = mediaDirectory ? await createMediaServer({ directory: mediaDirectory, membersFile, publicUrl: `http://localhost:${webPort}` }) : null
+  const mediaUrl = media ? await listen(media.server) : null
   const app = await createVite({ configFile: false, root: path.join(root, 'app'), plugins: [react()],
     define: { 'import.meta.env.VITE_COMMUNITY_RELAYS': JSON.stringify(relayUrl), 'import.meta.env.VITE_MODEL_GATEWAY_URL': JSON.stringify('http://localhost:' + webPort + '/v1') },
     resolve: { dedupe: ['lunar-typescript', 'timezonecomplete', 'tzdata'] },
-    server: { host: '127.0.0.1', port: webPort, strictPort: true, fs: { allow: [root] }, proxy: { '/v1': { target: gatewayUrl, changeOrigin: false }, '/push': { target: gatewayUrl, changeOrigin: false }, '/invite': { target: gatewayUrl, changeOrigin: false } } },
+    server: { host: '127.0.0.1', port: webPort, strictPort: true, fs: { allow: [root] }, proxy: { ...(mediaUrl ? { '/media': { target: mediaUrl, changeOrigin: false, rewrite: p => p.replace(/^\/media/, '') } } : {}), '/v1': { target: gatewayUrl, changeOrigin: false }, '/push': { target: gatewayUrl, changeOrigin: false }, '/invite': { target: gatewayUrl, changeOrigin: false } } },
   })
-  try { await app.listen() } catch (error) { await app.close(); throw error }
-  return { url: `http://localhost:${app.httpServer.address().port}`, close: () => app.close() }
+  const close = async () => { await app.close(); if (media) { await closeServer(media.server); await media.close() } }
+  try { await app.listen() } catch (error) { await close(); throw error }
+  return { url: `http://localhost:${app.httpServer.address().port}`, close }
 }

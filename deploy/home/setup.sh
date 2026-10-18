@@ -51,8 +51,8 @@ log "应用域名：$APP_DOMAIN"
 log "中继域名：$RELAY_DOMAIN"
 
 # ---- 3. 数据目录与占位文件（必须在 compose run 之前存在，否则 Docker 会把挂载点建成目录）----
-mkdir -p data/relay data/gateway
-chmod 700 data data/gateway 2>/dev/null || true
+mkdir -p data/relay data/gateway data/media
+chmod 700 data data/gateway data/media 2>/dev/null || true
 # relay 容器以 uid 10001 运行，绑定到 ./data/relay 的目录需要可写；这里给最宽松的权限，内测够用。
 chmod 777 data/relay
 
@@ -78,7 +78,7 @@ chmod 600 data/gateway-config.json data/gateway-members.json
 # ---- 4. 构建镜像 ----
 if [ "${SKIP_BUILD:-0}" != "1" ]; then
   log "构建镜像（relay 首次要在容器里编译 Rust，约 10–30 分钟；之后有缓存会快很多）…"
-  docker compose build relay gateway web
+  docker compose build relay gateway media web
 fi
 
 # ---- 5. VAPID（只生成一次，写回 .env）----

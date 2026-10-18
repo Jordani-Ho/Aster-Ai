@@ -11,7 +11,8 @@ import { extname, join, normalize, resolve, sep } from 'node:path'
 const ROOT = resolve(process.env.APP_DIST ?? '/srv/app/dist')
 const PORT = Number(process.env.PORT ?? 8080)
 const GATEWAY = process.env.GATEWAY_INTERNAL_URL ?? 'http://gateway:8787'
-const PROXY_PREFIXES = ['/push/', '/v1/', '/invite/']
+const MEDIA = process.env.MEDIA_INTERNAL_URL ?? 'http://media:3040'
+const PROXY_PREFIXES = ['/push/', '/v1/', '/invite/', '/media/']
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -44,7 +45,8 @@ function isProxyPath(pathname) {
 }
 
 function proxy(req, res) {
-  const upstream = new URL(GATEWAY)
+  const media = req.url.startsWith('/media/')
+  const upstream = new URL(media ? MEDIA : GATEWAY)
   const headers = { ...req.headers, host: upstream.host }
   delete headers.connection
   const forward = httpRequest({
@@ -52,18 +54,21 @@ function proxy(req, res) {
     hostname: upstream.hostname,
     port: upstream.port || 80,
     method: req.method,
-    path: req.url,
+    path: media ? req.url.slice('/media'.length) : req.url,
     headers,
   }, response => {
     const responseHeaders = { ...response.headers }
     delete responseHeaders.connection
     res.writeHead(response.statusCode ?? 502, responseHeaders)
+    res.on('close', () => response.destroy())
     response.pipe(res)
   })
   forward.on('error', () => {
     if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' })
     res.end(JSON.stringify({ error: 'gateway unavailable' }))
   })
+  req.on('aborted', () => forward.destroy())
+  res.on('close', () => { if (!res.writableEnded) forward.destroy() })
   req.pipe(forward)
 }
 

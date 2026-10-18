@@ -64,8 +64,8 @@ for attempt in 1 2 3; do
   set_env GATEWAY_DOMAIN "$APP_HOST"
   log "用临时地址重新生成配置…"
   SKIP_BUILD=1 ./setup.sh
-  log "重建 relay / gateway / web…"
-  docker compose --profile quick up -d --force-recreate relay gateway web
+  log "重建 relay / gateway / media / web…"
+  docker compose --profile quick up -d --force-recreate relay gateway media web
   log "等待网页构建与隧道回源（最多约 3 分钟）…"
   if wait_page "$APP_URL"; then
     CURRENT="$(extract_url cloudflared-app || true)"

@@ -2,6 +2,7 @@
 // 由技术合伙人建立；M1-09、M1-10、M1-11、M1-13、M1-14 直接引用，不要重复定义。
 
 import type { FamilyProof } from '../family/proof'
+import type { PracticeVideoRef } from '../practice-video'
 
 /** 每个字段的来源。界面用颜色区分；AI 推测永远不能显示成事实。 */
 export type Source = 'student' | 'teacher' | 'ai_draft' | 'external' | 'unknown'
@@ -70,6 +71,7 @@ export interface Homework {
   durationDays?: number            // 持续多少天；省略表示直到下次复诊
   source: 'teacher' | 'ai_draft'   // 2026-10-16 补：作业也要有来源标签
   note?: string                    // 老师接受 AI 草稿时写 'ai_accepted'
+  video?: PracticeVideoRef          // 人工附加的个人练习视频；只随加密签字病历交还
 }
 
 export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: string; bytes: number }

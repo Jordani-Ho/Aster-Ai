@@ -45,21 +45,22 @@ export function BackupSettings({identity,store,onRestored}:{identity:Identity;st
   setMessage('已生成加密备份文件，请确认下载并妥善保存。')
  })
  return <details><summary>备份状态</summary>
-  <p>中继备份默认开启，每天在应用打开时检查。照片只保存在本机和你导出的备份文件中。</p>
+  <p>中继备份默认开启，每天在应用打开时检查。照片和视频字节只保存在本机和你导出的备份文件中。</p>
   <p role="status">{status.result==='success'?'最近一次备份成功':status.result==='restored'?'已恢复本地数据':status.result==='failed'?'备份失败，等待重试':'尚未完成备份'}{status.lastSuccess&&` · ${new Date(status.lastSuccess).toLocaleString()}`}</p>
   {status.lastRestore&&<p>最近恢复：{new Date(status.lastRestore).toLocaleString()}</p>}
   {error&&<p role="alert">{error}</p>}{message&&<p role="status">{message}</p>}
-  {monthly&&<p>本月请导出一次加密备份文件，照片也会包含在内。</p>}
+  {monthly&&<p>本月请导出一次加密备份文件，照片和视频也会包含在内。</p>}
+  {status.lastRestore&&<p>视频请从备份文件恢复，或请老师重发</p>}
   <label>社区备份中继（每行一个WSS地址）<textarea rows={2} value={relaysText} onChange={e=>setRelaysText(e.target.value)} style={{width:'100%',boxSizing:'border-box'}}/></label>
   {!relaysText.trim()&&<p>社区备份中继尚未配置，自动备份暂不可用。</p>}
   <p><button disabled={busy} onClick={()=>void configure()}>保存中继设置</button>{' '}<button disabled={busy||!relaysText.trim()} onClick={()=>void run(async()=>{if(!managerRef.current)throw Error('备份尚未就绪');await managerRef.current.backupNow();setMessage('中继备份成功')})}>立即备份</button></p>
-  <p><button disabled={busy} onClick={()=>void download()}>导出加密备份文件（含照片）</button></p>
-  <p>恢复会替换本机全部业务数据。中继备份不含照片；如果本机仍有照片，请先导出文件。</p>
+  <p><button disabled={busy} onClick={()=>void download()}>导出加密备份文件（含照片和视频）</button></p>
+  <p>恢复会替换本机全部业务数据。中继备份不含照片和视频字节；如果本机仍有这些资料，请先导出文件。</p>
   <label><input type="checkbox" checked={replace} onChange={e=>setReplace(e.target.checked)}/>我已保存需要保留的本机资料，允许替换</label>
   <p><button disabled={busy||!replace} onClick={()=>void run(async()=>{if(!managerRef.current)throw Error('备份尚未就绪');await restoreWithLedgerPaused(()=>managerRef.current!.restoreLatest(true));onRestored?onRestored('已从中继恢复'):setMessage('已从中继恢复')})}>从中继恢复最新备份</button></p>
   <label>从加密备份文件恢复<input type="file" accept="application/json,.json" disabled={busy||!replace} onChange={event=>{
    const file=event.target.files?.[0];if(!file)return
-   void run(async()=>{if(file.size>64*1024*1024)throw Error('备份文件超过64MB，请在容量充足的设备恢复');if(!managerRef.current)throw Error('备份尚未就绪');const text=await file.text();await restoreWithLedgerPaused(()=>managerRef.current!.restoreFile(text,true));onRestored?onRestored('已从加密文件恢复'):setMessage('已从加密文件恢复')})
+    void run(async()=>{if(file.size>512*1024*1024)throw Error('备份文件超过512MB，请在容量充足的设备恢复');if(!managerRef.current)throw Error('备份尚未就绪');const text=await file.text();await restoreWithLedgerPaused(()=>managerRef.current!.restoreFile(text,true));onRestored?onRestored('已从加密文件恢复'):setMessage('已从加密文件恢复')})
    event.target.value=''
   }}/></label>
  </details>

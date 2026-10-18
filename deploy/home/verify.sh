@@ -52,9 +52,9 @@ else
   log "FAIL 配置文件缺失"; FAIL=1
 fi
 
-step "3/5 docker compose logs 隐私扫描（relay / gateway / web）"
+step "3/5 docker compose logs 隐私扫描（relay / gateway / media / web）"
 LOG_FILE="data/verify-logs.txt"
-docker compose --profile "$PROFILE" logs --no-color relay gateway web > "$LOG_FILE" 2>&1 || true
+docker compose --profile "$PROFILE" logs --no-color relay gateway media web > "$LOG_FILE" 2>&1 || true
 if grep -q "ASTER_VERIFY_MARKER_9f3a" "$LOG_FILE"; then
   log "FAIL 日志里出现了请求正文标记"; FAIL=1
 else

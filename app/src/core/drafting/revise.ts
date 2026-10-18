@@ -8,8 +8,9 @@ export async function reviseEncounter(input:Encounter, instruction:string, llm:L
   let timer:ReturnType<typeof setTimeout>|undefined
   try {
     if(!instruction.trim()||instruction.length>2000) throw Error()
+    const modelPlan={...input.plan,homework:input.plan.homework.map(({video:_video,...homework})=>homework)}
     const reply=await Promise.race([
-      llm.complete([{role:'system',content:prompt},{role:'user',content:JSON.stringify({instruction,draft:{fourExams:input.fourExams,judgment:input.judgment,plan:input.plan,outcome:input.outcome}})}]),
+      llm.complete([{role:'system',content:prompt},{role:'user',content:JSON.stringify({instruction,draft:{fourExams:input.fourExams,judgment:input.judgment,plan:modelPlan,outcome:input.outcome}})}]),
       new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error()),options.timeoutMs??30000)}),
     ])
     const raw:unknown=JSON.parse(reply)

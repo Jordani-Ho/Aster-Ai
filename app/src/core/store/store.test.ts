@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { IDBFactory, IDBObjectStore as FakeObjectStore } from 'fake-indexeddb'
+import { IDBFactory, IDBKeyRange, IDBObjectStore as FakeObjectStore } from 'fake-indexeddb'
 import { deriveKey, encryptRecord } from './crypto'
 import { createIdentity } from '../identity'
 import { openStore, resumeStore, type LocalStore } from './index'
@@ -32,6 +32,14 @@ async function raw(options: { name: string; factory: IDBFactory }, storeName: st
   } finally { db.close() }
 }
 afterEach(() => { handles.splice(0).forEach(store => store.close()) })
+it('listing small metadata uses a collection range instead of loading unrelated video bytes', async()=>{
+ const {open}=setup(),store=await open()
+ await store.put('notes',key,fixture);await store.put('practice-video-files',secondKey,new Uint8Array(1024))
+ vi.stubGlobal('IDBKeyRange',IDBKeyRange)
+ const reads=vi.spyOn(FakeObjectStore.prototype,'getAll')
+ try{expect(await store.list('notes')).toEqual([{key,value:fixture}]);expect(reads.mock.calls.some(([range])=>range instanceof IDBKeyRange&&JSON.stringify(range.lower)===JSON.stringify(['notes','']))).toBe(true)}
+ finally{reads.mockRestore();vi.unstubAllGlobals()}
+})
 
 describe('M1-02 acceptance with fake-indexeddb', () => {
   it('1: writes ciphertext only, with no plaintext value or private key in raw storage', async () => {

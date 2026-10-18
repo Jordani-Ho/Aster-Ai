@@ -5,6 +5,8 @@ import type { LlmClient } from './core/llm'
 import type { Wiring } from './core/wiring'
 import { persistenceLabels, type PersistenceStatus } from './core/store/persistence'
 import { MirrorPage } from './MirrorPage'
+import { WeeklyVideoReminder } from './PracticeVideo'
+import type { SendEnvelope } from './core/inbox'
 import { ConsultPage } from './ConsultPage'
 import { BackupSettings } from './BackupSettings'
 import { LedgerSettings } from './LedgerSettings'
@@ -47,8 +49,8 @@ export interface StudentShellProps {
   memberStore?: LocalStore
   memberIdentity?: Identity
   sendConsult?: (pkg: import('./core/record/types').ConsultPackage) => Promise<void>
-  /** M1-23a：把“本周坚持率”小结发给老师的通用发送函数（家人用自己的身份/连接）。 */
-  sendEnvelope?: (recipient: string, envelope: import('./core/transport').Envelope) => Promise<unknown>
+  /** Practice videos and adherence both use the active family identity. */
+  sendEnvelope?: SendEnvelope
   onFamilyChanged?: () => void
 }
 
@@ -96,13 +98,13 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, persist
   }
 
   if (other === 'records') return <Suspense fallback={<p>正在打开病历…</p>}><StudentRecordsPage identity={pagesIdentity} store={pagesStore} onBack={() => setOther('menu')} /></Suspense>
-  if (other === 'homework') return <Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={pagesStore} onBack={() => setOther('menu')} onCheckedIn={reportAdherence} /></Suspense>
+  if (other === 'homework') return <Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage key={active} store={pagesStore} identity={pagesIdentity} fileIdentity={identity} send={sendEnvelope??(pagesIdentity.publicKey===identity.publicKey?stack?.send:undefined)} onBack={() => setOther('menu')} onCheckedIn={reportAdherence} /></Suspense>
 
   return <div className="student-shell">
     <div className="student-main">
       <p role="status" className="relay-status">中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : stackStatus === 'rejected' ? '连接未成功，请联系老师' : '尚未连接'}</p>
       {modelNotice}
-      {tab === 'mirror' && <MirrorPage key={active} store={pagesStore} llm={llm} family={family} active={active} onSwitch={onSwitch} member={activeMember} onCheckedIn={reportAdherence} />}
+      {tab === 'mirror' && <><MirrorPage key={'mirror-'+active} store={pagesStore} llm={llm} family={family} active={active} onSwitch={onSwitch} member={activeMember} onCheckedIn={reportAdherence} /><WeeklyVideoReminder key={'video-reminder-'+active} store={pagesStore} onOpen={()=>setOther('homework')}/></>}
       {tab === 'consult' && <ConsultPage key={active} store={pagesStore} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} />}
       {tab === 'other' && <main className="other-page">
         <header><p className="eyebrow">知衡 · 学生</p><h1>其他</h1></header>

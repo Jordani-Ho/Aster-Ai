@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
+import { StudentHomeworkVideo } from './PracticeVideo'
+import type { Identity } from './core/identity'
+import type { SendEnvelope } from './core/inbox'
 import type { LocalStore } from './core/store'
 import type { Homework } from './core/record/types'
 import { checkIn, dueReminders, listCheckins, sevenDayProgress, type Assignment, type Checkin } from './core/homework'
 import { localDay, checkinDay, schedule } from './core/homework/schedule'
 import { shichenAt } from '../../domain/tcm/calendar'
 
-export function HomeworkPage({store,onBack,onCheckedIn}:{store:LocalStore;onBack:()=>void;onCheckedIn?:()=>void}) {
+export function HomeworkPage({store,onBack,identity,fileIdentity,send,onCheckedIn}:{store:LocalStore;onBack:()=>void;identity?:Identity;fileIdentity?:Identity;send?:SendEnvelope;onCheckedIn?:()=>void}) {
   const shown = useRef(new Set<string>())
   const [notificationsAllowed,setNotificationsAllowed]=useState(typeof Notification !== 'undefined' && Notification.permission==='granted')
   const [assignments,setAssignments]=useState<Assignment[]>([])
@@ -75,6 +78,7 @@ export function HomeworkPage({store,onBack,onCheckedIn}:{store:LocalStore;onBack
         <div className="card-heading"><h2>{homework.title}</h2><span className="time-pill">{habitAnchorText!==null?'随习惯：'+habitAnchorText:reminders.length?reminders[0].at.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',hour12:false}):'今日无安排'}</span></div>
         <p>{homework.detail}</p>
         {(reminders.length>0||habitual)&&<><label>备注（可选）<textarea rows={2} value={notes[homework.id]??''} onChange={e=>setNotes(previous=>({...previous,[homework.id]:e.target.value}))}/></label><button className="checkin-button" disabled={busy||completed} onClick={()=>void complete(homework.id)}>{completed?'今日已完成 ✓':'已完成'}</button></>}
+        {identity&&<StudentHomeworkVideo homework={homework} store={store} identity={identity} fileIdentity={fileIdentity??identity} send={send}/>}
         {habitual
           ? <p className="privacy-note">随习惯作业：今天做这件事的时候点一下打卡，不按钟点提醒；打卡会计入坚持率。</p>
           : <><div className="progress-heading"><h3>近 7 天</h3><span>{progress.completed}/{progress.expected} 次完成</span></div>
@@ -84,4 +88,3 @@ export function HomeworkPage({store,onBack,onCheckedIn}:{store:LocalStore;onBack
     <footer>只记录完成情况，不根据打卡作健康判断。</footer>
   </main>
 }
-

@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import type { Encounter, Field } from './types'
+import { encryptVideo, writeVideoCipher, VIDEO_COLLECTION } from '../practice-video'
 import {
   deidentifiedCaseBook,
   modificationLog,
@@ -123,6 +124,22 @@ function forgeSigned(content: Encounter): SignedEncounterEvent {
 }
 
 describe('M1-11 签字与交还验收', () => {
+  it('practice video belongs to one student; successful handover removes bytes and all teacher-side references', async () => {
+    const draft = draftEncounter(), hw = draft.plan.homework[0]
+    const encrypted = await encryptVideo(new Uint8Array(32), 'video/mp4', 60, { student, teacher, homework: hw.id, role: 'original' })
+    hw.video = encrypted.ref
+    const { final, signed } = await signedPair(draft), store = new MemoryStore()
+    await writeVideoCipher(store, encrypted.ref.sha256, encrypted.bytes)
+    await completeSigning({ store, encounter: final, draft, signed, attachmentIds: [], send: async (_type, payload) => {
+      expect(verifySignedEncounter(payload, { student, teacher }).plan.homework[0].video).toEqual(encrypted.ref)
+      expect(() => verifySignedEncounter(payload, { student: otherStudent, teacher })).toThrow()
+    } })
+    expect(await store.list(VIDEO_COLLECTION)).toEqual([])
+    const persisted = JSON.stringify(await store.list(RECORD_COLLECTIONS.caseBook))
+    expect(persisted).not.toContain(encrypted.ref.key)
+    expect(persisted).not.toContain(encrypted.ref.sha256)
+    expect(await store.list(RECORD_COLLECTIONS.pendingHandover)).toEqual([])
+  })
   it('1 还有 ai_draft 时签字抛错，全部确认后可以签字', () => {
     const draft = draftEncounter()
     expect(pendingDraftFields(draft)).toContain('fourExams.look')
