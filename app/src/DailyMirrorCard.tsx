@@ -9,7 +9,7 @@ import { needsNudge } from './core/adherence'
 import { getDailyMirror, listSelfRatings, listStressRatings, type MirrorInput, type MirrorResult } from './core/mirror'
 import { getWeather, type Weather } from './core/weather'
 import { localDay } from './core/homework/schedule'
-import { currentJieqi } from '../../domain/tcm/seasonal'
+import { cityByName, heavenAt } from './core/heaven'
 
 const pendingDays = new WeakMap<LocalStore, Map<string, Promise<MirrorResult>>>()
 function mirrorForDay(store: LocalStore, input: MirrorInput): Promise<MirrorResult> {
@@ -50,7 +50,8 @@ export function DailyMirrorCard({ store, llm, teacher }: { store: LocalStore; ll
       try {
         if (profile.city.value) forecast = await getWeather(profile.city.value, { fetch: (url, init) => fetch(url, { ...init, signal: controller.signal }) })
       } finally { clearTimeout(timeout) }
-      const next = await mirrorForDay(store, { carePlan: plan, jieqi: currentJieqi(at), weather: forecast, recentCheckins: checkins, recentSymptoms: ratings, recentStress: stress, age: profile.age.value, nudge: needsNudge(assignments, checkins, localDay(at)), ...(llm ? { llm } : {}), now: () => at })
+      // 节气按天文时刻换算到学生所在地的当地日期，不再直接拿北京时间。
+      const next = await mirrorForDay(store, { carePlan: plan, jieqi: heavenAt(at, cityByName(profile.city.value)).jieqi, weather: forecast, recentCheckins: checkins, recentSymptoms: ratings, recentStress: stress, age: profile.age.value, nudge: needsNudge(assignments, checkins, localDay(at)), ...(llm ? { llm } : {}), now: () => at })
       if (active) { setWeather(forecast); setResult(next); setError('') }
     }
     void run().catch(() => { if (active) setError('每日建议暂未能读取，请稍后重试。') })

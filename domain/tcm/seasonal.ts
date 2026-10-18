@@ -1,4 +1,3 @@
-import { jieqiDate } from './calendar'
 import data from './seasonal.json'
 
 // 通用节气养生：24 节气各一段起居、饮食、情志要点，只写传统养生常识，不写具体药方。
@@ -20,24 +19,8 @@ export const JIEQI_CHRONO: readonly string[] = [
 
 export const SEASONAL_JIEQI: readonly string[] = Object.keys(table)
 
-function localDay(at: Date): string {
-  return [at.getFullYear(), String(at.getMonth() + 1).padStart(2, '0'), String(at.getDate()).padStart(2, '0')].join('-')
-}
-
 export function seasonalTexts(jieqi: string): SeasonalTexts | null {
   const row = table[jieqi]
   if (!row) return null
   return { living: row.living, diet: row.diet, emotion: row.emotion }
-}
-
-// 返回某天所处的节气名（取最近一个已到的节气；1 月初小寒之前属上年冬至）。
-export function currentJieqi(at: Date): string {
-  if (!Number.isFinite(at.getTime())) throw new Error('日期无效')
-  const day = localDay(at)
-  let current = '冬至'
-  for (const name of JIEQI_CHRONO) {
-    if (jieqiDate(at.getFullYear(), name) <= day) current = name
-    else break
-  }
-  return current
 }

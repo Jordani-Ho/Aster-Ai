@@ -1,12 +1,13 @@
 import type { LocalStore } from '../store'
 import type { Homework } from '../record/types'
+import type { HeavenStamp } from '../heaven'
 import { addDays, checkinDay, habitAnchor, localDay, schedule } from './schedule'
-export interface Checkin { homeworkId:string; at:string; note?:string }
+export interface Checkin extends Partial<HeavenStamp> { homeworkId:string; at:string; note?:string }
 export interface Assignment { homework:Homework; startsOn:string }
 export interface HabitItem { homeworkId:string; title:string; detail:string; anchor:string; done:boolean }
-export async function checkIn(store:LocalStore,homeworkId:string,note?:string,at=new Date()):Promise<Checkin> {
+export async function checkIn(store:LocalStore,homeworkId:string,note?:string,at=new Date(),heaven?:HeavenStamp):Promise<Checkin> {
   if (!homeworkId.trim() || !Number.isFinite(at.getTime())) throw new Error('打卡资料无效')
-  const record:Checkin={homeworkId,at:at.toISOString(),...(note?.trim()?{note:note.trim()}:{})}
+  const record:Checkin={homeworkId,at:at.toISOString(),...(heaven?{shichen:heaven.shichen,jieqi:heaven.jieqi,city:heaven.city}:{}),...(note?.trim()?{note:note.trim()}:{})}
   await store.put('checkins',crypto.randomUUID(),{...record})
   return record
 }

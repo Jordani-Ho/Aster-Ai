@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
 import { DailyMirrorCard } from './DailyMirrorCard'
-import { listSelfRatings, recordSelfRating, listStressRatings, recordStressRating, last14DayTrend, type SelfRating, type StressRating } from './core/mirror/trend'
+import { listSelfRatings, recordSelfRating, listStressRatings, recordStressRating, last14DayTrend, mirrorShichenNotice, mirrorTrendNote, type SelfRating, type StressRating } from './core/mirror/trend'
 import { listCheckins, checkIn, dueReminders, habitHomework, type Assignment, type Checkin, type HabitItem } from './core/homework'
 import { checkinDay, localDay } from './core/homework/schedule'
 import { adherenceReport, type AdherenceReport } from './core/adherence'
 import { listTongueDays, saveTonguePhoto, tongueBytes } from './core/tongue'
+import { CITY_UNKNOWN_HINT, DEFAULT_MIRROR_SHICHEN, DEFAULT_TIME_DISPLAY, formatHeavenTime, heavenNow, heavenStampOf, loadMirrorShichen, loadTimeDisplay, type HeavenTime, type TimeDisplay } from './core/heaven'
 import { MemberSwitcher } from './MemberSwitcher'
 import type { FamilyMember } from './core/family'
 
@@ -32,10 +33,29 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
   const [todayTongue, setTodayTongue] = useState<Uint8Array | null>(null)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
+  const [heaven, setHeaven] = useState<HeavenTime | null>(null)
+  const [display, setDisplay] = useState<TimeDisplay>(DEFAULT_TIME_DISPLAY)
+  const [mirrorShichen, setMirrorShichen] = useState(DEFAULT_MIRROR_SHICHEN)
   const fileInput = useRef<HTMLInputElement | null>(null)
   const assignmentsRef = useRef<Assignment[]>([])
   const [now] = useState(() => new Date())
   const today = localDay(now)
+
+  // 天时每分钟刷新：时辰按当地真太阳时、节气按天文时刻换算到当地日期。
+  useEffect(() => {
+    let cancelled = false
+    const tick = () => {
+      void heavenNow(store).then(time => { if (!cancelled) setHeaven(time) }).catch(() => {})
+      void Promise.all([loadTimeDisplay(store), loadMirrorShichen(store)]).then(([mode, shichen]) => {
+        if (cancelled) return
+        setDisplay(mode); setMirrorShichen(shichen)
+      }).catch(() => {})
+    }
+    tick()
+    const timer = setInterval(tick, 60000)
+    window.addEventListener('focus', tick)
+    return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', tick) }
+  }, [store])
 
   useEffect(() => {
     let cancelled = false
@@ -63,9 +83,11 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
     return () => { cancelled = true }
   }, [store, now])
 
+  const stamp = heaven ? heavenStampOf(heaven) : undefined
+
   const complete = async (homeworkId: string) => {
     try {
-      await checkIn(store, homeworkId)
+      await checkIn(store, homeworkId, undefined, new Date(), stamp)
       const fresh = await listCheckins(store)
       setCheckins(fresh)
       setHabits(habitHomework(assignmentsRef.current, fresh, now))
@@ -77,7 +99,7 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
 
   const rate = async (score: number) => {
     try {
-      await recordSelfRating(store, score, now)
+      await recordSelfRating(store, score, now, stamp)
       setRatings(await listSelfRatings(store))
       setStatus('已记录今天的状态')
     } catch { setError('评分未能保存，请重试') }
@@ -85,7 +107,7 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
 
   const rateStress = async (score: number) => {
     try {
-      await recordStressRating(store, score, now)
+      await recordStressRating(store, score, now, stamp)
       setStressRatings(await listStressRatings(store))
       setStatus('已记录今天的压力')
     } catch { setError('压力未能保存，请重试') }
@@ -96,7 +118,7 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
     try {
       const file = files[0]
       const bytes = new Uint8Array(await file.arrayBuffer())
-      const saved = await saveTonguePhoto(store, { bytes, type: file.type || 'image/jpeg' }, { now: () => now })
+      const saved = await saveTonguePhoto(store, { bytes, type: file.type || 'image/jpeg' }, { now: () => now, ...(stamp ? { heaven: stamp } : {}) })
       setTodayTongue(await tongueBytes(store, saved.date))
       setTongueDays(await listTongueDays(store))
       setStatus('舌象已保存在本机')
@@ -104,13 +126,20 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
     finally { if (fileInput.current) fileInput.current.value = '' }
   }
 
-  const trend = last14DayTrend(checkins, ratings, stressRatings, now)
+  // 只拿照镜子时辰的镜子记录做对照；其他时辰的记录不参与并给出提示。
+  const trend = last14DayTrend(checkins, ratings, stressRatings, now, { shichen: mirrorShichen })
+  const trendNote = mirrorTrendNote(trend)
+  const shichenNotice = heaven ? mirrorShichenNotice(heaven, mirrorShichen, todayTongue !== null) : null
 
   return <main className="mirror-page">
     {family.length > 0 && <MemberSwitcher members={family} active={active} onChange={account => onSwitch?.(account)} />}
-    <header><p className="eyebrow">知衡 · 学生{member ? ` · ${member.alias}` : ''}</p><h1>镜子</h1></header>
+    <header><p className="eyebrow">知衡 · 学生{member ? ` · ${member.alias}` : ''}</p><h1>镜子</h1>
+      {heaven && <p className="mirror-meta">天时：{formatHeavenTime(heaven, display)} · {heaven.jieqi}{heaven.city ? ` · ${heaven.city}` : ''}</p>}
+      {heaven && !heaven.solar && <p className="mirror-meta">{CITY_UNKNOWN_HINT}</p>}
+    </header>
     {error && <p role="alert">{error}</p>}
     {status && <p role="status">{status}</p>}
+    {shichenNotice && <p role="status">{shichenNotice}</p>}
     <section className="mirror-card"><DailyMirrorCard store={store} llm={llm} /></section>
 
     <section className="mirror-card">
@@ -155,6 +184,7 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
         {[1, 2, 3, 4, 5].map(score => <button key={score} onClick={() => void rateStress(score)}>{score}<span>{DAY_NAMES[score]}</span></button>)}
       </div>
       {trend.days.length > 0 && <>
+        {trendNote && <p className="mirror-meta" role="status">{trendNote}</p>}
         <p className="mirror-meta">状态走势</p>
         <ol className="mirror-trend" aria-label="最近 14 天状态走势">
           {trend.days.map((day, index) => <li key={'s' + day}><span className="mirror-trend-day">{day.slice(5)}</span><span className={trend.scores[index] ? 'mirror-trend-dot done' : 'mirror-trend-dot'}>{trend.scores[index] ?? '·'}</span></li>)}

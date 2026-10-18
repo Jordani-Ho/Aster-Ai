@@ -8,6 +8,7 @@ import { ConsultPage } from './ConsultPage'
 import { LedgerSettings } from './LedgerSettings'
 import { PushSettings } from './PushSettings'
 import { TeacherListSettings } from './TeacherListSettings'
+import { TimeSettings } from './TimeSettings'
 import { FamilySettings } from './FamilySettings'
 import type { FamilyMember } from './core/family'
 import { listCheckins, type Assignment } from './core/homework'
@@ -87,6 +88,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
         <details><summary>设置</summary>
           {modelSettings}
           <LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} members={family} />
+          <TimeSettings store={store} />
           <TeacherListSettings store={store} />
           <PushSettings identity={identity} />
         </details>

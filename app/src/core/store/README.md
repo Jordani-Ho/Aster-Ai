@@ -33,11 +33,11 @@ await store.clearScope('f1-') // 删除某位家人的全部记录
 | `intake-sent` | 已发送问诊包的本机副本 `{encounter,history,attachments}` | 附件字节在 `intake-attachments` |
 | `intake-outbox` | 中继未接通时暂存的问诊包 | `flushIntakeOutbox` 发送成功即删除 |
 | `intake-attachments` | 采集照片处理后的 JPEG 字节（长边 ≤1600、≤500 KB） | 键为附件 id |
-| `profile` | 学生本机档案：称呼、性别、年龄、八字、城市（键 `self`） | 随问诊包给老师 |
+| `profile` | 学生本机档案：称呼、性别、年龄、八字、城市（键 `self`） | 城市用于天气与真太阳时/时区 |
 | `student-records` | 学生收到的签名病历索引 `{id,teacher,createdAt,eventJson,version}` | 显示前重新验签 |
-| `settings` | 键 `role`、`teachers`（老师公钥数组）等本机设置 | 家人分片内复制同一“我的老师”名单 |
+| `settings` | 键 `role`、`teachers`（老师公钥数组）、`time-display`（时辰/钟点/两者）、`mirror-shichen`（照镜子时辰）等本机设置 | 家人分片内复制同一“我的老师”名单 |
 | `homework` | 作业 `{homework, startsOn}` | M1-13 |
-| `checkins` | 打卡 `{homeworkId, at, note?}` | 当日 00:00–00:59 的打卡算前一天（M1-23a 子时归日） |
+| `checkins` | 打卡 `{homeworkId, at, note?, shichen?, jieqi?, city?}` | 当日 00:00–00:59 的打卡算前一天（M1-23a 子时归日）；后三项为 V2-02 天时 |
 | `consult-package` | 老师端收到的问诊包（临时资料） | 签字交还后仍保留，删除由 V2-05 保留期限统一处理 |
 | `attachments` | 问诊包照片/语音字节 | 同上 |
 | `in-person-draft` | 老师端进行中的面诊草稿 | 同上 |
@@ -46,8 +46,8 @@ await store.clearScope('f1-') // 删除某位家人的全部记录
 | `care-plans` | 调养方案（键为老师公钥） | 学生端只存名单内老师签发的最新版 |
 | `care-plan-pending` / `care-plan-issued` | 老师签发未送达的待发方案 / 版本索引 | |
 | `mirror` | 当日镜子建议缓存 `{greeting,today,trend}` | 同一天只生成一次 |
-| `self-ratings` / `self-stress` | 每日状态/压力自评 `{date,score}` | 同日覆盖 |
-| `tongue-photos` | 每日舌象 JPEG 字节（键 YYYY-MM-DD） | 每天一张 |
+| `self-ratings` / `self-stress` | 每日状态/压力自评 `{date,score,shichen?,jieqi?,city?}` | 同日覆盖；后三项为 V2-02 天时 |
+| `tongue-photos` | 每日舌象 `{bytes, heaven}`（键 YYYY-MM-DD） | 每天一张；`heaven` 为拍时的天时 |
 | `ledger-index` / `ledger-*` | 康币账本索引与每本师生账 `{ledger,notices,conflicts,receipts,pendingDisputes,outbox}` | 单一写入者记账链 |
 | `pilot-metrics` | 试点指标 `{idPrefix,durationMs,modificationRate,missingRate,resemblance,homeworkAdherence?}` | 只有数值，无身份/原文 |
 | `student-adherence` | 老师端学生本周坚持率小结（键为学生公钥） | 学生主动上报的数值，无原文 |
