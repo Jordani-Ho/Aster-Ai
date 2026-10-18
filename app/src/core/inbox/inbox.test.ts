@@ -299,7 +299,11 @@ it('3 照片缺一张时老师端不能起草，补到后可以', async () => {
     type: 'consult.attachment', version: 1,
     payload: { encounterId: pkg.encounter.id, ref: first.ref, data: toBase64(first.data) },
   })
-  await waitFor(async () => (await consultReadiness(teacherStore, pkg.encounter.id)).total === 2)
+  // 问诊包和照片是两条独立消息，要等到照片也落库再断言，否则读到包里刚写的 0 张。
+  await waitFor(async () => {
+    const status = await consultReadiness(teacherStore, pkg.encounter.id)
+    return status.total === 2 && status.arrived === 1
+  })
   const partial = await consultReadiness(teacherStore, pkg.encounter.id)
   expect(partial.arrived).toBe(1)
   expect(partial.missing).toEqual([second.ref.id])
