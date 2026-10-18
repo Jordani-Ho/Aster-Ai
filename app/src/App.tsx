@@ -24,6 +24,7 @@ import { createWiring, type Wiring } from './core/wiring'
 import { createPushClient } from './core/push'
 import { TeacherListSettings } from './TeacherListSettings'
 import { StudentShell } from './StudentShell'
+import { loadFamilyMembers, memberIdentity, memberStore, type FamilyMember } from './core/family'
 
 const TeacherWorkspace = lazy(() => import('./TeacherWorkspace').then(module => ({default:module.TeacherWorkspace})))
 const HomeworkPage = lazy(() => import('./HomeworkPage').then(module => ({ default: module.HomeworkPage })))
@@ -48,6 +49,11 @@ export function App() {
   const [recordsPage, setRecordsPage] = useState(false)
   const [stackRevision, setStackRevision] = useState(0)
   const [role, setRole] = useState<Role | null>(null)
+  // M1-22 家人子账户：家人清单、当前在看谁（0 = 本人），以及每位家人的中继连接。
+  const [family, setFamily] = useState<FamilyMember[]>([])
+  const [active, setActive] = useState(0)
+  const [memberStacks, setMemberStacks] = useState<ReadonlyMap<number, Wiring>>(new Map())
+  const [memberStatus, setMemberStatus] = useState<Record<number, LinkStatus>>({})
   const [stackStatus, setStackStatus] = useState<LinkStatus>('offline')
   const [identity, setIdentity] = useState<Identity | null>(null)
   const [error, setError] = useState('')
@@ -71,6 +77,7 @@ export function App() {
       if(cancelled){store.close();person.privateKey.fill(0);return}
       const saved=await store.get('settings','role') as {role?:Role}|undefined
       setRole(saved?.role??null);setIdentity(person)
+      void loadFamilyMembers(store).then(rows => { if (!cancelled) setFamily(rows) }).catch(() => {})
     }).catch(cause => { if(!cancelled){if(cause instanceof PasskeyUnlockRequired)setLocked(true);else setError('本机资料暂时无法打开，请使用恢复资料。')} })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true; stackRef.current?.close(); stackRef.current = null; storeRef.current?.close(); storeRef.current = null; identityRef.current?.privateKey.fill(0); identityRef.current = null }
@@ -97,38 +104,55 @@ export function App() {
   },[identity,stackRevision])
 
   // M1-15a：一个 transport + 收件分发 + 账本同步；有中继配置才启动。
+  // M1-22：每位家人各起一个自己的中继连接（各自订阅、各自解密），账本仍只在本人这条连接上。
   useEffect(() => {
     if (!identity || !storeRef.current) return
     const store = storeRef.current
     let cancelled = false
+    const opened: Wiring[] = []
     void (async () => {
       const config = (await store.list('backup-config'))[0]?.value as { relays?: unknown } | undefined
       const relays = Array.isArray(config?.relays) && config.relays.every(item => typeof item === 'string')
         ? config.relays as string[] : defaultRelays
       if (cancelled || relays.length === 0) return
-      const stack = createWiring({
-        identity, store, relays,
-        onChange: () => window.dispatchEvent(new Event('aster:data-changed')),
-        onStatus: status => { if (!cancelled) setStackStatus(status as LinkStatus) },
-        onError: () => { if (!cancelled) setStackStatus('offline') },
-        notifier: async pubkey => {
-          if (!pushGatewayUrl || !pushVapidPublicKey) return
-          const client = createPushClient({ gatewayUrl: pushGatewayUrl, vapidPublicKey: pushVapidPublicKey, secretKey: identity.privateKey })
-          await client.notifyRecipient(pubkey)
-        },
-      })
+      const notifier = async (pubkey: string) => {
+        if (!pushGatewayUrl || !pushVapidPublicKey) return
+        const client = createPushClient({ gatewayUrl: pushGatewayUrl, vapidPublicKey: pushVapidPublicKey, secretKey: identity.privateKey })
+        await client.notifyRecipient(pubkey)
+      }
+      const start = (who: Identity, scoped: LocalStore, report: (status: LinkStatus) => void) => {
+        const stack = createWiring({
+          identity: who, store: scoped, relays,
+          onChange: () => window.dispatchEvent(new Event('aster:data-changed')),
+          onStatus: status => { if (!cancelled) report(status as LinkStatus) },
+          onError: () => { if (!cancelled) report('offline') },
+          notifier,
+        })
+        opened.push(stack)
+        stack.start()
+        // M1-05 接通后，把本机待发的替身问诊包真实发出，成功后删除。
+        void stack.flushIntakeOutbox().catch(() => {})
+        return stack
+      }
+      const stack = start(identity, store, status => setStackStatus(status))
       stackRef.current = stack
-      stack.start()
-      // M1-05 接通后，把本机待发的替身问诊包真实发出，成功后删除。
-      void stack.flushIntakeOutbox().catch(() => {})
+      const members = new Map<number, Wiring>()
+      for (const member of family) {
+        const who = memberIdentity(member, identity.language)
+        members.set(member.account, start(who, memberStore(store, member.account), status => {
+          if (!cancelled) setMemberStatus(previous => ({ ...previous, [member.account]: status }))
+        }))
+      }
+      if (!cancelled) setMemberStacks(members)
     })().catch(() => {})
     return () => {
       cancelled = true
-      const stack = stackRef.current
       stackRef.current = null
-      if (stack) void stack.close()
+      for (const stack of opened) void stack.close()
+      setMemberStacks(new Map())
+      setMemberStatus({})
     }
-  }, [identity, stackRevision])
+  }, [identity, stackRevision, family])
 
   useEffect(() => {
     const pause = (event: Event) => {
@@ -148,6 +172,7 @@ export function App() {
     storeRef.current?.close();storeRef.current=null
     identityRef.current?.privateKey.fill(0);identityRef.current=null
     setIdentity(null);setRole(null);setModelConfig(undefined);setRestoreNotice('')
+    setFamily([]);setActive(0);setMemberStacks(new Map());setMemberStatus({})
     await clearStore()
     const fresh=await openStore(result);storeRef.current=fresh;identityRef.current=result;await after?.(fresh);const saved=await fresh.get('settings','role') as {role?:Role}|undefined;setRole(saved?.role??null);setIdentity(result);setLocked(false)
     setRecordsPage(false);setHomeworkPage(false);setError('')
@@ -159,15 +184,28 @@ export function App() {
     catch { setError('角色没有保存成功，请重试。') }
   }
 
+  // 家人被移除后，当前查看的家人切回本人。
+  useEffect(() => {
+    if (active !== 0 && !family.some(member => member.account === active)) setActive(0)
+  }, [family, active])
+
   const store = storeRef.current
   const stack = stackRef.current
+  const activeMember = family.find(member => member.account === active) ?? null
+  const activeStore = store ? (activeMember ? memberStore(store, activeMember.account) : store) : null
+  const activeIdentity = useMemo(() => identity ? (activeMember ? memberIdentity(activeMember, identity.language) : identity) : null, [identity, activeMember])
+  const activeStack = activeMember ? memberStacks.get(activeMember.account) ?? null : stack
+  const activeStatus: LinkStatus = activeMember ? memberStatus[activeMember.account] ?? 'offline' : stackStatus
+  const memberOptions = family.map(member => ({ account: member.account, alias: member.alias }))
+  const refreshFamily = () => { if (storeRef.current) void loadFamilyMembers(storeRef.current).then(setFamily).catch(() => {}) }
   const modelGateway=useMemo(()=>identity&&env.VITE_MODEL_GATEWAY_URL?{baseUrl:env.VITE_MODEL_GATEWAY_URL,secretKey:identity.privateKey}:null,[identity])
   const llm=useMemo(()=>modelConfig?createPersonalClient(modelConfig,modelGateway,setBackupModel):null,[modelConfig,modelGateway])
   const modelNotice=<>{restoreNotice&&<p role="status">{restoreNotice}</p>}{backupModel&&<p role="status" style={{fontSize:12}}>今天用的是备用模型，请检查您的模型账户</p>}</>
   const modelSettings=store?<details><summary>我的大模型</summary><ModelSettings key={modelConfig?.testedAt??'new'} store={store} gateway={modelGateway} current={modelConfig??null} onSaved={config=>{setModelConfig(config);window.dispatchEvent(new Event('aster:model-changed'))}}/></details>:null
   if(identity&&role&&store&&!modelConfig)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1>{modelNotice}{modelConfig===undefined?<p>正在读取接入设置…</p>:<><ModelSettings initial store={store} gateway={modelGateway} current={null} onSaved={setModelConfig}/>{role==='teacher'&&<details><summary>社区首次登记</summary><InviteSettings identity={identity} gateway={gateway}/></details>}<details><summary>从备份恢复接入</summary><BackupSettings onRestored={setRestoreNotice} identity={identity} store={store}/><AdvancedRecovery store={store} onRestore={replaceIdentity}/></details></>}</main>
   // 学生端三个底部标签（镜子/问诊/其他）；老师端走 TeacherWorkspace 四页。模型由 M1-21 的 personal client 提供。
-  if (store && identity && role === 'student') return <StudentShell store={store} identity={identity} llm={llm} stack={stack} stackStatus={stackStatus} persistence={persistence} defaultRelays={defaultRelays} onRestore={replaceIdentity} modelNotice={modelNotice} modelSettings={modelSettings} />
+  // M1-22：学生壳用“当前家人”的分片存储与身份，设置区仍用根身份；家人切换在镜子页/问诊页顶部。
+  if (store && identity && role === 'student') return <StudentShell store={store} identity={identity} llm={llm} stack={stack} stackStatus={activeStatus} persistence={persistence} defaultRelays={defaultRelays} onRestore={replaceIdentity} modelNotice={modelNotice} modelSettings={modelSettings} family={memberOptions} active={active} onSwitch={setActive} memberStore={activeStore ?? store} memberIdentity={activeIdentity ?? identity} sendConsult={activeStack?.sendConsult} onFamilyChanged={refreshFamily} />
   if (homeworkPage && store && identity) return <>{modelNotice}<div hidden><BackupSettings onRestored={setRestoreNotice} identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={store} onBack={() => setHomeworkPage(false)} /></Suspense></>
   if (recordsPage && store && identity) return <Suspense fallback={<p>正在打开病历…</p>}><StudentRecordsPage identity={identity} store={store} onBack={() => setRecordsPage(false)} /></Suspense>
   if (role==='teacher' && store && identity) return <Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherWorkspace identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} status={<>{modelNotice}<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p></>} ledgerPanel={<LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus}/>} settings={<details><summary>设置</summary>
@@ -188,7 +226,7 @@ export function App() {
       <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button disabled={role==='student'} onClick={()=>void chooseRole('student')}>我是学生</button></details>
       {modelSettings}<TeacherListSettings store={store}/>{role==='teacher'&&<PilotSettings store={store}/>}
       <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p>
-      <BackupSettings onRestored={setRestoreNotice} identity={identity} store={store}/><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus}/>
+      <BackupSettings onRestored={setRestoreNotice} identity={identity} store={store}/><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} members={memberOptions}/>
       <PasskeySettings identity={identity} store={store} defaults={defaultRelays}/>
       <PushSettings identity={identity}/>
       <AdvancedRecovery store={store} onRestore={replaceIdentity}/>

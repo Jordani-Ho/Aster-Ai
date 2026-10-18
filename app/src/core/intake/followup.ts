@@ -96,6 +96,8 @@ export interface OrganizeInput {
   focusOrder: string[]
   missingFocus: string[]
   template: TeacherTemplate
+  /** M1-22：家人（尤其孩子、老人）的年龄带给模型，追问语气与内容按年龄适配。 */
+  member?: { age: number | null }
 }
 
 export interface OrganizeOutcome {
@@ -148,6 +150,7 @@ export async function organizeIntake(
       focusAnswers: input.focusAnswers,
       template: { focus: input.template.focus },
       missingFocus: input.missingFocus,
+      ...(input.member ? { member: input.member } : {}),
     }
     const reply = await Promise.race([
       llm.complete([{ role: 'system', content: prompt }, { role: 'user', content: JSON.stringify(payload) }]),

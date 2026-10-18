@@ -80,6 +80,9 @@ export function verify(ledger: Ledger): VerifyIssue[] {
       if (fields.recordHash !== undefined && !isHex64(fields.recordHash)) report('chain', index, 'invalid-record-hash', '关联记录哈希格式无效')
     }
 
+    // M1-22：只有扣费可以标注“记在哪位家人名下”。
+    if (fields.forMember !== undefined && fields.type !== 'charge') report('chain', index, 'invalid-member', '只有扣费事件可以标注家人称呼')
+
     if (fields.type === 'refund') {
       if (fields.refundFor !== undefined && !chainEvents.has(fields.refundFor)) report('chain', index, 'unknown-refund-target', '退款指向的事件不存在或不在之前')
       if (typeof fields.amount === 'number' && Number.isSafeInteger(fields.amount) && fields.amount > 0) {

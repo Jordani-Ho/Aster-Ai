@@ -4,6 +4,7 @@ import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
 import { startLedgerSync } from './core/ledger/runtime'
 import { createLedgerSync, type LedgerView } from './core/ledger/sync'
+import { filterChargesByMember, SELF_MEMBER } from './core/ledger/filter'
 import type { TransportOptions } from './core/transport'
 
 const defaults = ((import.meta as ImportMeta & { env: Record<string, string | undefined> }).env.VITE_COMMUNITY_RELAYS ?? '').split(',').map(s => s.trim()).filter(Boolean)
@@ -12,15 +13,17 @@ type LinkStatus = Parameters<NonNullable<TransportOptions['onStatus']>>[0]
 
 // 账本设置：默认自己起一个 transport；M1-15a 之后 App 传入已有的同步控制器（同一个 transport），
 // 避免同一份加密存储上同时跑两个账本控制器。
-export function LedgerSettings({ identity, store, ledger, managed = false, status: sharedStatus }: {
+export function LedgerSettings({ identity, store, ledger, managed = false, status: sharedStatus, members = [] }: {
   identity: Identity
   store: LocalStore
   managed?: boolean
   ledger?: ReturnType<typeof createLedgerSync>
   status?: LinkStatus
+  members?: readonly { alias: string }[]
 }) {
   const [books, setBooks] = useState<LedgerView[]>([]), [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
+  const [memberFilter, setMemberFilter] = useState<string | null>(null)
   const [status, setStatus] = useState<LinkStatus>(sharedStatus ?? 'offline')
   const runtimeRef = useRef<ReturnType<typeof createLedgerSync> | null>(null)
   useEffect(() => {
@@ -88,12 +91,29 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
       {book.code !== null && <p>余额：{book.balance} 康币 · 对账码：{book.code}</p>}
       {book.code === null && <p role="alert">{book.conflict ? '账本有冲突，请与老师核对' : '本机账本校验失败，请与对方核对'}</p>}
       {book.notices.map(text => <p role="status" key={text}>{text}</p>)}
-      <ol>{book.ledger.events.map(event => {
-        try {
-          const fields = JSON.parse(event.content) as { type: keyof typeof labels; amount: number; at: string }
-          return <li key={event.id}>{fields.at} · {labels[fields.type]} {fields.amount}</li>
-        } catch { return <li key={event.id}>记录内容无效，请与对方核对</li> }
-      })}</ol>
+      {(() => {
+        const aliases = [...new Set([
+          ...members.map(member => member.alias),
+          ...book.ledger.events.flatMap(event => {
+            try {
+              const fields = JSON.parse(event.content) as { type?: unknown; forMember?: unknown }
+              return fields.type === 'charge' && typeof fields.forMember === 'string' ? [fields.forMember] : []
+            } catch { return [] }
+          }),
+        ])]
+        return <>
+          {aliases.length > 0 && <label>按家人筛选<select value={memberFilter === null ? 'all' : memberFilter} onChange={event => setMemberFilter(event.target.value === 'all' ? null : event.target.value)}>
+            <option value="all">全部</option><option value={SELF_MEMBER}>本人</option>
+            {aliases.map(alias => <option key={alias} value={alias}>{alias}</option>)}
+          </select></label>}
+          <ol>{filterChargesByMember(book.ledger, memberFilter).map(event => {
+            try {
+              const fields = JSON.parse(event.content) as { type: keyof typeof labels; amount: number; at: string; forMember?: string }
+              return <li key={event.id}>{fields.at} · {labels[fields.type]} {fields.amount}{fields.forMember ? ' · ' + fields.forMember : ''}</li>
+            } catch { return <li key={event.id}>记录内容无效，请与对方核对</li> }
+          })}</ol>
+        </>
+      })()}
       {book.ledger.disputes.map(event => {
         try { return <p key={event.id}>异议：{(JSON.parse(event.content) as { memo: string }).memo} · {book.receipts.find(r => r.id === event.id)?.message ?? '已入异议列表'}</p> }
         catch { return <p key={event.id}>异议内容无效，请与对方核对</p> }

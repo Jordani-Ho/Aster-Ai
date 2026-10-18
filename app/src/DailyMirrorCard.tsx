@@ -48,7 +48,7 @@ export function DailyMirrorCard({ store, llm, teacher }: { store: LocalStore; ll
       try {
         if (profile.city.value) forecast = await getWeather(profile.city.value, { fetch: (url, init) => fetch(url, { ...init, signal: controller.signal }) })
       } finally { clearTimeout(timeout) }
-      const next = await mirrorForDay(store, { carePlan: plan, jieqi: currentJieqi(at), weather: forecast, recentCheckins: checkins, recentSymptoms: ratings, recentStress: stress, ...(llm ? { llm } : {}), now: () => at })
+      const next = await mirrorForDay(store, { carePlan: plan, jieqi: currentJieqi(at), weather: forecast, recentCheckins: checkins, recentSymptoms: ratings, recentStress: stress, age: profile.age.value, ...(llm ? { llm } : {}), now: () => at })
       if (active) { setWeather(forecast); setResult(next); setError('') }
     }
     void run().catch(() => { if (active) setError('每日建议暂未能读取，请稍后重试。') })

@@ -6,7 +6,8 @@ import {uiError} from './core/onboarding/ui'
 import { calculateMetric, saveMetric, rateMetric } from './core/pilot'
 import { useEffect, useRef, useState } from 'react'
 import { draftEncounter } from './core/drafting'
-import type { Identity } from './core/identity'
+import { managedLabel } from './core/family'
+import { consultChargeBook } from './core/inbox'
 import {
   ConsultUndeliveredError,
   assertConsultReady,
@@ -21,6 +22,7 @@ import {
   type StoredConsult,
 } from './core/inbox'
 import type { Encounter } from './core/record/types'
+import type { Identity } from './core/identity'
 import type { LlmClient } from './core/llm'
 import type { LocalStore } from './core/store'
 import { SignEncounterPage } from './SignEncounterPage'
@@ -122,9 +124,11 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
       if (amount !== undefined && (!Number.isSafeInteger(amount) || amount <= 0)) throw Error('扣费金额必须是正整数')
       signedAt.current ??= Date.now()
       const metric = calculateMetric(draft ?? final, final, startedAt.current, signedAt.current)
+      // M1-22 一家一本账：只有代管证明验过的问诊才把扣费记到代管人那本账；否则按发件人自己处理。
+      const chargeBook = consultChargeBook(selected)
       const result = pendingEventId
-        ? await retryConsultHandover({ store, eventId: pendingEventId, send, ledger, charge: amount, teacher: identity.publicKey, student: selected.sender })
-        : await completeConsultSigning({ identity, store, consult: selected, draft: draft ?? final, final, send, ledger, charge: amount })
+        ? await retryConsultHandover({ store, eventId: pendingEventId, send, ledger, charge: amount, teacher: identity.publicKey, student: selected.sender, ...(chargeBook ? { chargeBook } : {}) })
+        : await completeConsultSigning({ identity, store, consult: selected, draft: draft ?? final, final, send, ledger, charge: amount, ...(chargeBook ? { chargeBook } : {}) })
       setPendingEventId(null)
       if (result.chargeError) setStatus('病历已交还；扣费没有记上：' + result.chargeError)
       else setStatus('已签字交还，原始资料已从老师端删除。')
@@ -196,7 +200,8 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
       const arrived = state?.arrived ?? 0
       return <article className="inbox-card" key={consult.encounter.id}>
         {urgentConsult(consult) && <p className="inbox-alert" role="note">急症提醒 · 请优先查看</p>}<h2>{textField(consult.encounter.intake.chiefComplaint)}</h2>
-        <p className="inbox-meta">学生 {consult.sender.slice(0, 8)}… · {new Date(consult.receivedAt).toLocaleString()}</p>
+        <p className="inbox-meta">{managedLabel(consult.encounter.profile)} · 学生 {consult.sender.slice(0, 8)}… · {new Date(consult.receivedAt).toLocaleString()}</p>
+        {consult.managerInvalid && <p className="inbox-alert" role="note">代管证明无效 · 扣费不会记到别人账上</p>}
         <p className={state?.ready ? 'inbox-status' : 'inbox-error'}>照片 {arrived}/{total}{state?.ready ? '' : ' · 照片还在路上'}</p>
         <div className="inbox-actions"><button disabled={busy || !state?.ready} onClick={() => void startDraft(consult)}>打开问诊</button></div>
       </article>

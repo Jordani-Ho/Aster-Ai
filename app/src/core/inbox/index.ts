@@ -6,6 +6,7 @@ import { RECORD_COLLECTIONS, UndeliveredError, completeSigning, retryHandover } 
 import { signEncounter, verifySignedEncounter, type SignedEncounterEvent, type SignedEncounterIndex } from '../record/sign'
 import type { AttachmentRef, ConsultPackage, Encounter, Homework } from '../record/types'
 import { CARE_PLAN_TYPE, parseSignedCarePlanEvent, storeCarePlan, verifySignedCarePlan } from '../careplan'
+import { verifyFamilyProof } from '../family/proof'
 import { INTAKE_COLLECTIONS, deleteDraft, restartAfterEmergency, type IntakeSession, type StoredPackage } from '../intake/session'
 import { localDay } from '../homework/schedule'
 
@@ -39,6 +40,10 @@ export interface ConsultEnvelopePayload {
   redFlag?: { hit: boolean; crisis: boolean }
   /** 最近 14 天状态与压力走势（M1-19）：只给老师端看，不进 Encounter schema。 */
   trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] }
+  /** M1-22 传输元数据：家人代管问诊时是代管人（根身份）公钥。 */
+  manager?: string
+  /** M1-22 代管证明：代管人私钥签名的 kind 2732 小事件，老师端验过才认 manager。 */
+  managerProof?: unknown
 }
 
 export interface AttachmentEnvelopePayload {
@@ -59,6 +64,10 @@ export interface StoredConsult {
   redFlag?: { hit: boolean; crisis: boolean } | null
   /** 最近 14 天状态与压力走势（M1-19）：老师草稿卡片上显示一条小走势。 */
   trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] } | null
+  /** M1-22：家人代管问诊时为代管人公钥；一本账与回信都按它处理。 */
+  manager?: string
+  /** M1-22：带 manager 但代管证明没通过校验，老师端据此提示且不按代管扣费。 */
+  managerInvalid?: boolean
 }
 
 export interface ConsultReadiness {
@@ -193,6 +202,14 @@ export function draftPackage(consult: StoredConsult): ConsultPackage {
   return { encounter: structuredClone(consult.encounter), history: [...consult.history], attachments: [] }
 }
 
+// M1-22 一家一本账：只有代管证明验过的问诊才把扣费记到代管人那本账；
+// 没有证明或证明无效时返回 undefined，调用方按发件人自己那本账处理。
+export function consultChargeBook(consult: StoredConsult): { student: string; forMember?: string } | undefined {
+  if (!consult.manager || consult.managerInvalid) return undefined
+  const forMember = consult.encounter.profile.alias.value ?? undefined
+  return forMember === undefined ? { student: consult.manager } : { student: consult.manager, forMember }
+}
+
 export function consultEnvelope(pkg: ConsultPackage): Envelope {
   return {
     type: CONSULT_TYPES.package,
@@ -203,6 +220,8 @@ export function consultEnvelope(pkg: ConsultPackage): Envelope {
       attachments: pkg.attachments.map(item => ({ ...item.ref })),
       ...(pkg.redFlag ? { redFlag: pkg.redFlag } : {}),
       ...(pkg.trend ? { trend: pkg.trend } : {}),
+      ...(pkg.manager ? { manager: pkg.manager } : {}),
+      ...(pkg.managerProof ? { managerProof: structuredClone(pkg.managerProof) } : {}),
     } satisfies ConsultEnvelopePayload,
   }
 }
@@ -302,6 +321,18 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
   if (!isEncounter(value.encounter)) return
   if (value.encounter.teacher !== identity.publicKey) return
   if (value.encounter.student !== message.sender) return
+  // 家人代管问诊时带代管人公钥；格式不对就整包丢弃，避免账本记到错误的书上。
+  if (value.manager !== undefined && (typeof value.manager !== 'string' || !HEX64.test(value.manager) || value.manager === value.encounter.student)) return
+  // 代管人必须有代管证明（代管人私钥签的 kind 2732，p 标签指向家人且家人就是发件人）。
+  // 证明不通过时保留问诊但标 managerInvalid：老师端提示“代管证明无效”，扣费回落到发件人自己那本账。
+  let manager: string | undefined
+  let managerInvalid = false
+  if (value.manager !== undefined) {
+    try {
+      verifyFamilyProof(value.managerProof, { manager: value.manager, member: value.encounter.student, sender: message.sender })
+      manager = value.manager
+    } catch { managerInvalid = true }
+  }
   // Already handed back: relay replay must not resurrect deleted raw material.
   if (await store.get(RECORD_COLLECTIONS.signedEncounters, value.encounter.id + '-v' + value.encounter.version)) return
   if (!Array.isArray(value.attachments) || value.attachments.length > MAX_PHOTOS || !value.attachments.every(isRef)) return
@@ -331,6 +362,8 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
     droppedHistory: checked.dropped,
     redFlag,
     ...(trend ? { trend } : {}),
+    ...(manager ? { manager } : {}),
+    ...(managerInvalid ? { managerInvalid: true } : {}),
   }
   await store.put(INBOX_COLLECTIONS.consult, value.encounter.id, stored as unknown as StoreValue)
 }
@@ -527,6 +560,8 @@ export interface ConsultSigningOptions {
   send: SendEnvelope
   ledger?: LedgerRecorder
   charge?: number
+  /** M1-22 一家一本账：扣费记在代管人（根身份）那本账上，并标注家人称呼。 */
+  chargeBook?: { student: string; forMember?: string }
 }
 
 export interface ConsultSigningResult {
@@ -550,6 +585,7 @@ async function recordCharge(
   student: string,
   eventId: string,
   charge: number | undefined,
+  forMember?: string,
 ): Promise<string | null> {
   if (charge === undefined) return null
   try {
@@ -560,6 +596,7 @@ async function recordCharge(
       amount: charge,
       chargeReason: 'consult',
       recordHash: eventId,
+      ...(forMember === undefined ? {} : { forMember }),
     })
     return null
   } catch (cause) {
@@ -571,6 +608,8 @@ async function recordCharge(
 // 老师签字交还：先送达再销毁（M1-11 的 completeSigning），送达成功后再按需记一笔扣费。
 export async function completeConsultSigning(options: ConsultSigningOptions): Promise<ConsultSigningResult> {
   if (options.charge !== undefined && (!Number.isSafeInteger(options.charge) || options.charge <= 0)) throw new Error('扣费金额必须是正整数')
+  const bookStudent = options.chargeBook?.student ?? options.final.student
+  if (options.chargeBook?.student !== undefined && (typeof options.chargeBook.student !== 'string' || !HEX64.test(options.chargeBook.student))) throw new Error('代管人公钥格式无效')
   const signed = signEncounter(options.final, options.identity.privateKey)
   const send = (type: 'record.signed', payload: SignedEncounterEvent) => options.send(options.consult.sender, { type, version: 1, payload })
   try {
@@ -582,7 +621,7 @@ export async function completeConsultSigning(options: ConsultSigningOptions): Pr
       attachmentIds: options.consult.attachments.map(ref => ref.id),
       send: async (type, payload) => { await send(type, payload) },
     })
-    const chargeError = await recordCharge(options.ledger, options.final.teacher, options.final.student, index.eventId, options.charge)
+    const chargeError = await recordCharge(options.ledger, options.final.teacher, bookStudent, index.eventId, options.charge, options.chargeBook?.forMember)
     return { index, chargeError }
   } catch (error) {
     if (error instanceof UndeliveredError) throw new ConsultUndeliveredError(signed.id)
@@ -599,13 +638,15 @@ export async function retryConsultHandover(options: {
   charge?: number
   teacher: string
   student: string
+  chargeBook?: { student: string; forMember?: string }
 }): Promise<ConsultSigningResult> {
   if (options.charge !== undefined && (!Number.isSafeInteger(options.charge) || options.charge <= 0)) throw new Error('扣费金额必须是正整数')
+  const bookStudent = options.chargeBook?.student ?? options.student
   try {
     const index = await retryHandover(options.store, options.eventId, async (type, payload) => {
       await options.send(options.student, { type, version: 1, payload })
     })
-    const chargeError = await recordCharge(options.ledger, options.teacher, options.student, index.eventId, options.charge)
+    const chargeError = await recordCharge(options.ledger, options.teacher, bookStudent, index.eventId, options.charge, options.chargeBook?.forMember)
     return { index, chargeError }
   } catch (error) {
     if (error instanceof UndeliveredError) throw new ConsultUndeliveredError(options.eventId)

@@ -149,7 +149,7 @@ export function skipFocus(state: IntakeSession, focus: string): IntakeSession {
 export async function organizeSession(
   state: IntakeSession,
   llm: LlmClient | null | undefined,
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number; member?: { age: number | null } } = {},
 ): Promise<IntakeSession> {
   if (state.phase === 'sent') throw new Error('这次采集已经发送')
   const focusAnswers: Record<string, string> = {}
@@ -164,6 +164,7 @@ export async function organizeSession(
     focusOrder: state.focusOrder,
     missingFocus: missing,
     template,
+    ...(options.member ? { member: options.member } : {}),
   }, options)
   const round = state.round + (outcome.questions.length > 0 ? 1 : 0)
   const questions = round > MAX_ROUNDS ? [] : outcome.questions
@@ -251,6 +252,7 @@ export function buildConsultPackage(
   history: readonly HistoryCandidate[],
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
   trend?: ConsultPackage['trend'],
+  options: { manager?: string; managerProof?: ConsultPackage['managerProof'] } = {},
 ): ConsultPackage {
   const checkResult = canConfirm(state)
   if (!checkResult.ok) throw new Error(checkResult.reason)
@@ -295,13 +297,21 @@ export function buildConsultPackage(
     judgment: { symptomSummary: unknown(), pattern: unknown(), mechanism: unknown(), rationale: unknown() },
     plan: { principle: unknown(), prescription: unknown(), homework: [], advice: unknown() },
   }
-  return {
+  const pkg: ConsultPackage = {
     encounter,
     history: history.map(candidate => candidate.eventJson),
     attachments: attachments.map(item => ({ ref: { ...item.ref }, data: item.data })),
     ...(redFlag ? { redFlag } : {}),
     ...(trend ? { trend } : {}),
   }
+  // M1-22：家人代管问诊时带上代管人公钥与代管证明，只走传输元数据，不改病历 schema。
+  if (options.manager !== undefined) {
+    if (!/^[0-9a-f]{64}$/.test(options.manager)) throw new Error('代管人公钥格式无效')
+    if (options.managerProof === undefined) throw new Error('缺少代管证明，不能替家人问诊')
+    pkg.manager = options.manager
+    pkg.managerProof = structuredClone(options.managerProof)
+  }
+  return pkg
 }
 
 export async function saveStoredPackage(store: IntakeStore, pkg: ConsultPackage, collection: string, encounterId: string): Promise<StoredPackage> {
@@ -325,8 +335,9 @@ export async function confirmAndSend(
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
   send: SendConsultPackage,
   trend?: ConsultPackage['trend'],
+  options: { manager?: string; managerProof?: ConsultPackage['managerProof'] } = {},
 ): Promise<ConsultPackage> {
-  const pkg = buildConsultPackage(state, profile, history, attachments, trend)
+  const pkg = buildConsultPackage(state, profile, history, attachments, trend, options)
   // 只有学生明确点“确认发送”才走到这里；之前任何一步都不调用 send。
   await send(pkg)
   await saveStoredPackage(store, pkg, INTAKE_COLLECTIONS.sent, state.encounterId)
@@ -368,6 +379,7 @@ function isProfile(value: unknown): value is Encounter['profile'] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const profile = value as Record<string, unknown>
   return ['alias', 'gender', 'age', 'bazi', 'city'].every(key => isField(profile[key]))
+    && (profile.managedBy === undefined || isField(profile.managedBy))
 }
 
 export async function loadProfile(store: IntakeStore): Promise<Encounter['profile']> {

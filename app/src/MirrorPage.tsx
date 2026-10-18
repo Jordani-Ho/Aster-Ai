@@ -6,10 +6,19 @@ import { listSelfRatings, recordSelfRating, listStressRatings, recordStressRatin
 import { listCheckins, checkIn, dueReminders, type Checkin } from './core/homework'
 import { localDay } from './core/homework/schedule'
 import { listTongueDays, saveTonguePhoto, tongueBytes } from './core/tongue'
+import { MemberSwitcher } from './MemberSwitcher'
+import type { FamilyMember } from './core/family'
 
 const DAY_NAMES: Record<number, string> = { 1: '差', 2: '一般', 3: '还行', 4: '不错', 5: '很好' }
 
-export function MirrorPage({ store, llm }: { store: LocalStore; llm: LlmClient | null }) {
+export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, member }: {
+  store: LocalStore
+  llm: LlmClient | null
+  family?: readonly Pick<FamilyMember, 'account' | 'alias'>[]
+  active?: number
+  onSwitch?: (account: number) => void
+  member?: Pick<FamilyMember, 'account' | 'alias'> | null
+}) {
   const [checkins, setCheckins] = useState<Checkin[]>([])
   const [ratings, setRatings] = useState<SelfRating[]>([])
   const [stressRatings, setStressRatings] = useState<StressRating[]>([])
@@ -85,7 +94,8 @@ export function MirrorPage({ store, llm }: { store: LocalStore; llm: LlmClient |
   const trend = last14DayTrend(checkins, ratings, stressRatings, now)
 
   return <main className="mirror-page">
-    <header><p className="eyebrow">知衡 · 学生</p><h1>镜子</h1></header>
+    {family.length > 0 && <MemberSwitcher members={family} active={active} onChange={account => onSwitch?.(account)} />}
+    <header><p className="eyebrow">知衡 · 学生{member ? ` · ${member.alias}` : ''}</p><h1>镜子</h1></header>
     {error && <p role="alert">{error}</p>}
     {status && <p role="status">{status}</p>}
     <section className="mirror-card"><DailyMirrorCard store={store} llm={llm} /></section>
