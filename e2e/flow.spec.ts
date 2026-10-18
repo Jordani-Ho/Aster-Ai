@@ -35,7 +35,7 @@ async function intake(page: Page, quote: string) {
   await page.getByRole('button',{name:'问诊',exact:true}).click()
   await page.getByLabel('按键盘上的🎤说话就行').fill(quote)
   await page.getByRole('button',{name:'发送',exact:true}).click()
-  for(let i=0;i<3;i++) { const skip=page.getByRole('button',{name:'跳过',exact:true}); if(await skip.count()===0) break; await skip.first().click() }
+  for(let i=0;i<3;i++) { const skip=page.getByRole('button',{name:'跳过',exact:true}).first(); try { await skip.waitFor({state:'visible',timeout:10000}) } catch { break } await skip.click() }
   await expect(page.getByRole('button',{name:'发给老师',exact:true})).toBeVisible()
   await page.getByLabel('最不舒服的地方（主诉）').fill(quote)
   await page.getByLabel('现在的情况（现病史）').fill('SYNTHETIC_PRESENT')
@@ -206,7 +206,7 @@ test('emergency prompts inline without phone numbers and still sends with redFla
   await expect(student.getByText('您说的情况需要尽快去医院，请不要耽误',{exact:true})).toBeVisible()
   const body=await student.locator('body').innerText()
   for(const num of ['120','911','999','119','995','988']) expect(body).not.toContain(num)
-  for(let i=0;i<3;i++){const skip=student.getByRole('button',{name:'跳过',exact:true});if(await skip.count()===0)break;await skip.first().click()}
+  for(let i=0;i<3;i++){const skip=student.getByRole('button',{name:'跳过',exact:true}).first();try{await skip.waitFor({state:'visible',timeout:10000})}catch{break};await skip.click()}
   await student.getByRole('button',{name:'发给老师',exact:true}).click()
   await expect(student.getByRole('heading',{name:'已发给老师',exact:true})).toBeVisible()
   await expect.poll(async()=> (await stored(people.teacher.page,'consult-package')).length).toBe(1)
@@ -220,7 +220,7 @@ test('self-harm shows only the crisis hotline and marks crisis redFlag',async({p
   await expect(student.getByText('你并不孤单',{exact:false})).toBeVisible()
   const body=await student.locator('body').innerText()
   for(const num of ['120','911','999','119','995']) expect(body).not.toContain(num)
-  for(let i=0;i<3;i++){const skip=student.getByRole('button',{name:'跳过',exact:true});if(await skip.count()===0)break;await skip.first().click()}
+  for(let i=0;i<3;i++){const skip=student.getByRole('button',{name:'跳过',exact:true}).first();try{await skip.waitFor({state:'visible',timeout:10000})}catch{break};await skip.click()}
   await student.getByRole('button',{name:'发给老师',exact:true}).click()
   await expect(student.getByRole('heading',{name:'已发给老师',exact:true})).toBeVisible()
   await expect.poll(async()=> (await stored(people.teacher.page,'consult-package')).length).toBe(1)
