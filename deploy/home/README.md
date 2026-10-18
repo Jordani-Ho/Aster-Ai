@@ -20,6 +20,8 @@
 
 这一节替代下文旧版的手工复制成员步骤。`.env` 的 `MEMBER_PUBKEYS` 可留空，`SELF_TEST_MEMBER` 默认0；保持模型和域名等部署变量。运行现有 `./setup.sh` 后，再按原步骤启动；脚本只生成本机一次性部署口令，不把口令打印到日志。
 
+> 从早期部署（M1-16 或更早）升级上来的，先按 [6.8 代码升级后重建镜像](#68-代码升级后重建镜像开放模式与种子成员) 重建 `relay/gateway/web` 镜像；旧镜像不认识 `community_open`，也没有 `/invite/seed`，直接重跑配置不会生效。
+
 1. 在部署电脑本机查看 `deploy/home/data/teacher-setup-code.txt`，只交给发起人指定的第一位老师。
 2. 老师在手机打开应用，只点“我是老师”即到首页。展开“我是这个社区的老师”，输入部署口令，点“登记为社区老师”。看到“社区已建立，可以邀请学生”。口令只能认领到一个后台身份，重跑setup不重置；同一人失败重试可继续。
 3. 老师点“邀请学生”，把链接或二维码发给学生。7天内可重复使用；学生点开就到问诊首页，不输入后台编号。过期请老师重新生成。
@@ -367,6 +369,42 @@ WSL2 在最后一个会话退出约 1 分钟后会被 Windows 回收，容器和
 1. 到 Docker Hub 的 `cloudflare/cloudflared` 页挑一个发布满 14 天的新 tag，记下 `tag` 和 digest：`docker pull cloudflare/cloudflared:<tag>` 后用 `docker image inspect --format '{{.RepoDigests}}' cloudflare/cloudflared:<tag>` 看 `@sha256:…`。
 2. 把 `compose.yaml` 三处 `image:` 换成 `cloudflare/cloudflared:<tag>@sha256:<digest>`（三处保持一致）。
 3. 重建并验证：无域名自测跑 `./quick-start.sh`，域名模式跑 `./start.sh`，最后 `./verify.sh` 六项全 PASS。
+
+### 6.8 代码升级后重建镜像（开放模式与种子成员）
+
+`relay/gateway/web` 三个镜像是把仓库源码打进镜像的（`relay` 还要在容器里编译 Rust），不是挂载源码运行。所以**代码升级后只重跑配置不够，必须重建这三个镜像**。用早期镜像时会出现这些症状：
+
+- `./verify.sh` 的中继探测 FAIL：`中继非成员 AUTH 期望被拒，实际 rejected`（旧 `relay` 不认识 `data/relay-config.toml` 里的 `community_open`，仍按白名单只放行成员，开放模式不生效）。
+- 老师手机“我是这个社区的老师”登记失败：旧 `gateway` 没有 `/invite/seed` 路由，旧 `web` 也不反代 `/invite/*`（探测 `POST /invite/seed` 会得到 405，而不是网关的 403）。
+- 页面仍是旧版应用：`web` 镜像里的前端在旧代码上构建。
+
+升级步骤（在 `deploy/home` 里执行，可直接复制）：
+
+```bash
+cd deploy/home
+git -C ../.. pull --ff-only                  # 或按第 2 步更新仓库到最新 main
+docker compose build relay gateway web       # relay 首次 10–30 分钟；3.7 GiB 内存可能吃紧，OOM 时按第 2 步先加 swap
+SKIP_BUILD=1 ./setup.sh
+SKIP_BUILD=1 ./quick-start.sh                # 无域名自测；域名模式改用 ./start.sh
+./verify.sh                                  # 预期六项全 PASS，含“中继开放模式接受已认证连接”
+```
+
+升级后核对：
+
+1. `data/relay-config.toml` 里有 `community_open = true`（内测部署默认开放；关闭方法见下）。
+2. `data/gateway/seed.json`（只有 `tokenHash`）和 `data/teacher-setup-code.txt`（一次性口令）在位；旧目录里的 `data/gateway-members.json` 会在 `./setup.sh` 时自动迁移到 `data/gateway/members.json`，不丢成员。
+3. `/invite/seed` 不再是 405：用假口令探测应得到网关的 403（**不要用真实口令探测，也不要打印口令**）。
+
+种子成员（老师首次登记）流程：
+
+1. 在部署电脑本机打开 `deploy/home/data/teacher-setup-code.txt` 读取一次性口令，只交给发起人指定的第一位老师；**不外传、不打印、不贴聊天记录**。
+2. 老师在手机打开应用，点“我是老师”，展开“我是这个社区的老师”，输入口令，点“登记为社区老师”；看到“社区已建立，可以邀请学生”。
+3. 口令只能认领到一个后台身份；重跑 `./setup.sh` 不会重置口令，也不会覆盖已认领记录或已加入成员。登记成功后老师再点“邀请学生”发链接/二维码。
+
+关闭开放模式 / 回滚：
+
+- 只关开放模式、保留新代码：在 `.env` 加一行 `RELAY_COMMUNITY_OPEN=false`，重跑 `SKIP_BUILD=1 ./setup.sh`（按成员重写白名单配置），再重启中继（无域名 `docker compose --profile quick up -d --force-recreate relay`，域名模式 `./start.sh`），最后 `./verify.sh` 应显示“中继拒绝非成员 AUTH”——此时新成员要先把公钥写进 `MEMBER_PUBKEYS` 再重跑 setup。
+- 回滚到旧代码：`git -C ../.. checkout <旧提交>`，再 `docker compose build relay gateway web` 并用 `./quick-start.sh` / `./start.sh` 重启；`data/` 是挂载卷，保留不动。
 
 ---
 
