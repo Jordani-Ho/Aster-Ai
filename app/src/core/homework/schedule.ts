@@ -1,6 +1,15 @@
 import { jieqiDate, shichenStart } from '../../../../domain/tcm/calendar'
 import type { Homework } from '../record/types'
 export interface Reminder { homeworkId: string; at: Date }
+// M1-23a 随习惯作业：anchor 是学生已有的日常习惯，只用于展示与打卡，不产生钟点提醒。
+export const HABIT_ANCHOR_MAX = 12
+export function habitAnchor(value: unknown): string {
+  if (typeof value !== 'string') throw new Error('习惯锚点必须是文字')
+  const anchor = value.trim()
+  if (anchor === '' || anchor.length > HABIT_ANCHOR_MAX) throw new Error(`习惯锚点需要 1 至 ${HABIT_ANCHOR_MAX} 个字`)
+  if (/[\u0000-\u001f\u007f]/.test(anchor)) throw new Error('习惯锚点不能包含换行等控制字符')
+  return anchor
+}
 export function localDay(at: Date): string {
   return [at.getFullYear(), String(at.getMonth()+1).padStart(2,'0'), String(at.getDate()).padStart(2,'0')].join('-')
 }
@@ -25,6 +34,8 @@ export function schedule(homework: Homework[], startsOn: string, days: number, w
     if (item.durationDays !== undefined && (!Number.isInteger(item.durationDays) || item.durationDays <= 0)) throw new Error('持续天数须为正整数')
     // 即使窗口里没有命中，也验证输入，不静默忽略错误。
     const spec = item.schedule
+    // 随习惯作业不排钟点提醒：只校验锚点，然后整天都不进提醒列表。
+    if (spec.kind === 'habit') { habitAnchor(spec.anchor); continue }
     if (spec.kind === 'daily') timeParts(spec.time)
     else if (spec.kind === 'shichen') shichenStart(spec.shichen)
     else if (spec.kind === 'once') { parseDay(spec.date); timeParts(spec.time ?? '08:00') }

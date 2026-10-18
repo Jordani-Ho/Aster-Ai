@@ -4,6 +4,7 @@ import { jieqiNames, shichenNames } from '../../../../domain/tcm/templates/types
 import type { LlmClient } from '../llm'
 import type { ConsultPackage, Encounter, Field, Homework, Prescription } from '../record/types'
 import { searchCases, type DraftCase } from './cases'
+import { habitAnchor } from '../homework/schedule'
 
 export type DraftLevel = 'record' | 'pattern' | 'prescription'
 export interface DraftOptions {
@@ -60,6 +61,10 @@ function schedule(value: unknown): Homework['schedule'] | null {
     case 'jieqi': return typeof value.jieqi === 'string' && jieqiNames.includes(value.jieqi) ? { kind: 'jieqi', jieqi: value.jieqi } : null
     case 'once': return date(value.date) && (value.time === undefined || time(value.time))
       ? { kind: 'once', date: value.date, ...(value.time === undefined ? {} : { time: value.time }) } : null
+    // M1-23a：随习惯作业（如“拖地时”），只校验锚点，不产生钟点提醒。
+    case 'habit': {
+      try { return { kind: 'habit', anchor: habitAnchor(value.anchor) } } catch { return null }
+    }
     default: return null
   }
 }

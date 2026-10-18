@@ -3,7 +3,7 @@ import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
 import { DailyMirrorCard } from './DailyMirrorCard'
 import { listSelfRatings, recordSelfRating, listStressRatings, recordStressRating, last14DayTrend, type SelfRating, type StressRating } from './core/mirror/trend'
-import { listCheckins, checkIn, dueReminders, type Checkin } from './core/homework'
+import { listCheckins, checkIn, dueReminders, habitHomework, type Checkin, type HabitItem } from './core/homework'
 import { localDay } from './core/homework/schedule'
 import { listTongueDays, saveTonguePhoto, tongueBytes } from './core/tongue'
 import { MemberSwitcher } from './MemberSwitcher'
@@ -23,6 +23,7 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
   const [ratings, setRatings] = useState<SelfRating[]>([])
   const [stressRatings, setStressRatings] = useState<StressRating[]>([])
   const [due, setDue] = useState<{ homeworkId: string; title: string }[]>([])
+  const [habits, setHabits] = useState<HabitItem[]>([])
   const [tongueDays, setTongueDays] = useState<string[]>([])
   const [todayTongue, setTodayTongue] = useState<Uint8Array | null>(null)
   const [status, setStatus] = useState('')
@@ -45,6 +46,7 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
           const assignment = assignments.find(a => a.homework.id === item.homeworkId)
           return { homeworkId: item.homeworkId, title: assignment?.homework.title ?? '作业' }
         }))
+        setHabits(habitHomework(assignments as never, checkinList, now))
         setTongueDays(await listTongueDays(store))
         setTodayTongue(await tongueBytes(store, today))
       } catch (cause) {
@@ -58,6 +60,7 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
     try {
       const record = await checkIn(store, homeworkId)
       setCheckins(previous => [...previous, record])
+      setHabits(previous => previous.map(item => item.homeworkId === homeworkId ? { ...item, done: true } : item))
       setStatus('已保存在本机')
     } catch { setError('打卡未能保存，请重试') }
   }
@@ -110,6 +113,15 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
           <button disabled={done} onClick={() => void complete(item.homeworkId)}>{done ? '今日已完成 ✓' : '打卡'}</button>
         </div>
       })}
+    </section>
+
+    <section className="mirror-card">
+      <h2>今天做这些事的时候，记得……</h2>
+      {habits.length === 0 && <p>今天没有随习惯的作业。</p>}
+      {habits.map(item => <div className="mirror-homework" key={item.homeworkId}>
+        <span>{item.anchor}：{item.title}</span>
+        <button disabled={item.done} onClick={() => void complete(item.homeworkId)}>{item.done ? '今天已完成 ✓' : '打卡'}</button>
+      </div>)}
     </section>
 
     <section className="mirror-card">
