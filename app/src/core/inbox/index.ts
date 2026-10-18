@@ -5,6 +5,7 @@ import type { ChainEventDraft } from '../ledger/types'
 import { RECORD_COLLECTIONS, UndeliveredError, completeSigning, retryHandover } from '../record/handover'
 import { signEncounter, verifySignedEncounter, type SignedEncounterEvent, type SignedEncounterIndex } from '../record/sign'
 import type { AttachmentRef, ConsultPackage, Encounter, Homework } from '../record/types'
+import { CARE_PLAN_TYPE, parseSignedCarePlanEvent, storeCarePlan, verifySignedCarePlan } from '../careplan'
 import { INTAKE_COLLECTIONS, deleteDraft, restartAfterEmergency, type IntakeSession, type StoredPackage } from '../intake/session'
 import { localDay } from '../homework/schedule'
 
@@ -346,6 +347,18 @@ async function receiveSignedRecord(identity: Identity, store: LocalStore, messag
   await importHomework(store, encounter, now)
 }
 
+// 学生端收调养方案：只认“我的老师”名单里的签名，验签通过后按版本替换旧版。
+async function receiveCarePlan(identity: Identity, store: LocalStore, message: Message, payload: unknown): Promise<void> {
+  const teachers = await loadTeachers(store)
+  if (!teachers.includes(message.sender)) return
+  const event = parseSignedCarePlanEvent(payload)
+  if (!event) return
+  try {
+    const plan = verifySignedCarePlan(event, { student: identity.publicKey, teacher: message.sender })
+    await storeCarePlan(store, message.sender, plan)
+  } catch { /* 验签失败或内容无效就丢弃。 */ }
+}
+
 export function createInbox(options: InboxOptions) {
   const { identity, store } = options
   const now = options.now ?? (() => new Date())
@@ -364,6 +377,10 @@ export function createInbox(options: InboxOptions) {
       }
       if (type === 'record.signed') {
         await receiveSignedRecord(identity, store, message, payload, now)
+        return
+      }
+      if (type === CARE_PLAN_TYPE) {
+        await receiveCarePlan(identity, store, message, payload)
         return
       }
       if (type.startsWith('ledger.') && options.ledger) await options.ledger.receive(message)
