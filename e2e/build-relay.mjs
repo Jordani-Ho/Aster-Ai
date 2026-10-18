@@ -45,6 +45,7 @@ export async function buildRelay(runTests = process.argv.includes('--test')) {
   try { rustVersion = await command(rustup, ['run', RUST, 'rustc', '-vV'], { env, quiet: true }); await command('cmake', ['--version'], { quiet: true }) }
   catch { throw Error('Install Rust 1.90.0 via rustup plus C/C++ and cmake first; see e2e/README.md. No fake relay fallback is permitted.') }
   env.RUSTC = await command(rustup, ['which', '--toolchain', RUST, 'rustc'], { env, quiet: true })
+  env.RUSTDOC = await command(rustup, ['which', '--toolchain', RUST, 'rustdoc'], { env, quiet: true })
   const compiler = await protoc(), protocVersion = await command(compiler, ['--version'])
   const patches = ['community-policy.patch', 'backup-policy.patch', 'onboarding-policy.patch'].map(name => path.join(root, 'relay', name))
   const docker = await readFile(path.join(root, 'relay/Dockerfile'), 'utf8')
@@ -74,11 +75,12 @@ export async function buildRelay(runTests = process.argv.includes('--test')) {
     }
     const target = path.join(cache, 'target', 'rust-' + RUST)
     await command(rustup, ['run', RUST, 'cargo', 'build', '--release', '--locked'], { cwd: source, env: { ...env, PROTOC: compiler, CARGO_TARGET_DIR: target, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2' } })
-    if(runTests) await command(rustup,['run',RUST,'cargo','test','--release','--locked','--','--test-threads=1'],{cwd:source,env:{...env,RUST_LOG:'off',PROTOC:compiler,CARGO_TARGET_DIR:target,CARGO_BUILD_JOBS:process.env.CARGO_BUILD_JOBS??'2'}})
+    let testResults=[]
+    if(runTests){const output=await command(rustup,['run',RUST,'cargo','test','--release','--locked','--','--test-threads=1'],{cwd:source,env:{...env,RUST_LOG:'off',PROTOC:compiler,CARGO_TARGET_DIR:target,CARGO_BUILD_JOBS:process.env.CARGO_BUILD_JOBS??'2'}});testResults=output.match(/^test result:.*$/gm)??[];console.error(testResults.join('\n'))}
     await copyFile(path.join(target, 'release/nostr-rs-relay'), binary + '.tmp')
     await chmod(binary + '.tmp', 0o755)
     await rename(binary + '.tmp', binary)
-    await writeFile(manifest + '.tmp', JSON.stringify({ key: fingerprint, upstream: UPSTREAM, rust: RUST, protoc: protocVersion, sha256: sha(await readFile(binary)) }))
+    await writeFile(manifest + '.tmp', JSON.stringify({ key: fingerprint, upstream: UPSTREAM, rust: RUST, protoc: protocVersion, testResults, sha256: sha(await readFile(binary)) }))
     await rename(manifest + '.tmp', manifest)
     return { binary, command: binary, args: [], cached: false, key: fingerprint, elapsedMs: Date.now() - started }
   } finally {

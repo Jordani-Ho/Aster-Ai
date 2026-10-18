@@ -94,10 +94,10 @@ export async function startWebApp({ gatewayUrl, relayUrl }) {
   const { default: react } = await import(pathToFileURL(requireApp.resolve('@vitejs/plugin-react')).href)
   const webPort = await port()
   const app = await createVite({ configFile: false, root: path.join(root, 'app'), plugins: [react()],
-    define: { 'import.meta.env.VITE_COMMUNITY_RELAYS': JSON.stringify(relayUrl), 'import.meta.env.VITE_MODEL_GATEWAY_URL': JSON.stringify('http://127.0.0.1:' + webPort + '/v1') },
+    define: { 'import.meta.env.VITE_COMMUNITY_RELAYS': JSON.stringify(relayUrl), 'import.meta.env.VITE_MODEL_GATEWAY_URL': JSON.stringify('http://localhost:' + webPort + '/v1') },
     resolve: { dedupe: ['lunar-typescript', 'timezonecomplete', 'tzdata'] },
     server: { host: '127.0.0.1', port: webPort, strictPort: true, fs: { allow: [root] }, proxy: { '/v1': { target: gatewayUrl, changeOrigin: false }, '/push': { target: gatewayUrl, changeOrigin: false }, '/invite': { target: gatewayUrl, changeOrigin: false } } },
   })
   try { await app.listen() } catch (error) { await app.close(); throw error }
-  return { url: `http://127.0.0.1:${app.httpServer.address().port}`, close: () => app.close() }
+  return { url: `http://localhost:${app.httpServer.address().port}`, close: () => app.close() }
 }

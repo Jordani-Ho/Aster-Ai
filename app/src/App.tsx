@@ -183,9 +183,9 @@ export function App() {
       <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p>
       <BackupSettings identity={identity} store={store}/><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus}/>
       <PasskeySettings identity={identity} store={store} defaults={defaultRelays}/>
+      <PushSettings identity={identity}/>
       <AdvancedRecovery store={store} onRestore={replaceIdentity}/>
     </details>}
-    {identity&&<PushSettings identity={identity}/>}
     {!identity&&!loading&&<AdvancedRecovery onRestore={replaceIdentity}/>}
     <details><summary>换手机后找回备份</summary><p>恢复会替换这台设备上的资料，请先保存需要保留的文件。照片不在中继备份中。</p><label><input type="checkbox" checked={allowReplace} onChange={e=>setAllowReplace(e.target.checked)}/>允许用备份替换本机资料</label><button disabled={!allowReplace||recovering||!globalThis.PublicKeyCredential} onClick={()=>{setRecovering(true);void(async()=>{try{const relays=store?await configuredRelays(store,defaultRelays):defaultRelays,{identity:found,key}=await recoverPasskey(relays);await replaceIdentity(found,async fresh=>{const relay=communityBackupRelay(found,relays),manager=createBackupManager({identity:found,store:fresh,relay});try{await manager.restoreLatest(true);await protectStore(found,key)}finally{manager.close();relay.close()}});setError('')}catch{setError('恢复未完成，请检查手机账户和社区备份后重试。')}finally{setRecovering(false)}})()}}>用刷脸找回备份</button></details>
     <p style={{fontSize:12}}>换手机前请到设置里备份</p>

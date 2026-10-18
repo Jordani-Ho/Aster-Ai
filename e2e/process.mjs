@@ -9,7 +9,7 @@ export function command(executable, args, { cwd = root, env = process.env, quiet
     child.stdout.on('data', data => { output += data })
     child.stderr?.on('data', data => { error = (error + data).slice(-12000) })
     child.once('error', reject)
-    child.once('close', code => code === 0 ? resolve(output.trim()) : reject(Error(`${executable} exited ${code}${error ? ': ' + error : ''}`)))
+    child.once('close', code => code === 0 ? resolve(output.trim()) : reject(Error(`${executable} exited ${code}${error || output ? ': ' + (error || output.slice(-12000)) : ''}`)))
   })
 }
 export async function stopChild(child, gracefulInput = false) {
