@@ -5,10 +5,11 @@ import path from 'node:path'
 import type { Page } from '@playwright/test'
 test.use({ seedLedger: true })
 async function settings(page: Page) {
+  const manage=page.getByRole('button',{name:'管理',exact:true});if(await manage.count())await manage.click()
   const summary = page.locator('summary').filter({ hasText: /^设置$/ })
   if (await summary.locator('..').getAttribute('open') === null) await summary.click()
 }
-async function role(page:Page,value:'老师'|'学生') {await expect(page.getByRole('heading',{name:value==='老师'?'老师首页':'问诊首页',exact:true})).toBeVisible();await expect(page.getByText('中继：已连接',{exact:true})).toBeVisible()}
+async function role(page:Page,value:'老师'|'学生') {await expect(page.getByRole('heading',{name:value==='老师'?'今天':'问诊首页',exact:true})).toBeVisible();await expect(page.getByText('中继：已连接',{exact:true})).toBeVisible()}
 async function stored(page: Page, collection: string) {
   return page.evaluate(async name => {
     const module='/src/core/store/index.ts', { resumeStore }=await import(module), session=await resumeStore().catch(async()=>{const p='/src/core/onboarding/passkey.ts',{authenticatePasskey}=await import(p);return resumeStore({unlockKey:(await authenticatePasskey()).key})})
@@ -58,7 +59,7 @@ test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' r
   const teacher=people.teacher.page,student=people.student.page,quote='SYNTHETIC_PRIVATE_QUOTE_15B'
   await role(teacher,'老师');await role(student,'学生')
   await expect.poll(async()=> (await book(student)).balance).toBe(10)
-  await teacher.getByRole('button',{name:'问诊箱',exact:true}).click()
+  await teacher.getByRole('button',{name:'远程',exact:true}).click()
   await intake(student,quote)
   const jpeg=await student.evaluate(()=>{const c=document.createElement('canvas');c.width=32;c.height=24;const ctx=c.getContext('2d')!;ctx.fillStyle='#1a829e';ctx.fillRect(0,0,32,24);return c.toDataURL('image/jpeg').split(',')[1]})
   await student.locator('input[type=file][accept="image/*"]').setInputFiles({name:'synthetic.jpg',mimeType:'image/jpeg',buffer:Buffer.from(jpeg,'base64')})
@@ -69,16 +70,14 @@ test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' r
   await expect(teacher.getByText('照片 1/1',{exact:true})).toBeVisible()
   const photos=await stored(teacher,'attachments');expect(photos).toHaveLength(1)
   const photoBytes=photos[0].value as number[]
-  await teacher.getByRole('button',{name:'查看',exact:true}).click()
-  await teacher.getByRole('button',{name:'起草并审改',exact:true}).click()
+  await teacher.getByRole('button',{name:'打开问诊',exact:true}).click()
   await expect(teacher.getByText('SYNTHETIC_SUMMARY',{exact:true})).toBeVisible()
-  const summary=teacher.locator('article').filter({has:teacher.getByRole('heading',{name:'判断 · 症状摘要',exact:true})})
-  await summary.getByRole('button',{name:'修改',exact:true}).click()
-  await teacher.locator('.sign-editor textarea').fill('SYNTHETIC_FINAL_SUMMARY')
-  await teacher.getByRole('button',{name:'保存修改',exact:true}).click()
-  while(await teacher.getByRole('button',{name:'采用',exact:true}).count()) await teacher.getByRole('button',{name:'采用',exact:true}).first().click()
+  await teacher.getByRole('textbox',{name:'说说怎么改'}).fill('SYNTHETIC_REVISE_SUMMARY')
+  await teacher.getByRole('button',{name:'按意见改稿',exact:true}).click()
+  await expect(teacher.getByText('SYNTHETIC_FINAL_SUMMARY',{exact:true})).toBeVisible()
+  await expect(teacher.getByText('AI 草稿',{exact:true}).first()).toBeVisible()
   await teacher.getByRole('spinbutton',{name:'本次扣费（可选，康币）'}).fill('3')
-  await teacher.getByRole('button',{name:'确认无误，签字',exact:true}).click()
+  await teacher.getByRole('button',{name:'签字发出',exact:true}).click()
   await expect(teacher.getByRole('heading',{name:'已签字交还',exact:true})).toBeVisible()
   await expect(teacher.getByRole('dialog',{name:'像不像我评分'})).toBeVisible()
   await teacher.getByRole('button',{name:'5分',exact:true}).click()
@@ -94,12 +93,13 @@ test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' r
   await student.getByRole('button',{name:'返回',exact:true}).click()
   const records=await stored(student,'student-records'),assignments=await stored(student,'homework')
   expect(records).toHaveLength(1);expect(assignments).toHaveLength(1)
+  expect(JSON.stringify(records)).not.toContain('ai_draft')
   await test.step('hard: teacher decrypted IndexedDB has no original quote or processed JPEG, including after relay replay',async()=>{
     await teacher.getByRole('button',{name:'返回首页',exact:true}).click()
-    await teacher.reload();await expect(teacher.getByRole('heading',{name:'老师首页',exact:true})).toBeVisible()
+    await teacher.reload();await expect(teacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible()
     // Reconnect replays history; a completed consult must stay erased.
     await expect(teacher.getByText('中继：已连接',{exact:true})).toBeVisible()
-    await teacher.getByRole('button',{name:'问诊箱',exact:true}).click()
+    await teacher.getByRole('button',{name:'远程',exact:true}).click()
     await expect(teacher.getByText(/还没有收到问诊/)).toBeVisible()
     const text=JSON.stringify(await decrypted(teacher))
     expect(text).not.toContain(quote)

@@ -175,11 +175,12 @@ export async function deleteInPersonDraft(store: RecordStore, encounterId: strin
 
 // 老师已有的学生索引（signed-encounters 只含公钥与时间），供新建面诊时选择。
 export async function knownStudents(store: RecordStore): Promise<string[]> {
-  const rows = await store.list(RECORD_COLLECTIONS.signedEncounters)
+  const rows = [...await store.list(RECORD_COLLECTIONS.signedEncounters), ...await store.list(RECORD_COLLECTIONS.consultPackage)]
   const students = new Set<string>()
   for (const row of rows) {
-    const value = row.value as { student?: unknown } | undefined
-    if (value && typeof value.student === 'string' && HEX64.test(value.student)) students.add(value.student)
+    const value = row.value as { student?: unknown; encounter?: {student?:unknown} } | undefined
+    const student = value?.student ?? value?.encounter?.student
+    if (typeof student === 'string' && HEX64.test(student)) students.add(student)
   }
   return [...students].sort()
 }

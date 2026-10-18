@@ -8,7 +8,7 @@ import { createGateway } from '../gateway/server.js'
 export const SYNTHETIC_DRAFT = Object.freeze({
   fourExams: { ask: { value: 'SYNTHETIC_EXAM' } },
   judgment: { symptomSummary: { value: 'SYNTHETIC_SUMMARY' }, pattern: { value: 'SYNTHETIC_PATTERN' } },
-  plan: { prescription: { value: { items: [{ herb: 'SYNTHETIC_HERB', dose: 'SYNTHETIC_DOSE' }] } }, advice: { value: 'SYNTHETIC_ADVICE' }, homework: [{ title: 'SYNTHETIC_HOMEWORK', detail: 'SYNTHETIC_ONLY', schedule: { kind: 'daily', time: '20:00' }, durationDays: 7 }] },
+  plan: { prescription: { value: { items: [{ herb: 'SYNTHETIC_HERB', dose: 'SYNTHETIC_DOSE' }, {herb:'SYNTHETIC_KEEP',dose:'SYNTHETIC_DOSE'}] } }, advice: { value: 'SYNTHETIC_ADVICE' }, homework: [{ title: 'SYNTHETIC_HOMEWORK', detail: 'SYNTHETIC_ONLY', schedule: { kind: 'daily', time: '20:00' }, durationDays: 7 }] },
 })
 export async function listen(server, port = 0) {
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', () => { server.off('error', reject); resolve() }) })
@@ -35,7 +35,11 @@ export async function startGatewayFixture({ directory, members }) {
     let stream = false
     try { stream = JSON.parse(body).stream === true } catch { res.writeHead(400).end(); return }
     stats.upstream++
-    const content = JSON.stringify(SYNTHETIC_DRAFT)
+    const parsed=JSON.parse(body)
+    const isRevision=parsed.messages?.[0]?.content?.includes('# 老师草稿改稿')
+    const instruction=isRevision?JSON.parse(parsed.messages[1].content).instruction:''
+    const revision=instruction==='SYNTHETIC_REMOVE_HERB'?{plan:{prescription:{value:{items:[{herb:'SYNTHETIC_KEEP',dose:'SYNTHETIC_DOSE'}]}}}}:{judgment:{symptomSummary:{value:'SYNTHETIC_FINAL_SUMMARY'}}}
+    const content = JSON.stringify(isRevision?revision:SYNTHETIC_DRAFT)
     if (stream) {
       res.writeHead(200, { 'content-type': 'text/event-stream' })
       res.end('data: ' + JSON.stringify({ choices: [{ delta: { content } }] }) + '\n\ndata: [DONE]\n\n')

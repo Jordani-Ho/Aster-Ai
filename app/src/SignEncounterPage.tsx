@@ -1,173 +1,37 @@
 import { useState } from 'react'
-import type { Encounter, Field, Homework, Source } from './core/record/types'
-import { pendingDraftFields } from './core/record/sign'
+import type { Encounter, Source } from './core/record/types'
+import { acceptDraftForSigning } from './core/record/sign'
 import './sign-encounter.css'
-
-const SOURCE_LABELS: Record<Source, string> = {
-  student: '学生陈述',
-  teacher: '老师判断',
-  ai_draft: 'AI 草稿',
-  external: '外部证据',
-  unknown: '未知',
-}
-
-const FOUR_EXAMS: [keyof Encounter['fourExams'], string][] = [
-  ['look', '望'], ['listenSmell', '闻'], ['ask', '问'], ['pulse', '切'],
-]
-const JUDGMENT: [keyof Encounter['judgment'], string][] = [
-  ['symptomSummary', '症状摘要'], ['pattern', '证候'], ['mechanism', '病机'], ['rationale', '辨证依据'],
-]
-
-interface Descriptor {
-  path: string
-  label: string
-  source: Source
-  value: unknown
-}
-
-function descriptors(encounter: Encounter): Descriptor[] {
-  const list: Descriptor[] = []
-  for (const [key, label] of FOUR_EXAMS) {
-    list.push({ path: 'fourExams.' + key, label: '四诊 · ' + label, source: encounter.fourExams[key].source, value: encounter.fourExams[key].value })
-  }
-  for (const [key, label] of JUDGMENT) {
-    list.push({ path: 'judgment.' + key, label: '判断 · ' + label, source: encounter.judgment[key].source, value: encounter.judgment[key].value })
-  }
-  list.push({ path: 'plan.principle', label: '处理 · 治则治法', source: encounter.plan.principle.source, value: encounter.plan.principle.value })
-  list.push({ path: 'plan.prescription', label: '处理 · 方子', source: encounter.plan.prescription.source, value: encounter.plan.prescription.value })
-  list.push({ path: 'plan.advice', label: '处理 · 医嘱', source: encounter.plan.advice.source, value: encounter.plan.advice.value })
-  encounter.plan.homework.forEach((item, index) => {
-    list.push({ path: 'plan.homework[' + index + ']', label: '作业 · ' + item.title, source: item.source, value: item })
-  })
-  return list
-}
-
-function display(value: unknown): string {
-  if (value === null || value === undefined) return '未知'
-  if (typeof value === 'string') return value
+const labels:Record<Source,string>={student:'学生陈述',teacher:'老师判断',ai_draft:'AI 草稿',external:'外部证据',unknown:'未知'}
+const fields:Record<string,string>={look:'望',listenSmell:'闻',ask:'问',pulse:'切',symptomSummary:'症状摘要',pattern:'证候',mechanism:'病机',rationale:'辨证依据',principle:'治则治法',prescription:'方子',advice:'医嘱',change:'变化',adverse:'不良反应',next:'下次计划'}
+function display(value:unknown):string {
+  if(value==null)return '未知'
+  if(typeof value==='string')return value
+  const p=value as Encounter['plan']['prescription']['value']
+  if(p&&Array.isArray(p.items))return p.items.map(i=>i.herb+' '+i.dose+(i.note?'（'+i.note+'）':'')).join('、')+(p.method?'；'+p.method:'')+(p.days?'；'+p.days+'天':'')+(p.changeReason?'；加减理由：'+p.changeReason:'')
   return JSON.stringify(value)
 }
-
-function withField(encounter: Encounter, path: string, update: (field: Field<unknown>) => Field<unknown>): Encounter {
-  const [section, key] = path.split('.') as ['fourExams' | 'judgment', keyof Encounter['fourExams'] & keyof Encounter['judgment']]
-  return { ...encounter, [section]: { ...encounter[section], [key]: update(encounter[section][key]) } }
-}
-
-function withPlanField(encounter: Encounter, key: 'principle' | 'prescription' | 'advice', update: (field: Field<unknown>) => Field<unknown>): Encounter {
-  return { ...encounter, plan: { ...encounter.plan, [key]: update(encounter.plan[key]) } }
-}
-
-function accept(encounter: Encounter, descriptor: Descriptor): Encounter {
-  if (descriptor.path.startsWith('plan.homework[')) {
-    const index = Number(descriptor.path.slice('plan.homework['.length, -1))
-    const homework = encounter.plan.homework.map((item, position): Homework => position === index
-      ? { ...item, source: 'teacher', note: 'ai_accepted' }
-      : item)
-    return { ...encounter, plan: { ...encounter.plan, homework } }
-  }
-  const mark = (field: Field<unknown>): Field<unknown> => ({ ...field, source: 'teacher', note: 'ai_accepted' })
-  if (descriptor.path.startsWith('plan.')) return withPlanField(encounter, descriptor.path.slice('plan.'.length) as 'principle' | 'prescription' | 'advice', mark)
-  return withField(encounter, descriptor.path, mark)
-}
-
-function modify(encounter: Encounter, descriptor: Descriptor, value: unknown): Encounter {
-  if (descriptor.path.startsWith('plan.homework[')) {
-    const index = Number(descriptor.path.slice('plan.homework['.length, -1))
-    const homework = encounter.plan.homework.map((item, position): Homework => position === index
-      ? { ...(value as Homework), source: 'teacher' }
-      : item)
-    return { ...encounter, plan: { ...encounter.plan, homework } }
-  }
-  const replace = (_field: Field<unknown>): Field<unknown> => ({ value, source: 'teacher' })
-  if (descriptor.path.startsWith('plan.')) return withPlanField(encounter, descriptor.path.slice('plan.'.length) as 'principle' | 'prescription' | 'advice', replace)
-  return withField(encounter, descriptor.path, replace)
-}
-
 export interface SignEncounterPageProps {
-  initial: Encounter
-  onConfirm: (encounter: Encounter) => Promise<void> | void
-  onCancel?: () => void
+  initial:Encounter
+  onConfirm:(encounter:Encounter)=>Promise<void>|void
+  onCancel?:()=>void
+  onRevise?:(encounter:Encounter,instruction:string)=>Promise<Encounter>
 }
-
-// 老师端审改界面：来源用颜色区分；AI 草稿逐项“采用”或“修改”；全部确认后才能签字。
-export function SignEncounterPage({ initial, onConfirm, onCancel }: SignEncounterPageProps) {
-  const [encounter, setEncounter] = useState(initial)
-  const [editing, setEditing] = useState<{ path: string; text: string; original: unknown } | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [deliveryError, setDeliveryError] = useState<string | null>(null)
-  const pending = pendingDraftFields(encounter)
-  const beginEdit = (descriptor: Descriptor) => {
-    setEditing({
-      path: descriptor.path,
-      text: typeof descriptor.value === 'string' ? descriptor.value : JSON.stringify(descriptor.value, null, 2),
-      original: descriptor.value,
-    })
-  }
-  const saveEdit = () => {
-    if (!editing) return
-    const descriptor = descriptors(encounter).find(item => item.path === editing.path)
-    if (!descriptor) return
-    const value = typeof editing.original === 'string' ? editing.text : JSON.parse(editing.text)
-    setEncounter(modify(encounter, descriptor, value))
-    setEditing(null)
-  }
-  return (
-    <main className="sign-page">
-      <header className="sign-head">
-        <h1>审改并签字</h1>
-        <p className="sign-meta">第 {encounter.version} 版 · {encounter.id.slice(0, 8)} · 病历里的老师：已核验身份</p>
-        <ul className="sign-legend" aria-label="来源颜色说明">
-          {(Object.keys(SOURCE_LABELS) as Source[]).map(source => (
-            <li key={source}><span className={'source source-' + source}>{SOURCE_LABELS[source]}</span></li>
-          ))}
-        </ul>
-      </header>
-      <section>
-        {descriptors(encounter).map(descriptor => (
-          <article className="sign-field" key={descriptor.path}>
-            <div className="sign-field-head">
-              <h2>{descriptor.label}</h2>
-              <span className={'source source-' + descriptor.source}>{SOURCE_LABELS[descriptor.source]}</span>
-            </div>
-            <p className="sign-value">{display(descriptor.value)}</p>
-            {descriptor.source === 'ai_draft' && (
-              <div className="sign-actions">
-                <button type="button" onClick={() => setEncounter(accept(encounter, descriptor))}>采用</button>
-                <button type="button" onClick={() => beginEdit(descriptor)}>修改</button>
-              </div>
-            )}
-          </article>
-        ))}
-      </section>
-      {editing && (
-        <section className="sign-editor">
-          <h2>修改内容</h2>
-          <textarea rows={5} value={editing.text} onChange={event => setEditing({ ...editing, text: event.target.value })} />
-          <div className="sign-actions">
-            <button type="button" onClick={saveEdit}>保存修改</button>
-            <button type="button" onClick={() => setEditing(null)}>取消</button>
-          </div>
-        </section>
-      )}
-      <footer className="sign-foot">
-        <p role="status">{pending.length === 0 ? '所有 AI 草稿均已确认，可以签字。' : '还有 ' + pending.length + ' 项 AI 草稿未确认：' + pending.join('、')}</p>
-        {deliveryError && <p role="alert" className="sign-error">{deliveryError}</p>}
-        <div className="sign-actions">
-          <button type="button" className="sign-primary" disabled={pending.length > 0 || busy} onClick={async () => {
-            setBusy(true)
-            setDeliveryError(null)
-            try {
-              await onConfirm(encounter)
-            } catch (error) {
-              // 交还失败时本地资料未销毁，签名事件已暂存；再点一次即重发。
-              setDeliveryError(error instanceof Error && error.message ? error.message : '未送达，可重发')
-            } finally {
-              setBusy(false)
-            }
-          }}>{deliveryError ? '重发交还' : '确认无误，签字'}</button>
-          {onCancel && <button type="button" onClick={onCancel}>返回</button>}
-        </div>
-      </footer>
-    </main>
-  )
+// 仅展示与真人确认；模型调用由起草父组件提供，签字处理从不调用 onRevise。
+export function SignEncounterPage({initial,onConfirm,onCancel,onRevise}:SignEncounterPageProps){
+  const [encounter,setEncounter]=useState(initial),[instruction,setInstruction]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[retry,setRetry]=useState(false)
+  return <main className="sign-page">
+    <header className="sign-head"><h1>病历草稿</h1><p>看过整张卡片后，按“签字发出”确认全部内容。</p></header>
+    <article className="draft-card" aria-label="完整病历卡片">
+      <section><h2>学生陈述</h2>{(['chiefComplaint','presentIllness','history','medsAllergies'] as const).map((key,i)=><p key={key}>{['主诉','现病史','既往史','用药与过敏'][i]}：{encounter.intake[key].value??'未知'}</p>)}<p>照片：{encounter.intake.attachments.length} 张</p></section>
+      {[encounter.fourExams,encounter.judgment,encounter.plan,encounter.outcome].filter(Boolean).map((section,i)=><section key={i}>
+        {Object.entries(section!).filter((entry): entry is [string, import('./core/record/types').Field<string> | import('./core/record/types').Field<import('./core/record/types').Prescription>] => entry[0]!=='homework' && !Array.isArray(entry[1])).map(([key,field])=><div className="sign-field" key={key}><div className="sign-field-head"><h2>{fields[key]}</h2><span className={'source source-'+field.source}>{labels[field.source as Source]}</span></div><p className="sign-value">{display(field.value)}</p></div>)}
+      </section>)}
+      <section><h2>作业</h2>{encounter.plan.homework.length===0?<p>暂无</p>:encounter.plan.homework.map(h=><div className="sign-field" key={h.id}><h3>{h.title}</h3><p>{h.detail}</p><p>{h.schedule.kind==='daily'?'每天 '+h.schedule.time:h.schedule.kind==='shichen'?h.schedule.shichen+'时':h.schedule.kind==='jieqi'?h.schedule.jieqi:h.schedule.date+(h.schedule.time?' '+h.schedule.time:'')}{h.durationDays?' · '+h.durationDays+'天':''}</p><span className={'source source-'+h.source}>{labels[h.source]}</span></div>)}</section>
+    </article>
+    {onRevise&&<form className="sign-editor" onSubmit={event=>{event.preventDefault();if(busy||retry||!instruction.trim())return;setBusy(true);setError('');void onRevise(encounter,instruction).then(next=>{setEncounter(next);setInstruction('')}).catch(cause=>setError(cause instanceof Error?cause.message:'改稿未完成，请重试。')).finally(()=>setBusy(false))}}>
+      <label>说说怎么改<textarea rows={2} value={instruction} disabled={busy||retry} onChange={e=>setInstruction(e.target.value)} placeholder="用键盘话筒说话，或打字：去掉某味药、作业改成每晚泡脚"/></label><button disabled={busy||retry||!instruction.trim()}>按意见改稿</button>
+    </form>}
+    <footer className="sign-foot">{error&&<p role="alert">{error}</p>}<div className="sign-actions"><button className="sign-primary" disabled={busy} onClick={async()=>{setBusy(true);setError('');try{await onConfirm(acceptDraftForSigning(encounter))}catch(cause){setRetry(true);setError(cause instanceof Error?cause.message:'发出未完成，请重试。')}finally{setBusy(false)}}}>{retry?'重发交还':'签字发出'}</button>{onCancel&&<button disabled={busy||retry} onClick={onCancel}>返回</button>}</div></footer>
+  </main>
 }

@@ -13,13 +13,15 @@
 - 老师端 `signed-encounters` 只存索引 `{ eventId, encounterId, version, student, createdAt }`，不留病历内容（eventId 供康币扣费的 recordHash 与改方的 previousOf 使用）；学生端才保留旧版病历。
 - 签名模块及其依赖不导入 `core/llm`（测试检查），签字路径里不存在模型调用。
 - 老师端本地集合：`consult-package`、`attachments`、`signed-encounters`、`case-book`、`record-log`、`pending-handover`，登记在 `app/src/core/store/README.md`。
-- 验收测试：`app/src/core/record/record.test.ts`（12 项，合成身份与合成病历）。界面 `app/src/SignEncounterPage.tsx` 用颜色区分来源，AI 草稿逐项“采用/修改”，未确认完不能签字，交还失败时提示“未送达，可重发”；截图 `docs/screenshots/sign-encounter-375.png`。
+- 验收测试：`app/src/core/record/record.test.ts`（12 项，合成身份与合成病历）。界面 `app/src/SignEncounterPage.tsx` 用整张卡片及来源标记展示草稿；真人按“签字发出”时由纯函数 acceptDraftForSigning 统一确认 ai_draft（含作业与结果），然后才签字；改稿阶段不确认来源，交还失败可重发；截图 `docs/screenshots/sign-encounter-375.png`。
 
 ## M1-12 面诊记录
 
 - `in-person.ts`：老师端新建 `kind: 'in_person'` 病历（`startInPersonEncounter`）；`recordIntakeField` 由老师代录 intake，非空项来源为 `teacher`、`note` 为 `in_person`，每次录入都过 `core/redflags` 的本地急症红线，命中只提示“请立即安排就医”不阻断（老师在现场判断）。`addInPersonPhoto` 接收 M1-09 `photo.ts` 已处理的 `AttachmentRef`，最多 4 张。
 - 面诊是 `intake` 来源硬规则的唯一例外，且只认 `kind === 'in_person'`：`signEncounter` 与 `verifySignedEncounter` 都按 kind 放行，同样内容改成 `remote_async` 后签不了、学生端也拒收。学生端展示用 `intakeDisplayLabel` 在主诉旁标“老师代录”。
 - 起草复用 M1-10：`inPersonConsultPackage` 把面诊病历转成 `ConsultPackage` 交给 `draftEncounter`；审改签字与交还复用 M1-11：`signAndHandoverInPerson` 调用 `signEncounter` + `completeSigning`，成功后删除 `in-person-draft`。发送失败抛 `InPersonUndeliveredError`（带签名事件 id），`retryInPersonHandover` 重发同一条事件，送达后才销毁资料、写索引与医案。照片字节存 `attachments` 集合，交还时随问诊资料一并删除。
-- 老师端界面 `app/src/InPersonPage.tsx`：选学生（本机索引或输入公钥）→ 代录主诉与病史 → 当面拍照 → 复用 `SignEncounterPage` 审改签字。截图 `docs/screenshots/in-person-375.png`。
+- 老师端界面 `app/src/InPersonPage.tsx`：选学生（本机已有签字索引或已收到的问诊）→ 一个输入框逐句代录、固定追问可跳过 → 当面拍照 → 复用 `SignEncounterPage` 改稿与一键签字。截图 `docs/screenshots/in-person-375.png`。
 - 验收测试：`app/src/core/record/in-person.test.ts`（5 项，合成身份与合成病历）。
 - 本机集合：`in-person-draft`（进行中的面诊草稿，含代录原文与附件索引，签字交还成功后删除）、`record-outbox`（中继设置接好前的待发签名病历）。
+
+M1-20：面诊页面将 record.signed 接入共享 transport，发送成功后才删除面诊草稿；未连接或发送失败保留原文，可在当前会话重发。现有签名病历中的照片仍只有 AttachmentRef，本卡未扩展面诊照片字节的回传协议（与远程学生自持照片不同），不得把签名病历发送成功描述为照片字节也已交还。

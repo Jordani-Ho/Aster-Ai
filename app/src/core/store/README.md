@@ -158,3 +158,5 @@ M1-15b集合：`pilot-metrics` 使用随机UUID键，值仅为 `{idPrefix, durat
 M1-17：新增 `recovery-words/self` 保存自动生成时的恢复词，值为 `{words}`，仍由同一个本机AES-GCM库加密；中继/文件业务备份排除此集合。只在高级恢复页本人主动展开后显示。可选PRF保护启用后meta.deviceKey改存字面标志 `prf`，meta.identity由瞬时PRF派生AES-GCM包装，数据库不保留可直接解锁的CryptoKey；resumeStore要求外部临时unlockKey。未启用时保持原设备解锁格式。clearStore仅在本人勾选替换并确认恢复时调用。
 
 M1-18 集合：`care-plans`（键为老师公钥，值 `{constitution, points, avoid, updatedAt, version}`，学生端只存“我的老师”名单内签发的调养方案，新版本替换旧版）；`tongue-photos`（键为 YYYY-MM-DD，值为压缩去 EXIF 的 JPEG 字节，每天一张、同日覆盖）；`mirror`（键为 YYYY-MM-DD，值 `{greeting, today, trend}`，当日建议缓存，同一天只生成一次）；`self-ratings`（键为 YYYY-MM-DD，值 `{date, score}`，自评 1～5 分，同日覆盖）。均 AES-GCM 本机加密；舌象字节为 bin 记录，随完整备份恢复，中继备份显式排除。
+
+M1-20：settings 新增 teacher-template 键，值为本机 TeacherTemplate（name/focus/notes，保持默认 id 与病历顺序）；仅老师模板，沿用既有 settings 的加密、备份与恢复路径，无原始问诊或个人资料。

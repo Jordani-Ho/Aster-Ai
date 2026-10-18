@@ -27,3 +27,7 @@ M1-15b：部署可选 `VITE_MODEL_GATEWAY_URL`（完整社区网关基址，结�
 M1-17：首次自动建立本机身份，只选老师/学生；邀请学生、邀请兑换和账本登记不要求输入后台编号。高级恢复默认收起；可选刷脸以真实PRF取值决定是否可用，缺失不会阻断基础功能。后台签名与加密不变。边界和验证见 src/core/onboarding/README.md。
 
 M1-17：提醒入口移入“设置”，优先自动使用部署的VITE_PUSH_GATEWAY_URL与VITE_PUSH_VAPID_PUBLIC_KEY；兼容手工配置放在默认收起的高级区。提醒仍由本人点按钮授权，未改订阅/推送鉴权或消息文案。
+
+M1-20（独立界面部分，等待 M1-18）：TeacherWorkspace 提供今天/面诊/远程/管理四页。今天与远程共用本地急症排序；远程点开直接起草整张卡片，“说说怎么改”走 drafting/revise，改后仍为 ai_draft。SignEncounterPage 只在真人点击“签字发出”时用 record/sign.acceptDraftForSigning 统一改为 teacher、note: ai_accepted，随后执行原签字交还；签字模块不引用模型。原始 AI 草稿仍用于修改率对照。管理页可保存本机问诊模板，下一次起草读取；设置组件持续挂载以保留后台每日备份。面诊从已有索引/收到的问诊选择学生，用一个输入框和键盘话筒逐句代录与拍照，经共享 transport 发出签名病历。
+
+M1-18 接口：TeacherWorkspace.mirror 接收老师自己的镜子组件；renderCarePlan(student) 接收给选定学生签发调养方案的组件。当前两处只有明确占位，不实现 care.plan 协议或每日建议缓存；须等 M1-18 合并后在同一 PR rebase 接入并完成次日建议验收。375px 截图：docs/screenshots/teacher-{today,in-person,remote,manage}-375.png。

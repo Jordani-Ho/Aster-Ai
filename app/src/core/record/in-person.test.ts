@@ -10,6 +10,7 @@ import {
   addInPersonPhoto,
   intakeDisplayLabel,
   loadInPersonDraft,
+  knownStudents,
   recordIntakeField,
   retryInPersonHandover,
   saveInPersonDraft,
@@ -184,3 +185,5 @@ describe('M1-12 面诊记录验收', () => {
     expect(existsSync(new URL('../../../../docs/screenshots/in-person-375.png', import.meta.url))).toBe(true)
   })
 })
+
+it('M1-20 首次收到问诊即可选学生，不需已有签字记录或手填身份',async()=>{const store=new MemoryStore();await store.put('consult-package','first',{encounter:fresh()});expect(await knownStudents(store)).toEqual([student]);await store.put('signed-encounters','old',{student});expect(await knownStudents(store)).toEqual([student])})

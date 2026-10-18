@@ -1,6 +1,6 @@
 # 老师起草
 
-`draftEncounter(pkg, template, cases, llm, options?)` 直接使用 record/types 的 Encounter 和 ConsultPackage、M1-07 的 LlmClient。调用方传入自己的已配置客户端；本模块不配置凭据、不持久化资料、不签字、不发消息。
+`draftEncounter(pkg, template, cases, llm, options?)` 直接使用 record/types 的 Encounter 和 ConsultPackage、M1-07 的 LlmClient。调用方传入自己的已配置客户端；起草函数不配置凭据、不持久化问诊资料、不签字、不发消息；本机模板读写见下文 template.ts。
 
 options.level 默认 record：只允许四诊与症状摘要。pattern 再允许证候、病机、依据和治则；prescription 再允许方子、作业与医嘱。重起草从学生资料建立全新草稿，不沿用已存在的老师判断或结果。模型字段来源强制 ai_draft，缺失为 unknown/null，非法字段注明原因。
 
@@ -13,3 +13,5 @@ options.level 默认 record：只允许四诊与症状摘要。pattern 再允许
 没有 M1-05 传输代码，直接接收 ConsultPackage，历史签名与附件校验由接收层负责；本模块不解析历史病历、不读取附件二进制。
 
 测试全部使用合成资料及模拟 LlmClient，无真实网关请求。
+
+M1-20：reviseEncounter(input, instruction, llm) 加载 prompts/teacher/revise-draft.md，只接受 fourExams/judgment/plan/已有 outcome 的字段补丁。省略字段保留原值，value:null 表示明确清空；格式不合法、超时或无有效补丁时抛安全错误且保留整张原卡。更新字段与作业强制 ai_draft，不采纳模型来源、身份、profile、intake、附件或版本；不签字、不发送。template.ts 读写本机加密 settings/teacher-template，限制名称/要点长度，保留默认病历顺序与模板 id，读入后供下次起草使用。无新依赖。
