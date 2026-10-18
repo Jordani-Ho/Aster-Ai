@@ -1,3 +1,4 @@
+import { DailyMirrorCard } from './DailyMirrorCard'
 import { PasskeySettings, configuredRelays } from './PasskeySettings'
 import { authenticatePasskey } from './core/onboarding/passkey'
 import { recoverPasskey } from './core/onboarding/identity-relay'
@@ -154,11 +155,11 @@ export function App() {
   if (homeworkPage && store && identity) return <><div hidden><BackupSettings identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={store} onBack={() => setHomeworkPage(false)} /></Suspense></>
   if (intakePage && store && identity) return <><div hidden><BackupSettings identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开采集页…</p>}><IntakePage store={store} identity={identity} sendConsult={stack?.sendConsult} onBack={() => setIntakePage(false)} /></Suspense></>
   if (recordsPage && store && identity) return <Suspense fallback={<p>正在打开病历…</p>}><StudentRecordsPage identity={identity} store={store} onBack={() => setRecordsPage(false)} /></Suspense>
-  if (role==='teacher' && store && identity) return <Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherWorkspace identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} status={<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p>} settings={<details><summary>设置</summary>
+  if (role==='teacher' && store && identity) return <Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherWorkspace identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} status={<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p>} ledgerPanel={<LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus}/>} settings={<details><summary>设置</summary>
       <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button onClick={()=>void chooseRole('student')}>我是学生</button></details>
       <TeacherListSettings store={store}/>{role==='teacher'&&<PilotSettings store={store}/>}
       <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p>
-      <BackupSettings identity={identity} store={store}/><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus}/>
+      <BackupSettings identity={identity} store={store}/>
       <PasskeySettings identity={identity} store={store} defaults={defaultRelays}/>
       <PushSettings identity={identity}/>
       <AdvancedRecovery store={store} onRestore={replaceIdentity}/>
@@ -171,6 +172,7 @@ export function App() {
     {identity&&role&&<>
       <h2>{role==='teacher'?'老师首页':'问诊首页'}</h2>
       <p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':stackStatus==='rejected'?'连接未成功，请联系老师':'尚未连接'}</p>
+      {store&&<section><h2>我的镜子</h2><DailyMirrorCard store={store} llm={llm}/></section>}
       {<><p><button onClick={()=>setIntakePage(true)}>开始采集</button></p><p><button onClick={()=>setRecordsPage(true)}>我的病历</button></p><p><button onClick={()=>setHomeworkPage(true)}>今日作业</button></p></>}
     </>}
     {store&&identity&&<details><summary>设置</summary>

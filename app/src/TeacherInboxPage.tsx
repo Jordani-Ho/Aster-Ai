@@ -1,3 +1,4 @@
+import { CarePlanStudentPicker } from './TeacherCarePlan'
 import { loadTeacherTemplate } from './core/drafting/template'
 import { reviseEncounter } from './core/drafting/revise'
 import { prioritizeConsults, urgentConsult } from './core/inbox/priority'
@@ -157,7 +158,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
         {status && <p role="status" className="inbox-status">{status}</p>}
         {error && <p role="alert" className="inbox-error">{error}</p>}
       </div>
-      <section className="inbox-card"><h2>这位学生的调养方案</h2>{renderCarePlan ? renderCarePlan(selected.sender) : <p>调养方案正在接入，暂未开放。</p>}</section>
+      <section className="inbox-card"><h2>这位学生的调养方案</h2>{renderCarePlan ? renderCarePlan(selected.sender) : null}</section>
       <SignEncounterPage
         initial={draft}
         onConfirm={confirm}
@@ -191,5 +192,6 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
         <div className="inbox-actions"><button disabled={busy || !state?.ready} onClick={() => void startDraft(consult)}>打开问诊</button></div>
       </article>
     })}
+    {renderCarePlan && <CarePlanStudentPicker store={store} render={renderCarePlan}/>}
   </main>
 }

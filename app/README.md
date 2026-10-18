@@ -28,6 +28,8 @@ M1-17：首次自动建立本机身份，只选老师/学生；邀请学生、�
 
 M1-17：提醒入口移入“设置”，优先自动使用部署的VITE_PUSH_GATEWAY_URL与VITE_PUSH_VAPID_PUBLIC_KEY；兼容手工配置放在默认收起的高级区。提醒仍由本人点按钮授权，未改订阅/推送鉴权或消息文案。
 
-M1-20（独立界面部分，等待 M1-18）：TeacherWorkspace 提供今天/面诊/远程/管理四页。今天与远程共用本地急症排序；远程点开直接起草整张卡片，“说说怎么改”走 drafting/revise，改后仍为 ai_draft。SignEncounterPage 只在真人点击“签字发出”时用 record/sign.acceptDraftForSigning 统一改为 teacher、note: ai_accepted，随后执行原签字交还；签字模块不引用模型。原始 AI 草稿仍用于修改率对照。管理页可保存本机问诊模板，下一次起草读取；设置组件持续挂载以保留后台每日备份。面诊从已有索引/收到的问诊选择学生，用一个输入框和键盘话筒逐句代录与拍照，经共享 transport 发出签名病历。
+M1-20：TeacherWorkspace 提供今天/面诊/远程/管理四页。今天与远程共用本地急症排序；远程点开直接起草整张卡片，“说说怎么改”走 drafting/revise，改后仍为 ai_draft。SignEncounterPage 只在真人点击“签字发出”时用 record/sign.acceptDraftForSigning 统一改为 teacher、note: ai_accepted，随后执行原签字交还；签字模块不引用模型。原始 AI 草稿仍用于修改率对照。管理页可保存本机问诊模板，下一次起草读取；设置组件持续挂载以保留后台每日备份。面诊从已有索引/收到的问诊选择学生，用一个输入框和键盘话筒逐句代录与拍照，经共享 transport 发出签名病历。
 
-M1-18 接口：TeacherWorkspace.mirror 接收老师自己的镜子组件；renderCarePlan(student) 接收给选定学生签发调养方案的组件。当前两处只有明确占位，不实现 care.plan 协议或每日建议缓存；须等 M1-18 合并后在同一 PR rebase 接入并完成次日建议验收。375px 截图：docs/screenshots/teacher-{today,in-person,remote,manage}-375.png。
+TeacherWorkspace 保留 mirror 和 renderCarePlan 组件扩展点，默认已接入 M1-18。375px 截图：docs/screenshots/teacher-{today,in-person,remote,manage}-375.png。
+
+M1-18 已合并后的接入：DailyMirrorCard 直接复用 currentCarePlan/getDailyMirror/currentJieqi/getWeather 与现有打卡、自评集合，展示当日建议、天气及打卡摘要；未知城市不取天气、请求失败不阻断。老师今天页可给自己定制，远程当前问诊卡片和已知学生入口可用 TeacherCarePlan 的单输入框起草、人工确认签发。学生已有首页暂复用同一只读镜子展示，以完成端到端次日验收；M1-19 的三页导航仍由其原任务施工。默认选现有老师名单第一位，与当前问诊默认一致。同日缓存不主动失效，新签方案次日起引用。
