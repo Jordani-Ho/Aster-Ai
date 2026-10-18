@@ -1,6 +1,11 @@
 import { test, expect } from './fixtures'
 test('V2-04 一句话草稿不入账，真人确认后钱账同步；退款、扣费与康币停用互不影响',async({people})=>{
  const teacher=people.teacher.page,student=people.student.page
+ // 邀请在学生端建立账本；此用例独立登记老师的空账，不预充值。
+ await teacher.evaluate(async({teacher,student})=>{
+  const p='/src/core/store/index.ts',r='/src/core/ledger/runtime.ts',q='/src/core/ledger/sync.ts'
+  await(await import(r)).restoreWithLedgerPaused(async()=>{const s=await(await import(p)).resumeStore(),sync=(await import(q)).createLedgerSync({identity:s.identity,store:s.store,send:async()=>{}});try{await sync.open(teacher,student)}finally{await sync.close();s.store.close();s.identity.privateKey.fill(0)}})
+ },{teacher:people.teacher.actor.pubkey,student:people.student.actor.pubkey})
  let events=[{type:'topup',amount:'100'},{type:'gift',amount:'20'}],calls=0
  await teacher.route('https://model.synthetic.example/v1/chat/completions',async route=>{
   if(!route.request().postData()?.includes('钱账草稿'))return route.fallback()
