@@ -57,12 +57,13 @@ export async function startGatewayFixture({ directory, members }) {
   let gateway
   try {
     const upstreamUrl = await listen(upstream)
-    gateway = createGateway({ membersFile, seedTokenFile, upstreamBaseUrl: upstreamUrl, upstreamModel: 'synthetic-fixture',
+    const config = {fallbackEnabled:true,proxyAllowedUrls:['https://model.synthetic.example/v1/chat/completions'], membersFile, seedTokenFile, upstreamBaseUrl: upstreamUrl, upstreamModel: 'synthetic-fixture',
       upstreamApiKeyEnv: 'ASTER_E2E_UNUSED_KEY', maxBodyBytes: 1048576, upstreamTimeoutMs: 5000,
       rateLimit: { windowMs: 60000, maxPerWindow: 500 }, logFile: path.join(directory, 'gateway.log'),
       push: { subscriptionsFile: path.join(directory, 'push.json'), send: async (_subscription, text) => { stats.pushes++; stats.lastPushText = text } },
-    })
+    }
+    gateway=createGateway(config,{fetchUpstream:(url,init)=>fetch(url==='https://model.synthetic.example/v1/chat/completions'?upstreamUrl+'/v1/chat/completions':url,init)})
     const url = await listen(gateway)
-    return { url, upstreamUrl, stats, async resetMembers(){await writeFile(membersFile,'[]');await writeFile(seedTokenFile,JSON.stringify({tokenHash:createHash('sha256').update('SYNTHETIC_DEPLOYMENT_TOKEN').digest('hex')}))}, async close() { await closeServer(gateway); await closeServer(upstream) } }
+    return { url, upstreamUrl, stats, setFallbackEnabled(value){config.fallbackEnabled=value}, async resetMembers(){await writeFile(membersFile,'[]');await writeFile(seedTokenFile,JSON.stringify({tokenHash:createHash('sha256').update('SYNTHETIC_DEPLOYMENT_TOKEN').digest('hex')}))}, async close() { await closeServer(gateway); await closeServer(upstream) } }
   } catch (error) { await closeServer(gateway); await closeServer(upstream); throw error }
 }

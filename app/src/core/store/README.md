@@ -164,3 +164,5 @@ M1-20：settings 新增 teacher-template 键，值为本机 TeacherTemplate（na
 M1-20 调养方案集合：care-plan-pending 使用随机 UUID 键，值 {student,event}，仅签字后未成功发出时保留；发出并完成本机收尾后删除。care-plan-issued 使用随机 UUID 键，值 {student,version,eventId}，仅用于下次签发递增版本，不保留学生方案内容。老师自己的方案是本人的资料，复用 care-plans，以本人为收件人签名验签后存储。集合均 AES-GCM 加密并沿用备份恢复。
 
 M1-20 面诊照片：record-photo-index 随机 UUID 键 -> {eventId,refId,sha256,dataKey}，record-photos 随机 UUID 键 -> 压缩去 EXIF 的 JPEG 字节。所有关联值加密，不用身份或内容哈希作明文键；学生收到有效老师签名并核对引用后才保存。照片只在学生本机和含二进制的完整加密文件备份中，中继业务备份不含字节。
+
+M1-21：settings/personal-model -> {provider,baseUrl,model,apiKey,testedAt}，凭证与其他字段一起 AES-GCM 加密，仅本人设备保存；沿用结构化中继备份和加密文件备份。testedAt 只在本人模型连接验证成功后写入，恢复后不要求重填。设置修改未测试成功不会覆盖原记录。

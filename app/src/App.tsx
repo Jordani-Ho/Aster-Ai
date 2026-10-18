@@ -6,11 +6,13 @@ import { PasskeyUnlockRequired, resumeStore, protectStore } from './core/store'
 import { createBackupManager } from './core/backup'
 import { communityBackupRelay } from './core/backup/relay'
 import { PilotSettings } from './PilotSettings'
-import { createLlmClient } from './core/llm'
+import {createPersonalClient, loadPersonalModel, type PersonalModel} from './core/llm/personal'
+import {ModelSettings} from './ModelSettings'
+import {InviteSettings} from './InviteSettings'
 import { LedgerSettings } from './LedgerSettings'
 import { BackupSettings } from './BackupSettings'
 import './homework.css'
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, useMemo } from 'react'
 import { PushSettings } from './PushSettings'
 
 import type { Identity } from './core/identity'
@@ -39,6 +41,9 @@ const pushVapidPublicKey = env.VITE_PUSH_VAPID_PUBLIC_KEY ?? ''
 const gateway = gatewayBase(env.VITE_MODEL_GATEWAY_URL ?? pushGatewayUrl)
 
 export function App() {
+  const [modelConfig,setModelConfig]=useState<PersonalModel|null|undefined>(undefined)
+  const [backupModel,setBackupModel]=useState(false)
+  const [restoreNotice,setRestoreNotice]=useState('')
   const [locked,setLocked]=useState(false),[recovering,setRecovering]=useState(false),[allowReplace,setAllowReplace]=useState(false)
   const [homeworkPage, setHomeworkPage] = useState(false)
   const [intakePage, setIntakePage] = useState(false)
@@ -85,6 +90,13 @@ export function App() {
     }).catch(() => {})
     return () => { cancelled = true }
   }, [identity, stackRevision])
+
+  useEffect(()=>{
+    if(!identity||!storeRef.current)return
+    let cancelled=false;setBackupModel(false)
+    void loadPersonalModel(storeRef.current).then(c=>{if(!cancelled)setModelConfig(c)}).catch(()=>{if(!cancelled)setModelConfig(null)})
+    return()=>{cancelled=true}
+  },[identity,stackRevision])
 
   // M1-15a：一个 transport + 收件分发 + 账本同步；有中继配置才启动。
   useEffect(() => {
@@ -137,7 +149,7 @@ export function App() {
     await stackRef.current?.close();stackRef.current=null
     storeRef.current?.close();storeRef.current=null
     identityRef.current?.privateKey.fill(0);identityRef.current=null
-    setIdentity(null);setRole(null)
+    setIdentity(null);setRole(null);setModelConfig(undefined);setRestoreNotice('')
     await clearStore()
     const fresh=await openStore(result);storeRef.current=fresh;identityRef.current=result;await after?.(fresh);const saved=await fresh.get('settings','role') as {role?:Role}|undefined;setRole(saved?.role??null);setIdentity(result);setLocked(false)
     setIntakePage(false);setRecordsPage(false);setHomeworkPage(false);setError('')
@@ -151,21 +163,25 @@ export function App() {
 
   const store = storeRef.current
   const stack = stackRef.current
-  const llm = identity && env.VITE_MODEL_GATEWAY_URL ? createLlmClient({ kind: 'gateway', baseUrl: env.VITE_MODEL_GATEWAY_URL, secretKey: identity.privateKey }) : null
-  if (homeworkPage && store && identity) return <><div hidden><BackupSettings identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={store} onBack={() => setHomeworkPage(false)} /></Suspense></>
-  if (intakePage && store && identity) return <><div hidden><BackupSettings identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开采集页…</p>}><IntakePage store={store} identity={identity} sendConsult={stack?.sendConsult} onBack={() => setIntakePage(false)} /></Suspense></>
+  const modelGateway=useMemo(()=>identity&&env.VITE_MODEL_GATEWAY_URL?{baseUrl:env.VITE_MODEL_GATEWAY_URL,secretKey:identity.privateKey}:null,[identity])
+  const llm=useMemo(()=>modelConfig?createPersonalClient(modelConfig,modelGateway,setBackupModel):null,[modelConfig,modelGateway])
+  const modelNotice=<>{restoreNotice&&<p role="status">{restoreNotice}</p>}{backupModel&&<p role="status" style={{fontSize:12}}>今天用的是备用模型，请检查您的模型账户</p>}</>
+  const modelSettings=store?<details><summary>我的大模型</summary><ModelSettings key={modelConfig?.testedAt??'new'} store={store} gateway={modelGateway} current={modelConfig??null} onSaved={config=>{setModelConfig(config);window.dispatchEvent(new Event('aster:model-changed'))}}/></details>:null
+  if(identity&&role&&store&&!modelConfig)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1>{modelNotice}{modelConfig===undefined?<p>正在读取接入设置…</p>:<><ModelSettings initial store={store} gateway={modelGateway} current={null} onSaved={setModelConfig}/>{role==='teacher'&&<details><summary>社区首次登记</summary><InviteSettings identity={identity} gateway={gateway}/></details>}<details><summary>从备份恢复接入</summary><BackupSettings onRestored={setRestoreNotice} identity={identity} store={store}/><AdvancedRecovery store={store} onRestore={replaceIdentity}/></details></>}</main>
+  if (homeworkPage && store && identity) return <>{modelNotice}<div hidden><BackupSettings onRestored={setRestoreNotice} identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={store} onBack={() => setHomeworkPage(false)} /></Suspense></>
+  if (intakePage && store && identity) return <>{modelNotice}<div hidden><BackupSettings onRestored={setRestoreNotice} identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开采集页…</p>}><IntakePage store={store} identity={identity} llm={llm} sendConsult={stack?.sendConsult} onBack={() => setIntakePage(false)} /></Suspense></>
   if (recordsPage && store && identity) return <Suspense fallback={<p>正在打开病历…</p>}><StudentRecordsPage identity={identity} store={store} onBack={() => setRecordsPage(false)} /></Suspense>
-  if (role==='teacher' && store && identity) return <Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherWorkspace identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} status={<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p>} ledgerPanel={<LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus}/>} settings={<details><summary>设置</summary>
+  if (role==='teacher' && store && identity) return <Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherWorkspace identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} status={<>{modelNotice}<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p></>} ledgerPanel={<LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus}/>} settings={<details><summary>设置</summary>
       <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button onClick={()=>void chooseRole('student')}>我是学生</button></details>
-      <TeacherListSettings store={store}/>{role==='teacher'&&<PilotSettings store={store}/>}
+      {modelSettings}<TeacherListSettings store={store}/>{role==='teacher'&&<PilotSettings store={store}/>}
       <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p>
-      <BackupSettings identity={identity} store={store}/>
+      <BackupSettings onRestored={setRestoreNotice} identity={identity} store={store}/>
       <PasskeySettings identity={identity} store={store} defaults={defaultRelays}/>
       <PushSettings identity={identity}/>
       <AdvancedRecovery store={store} onRestore={replaceIdentity}/>
     </details>} /></Suspense>
   return <main style={{fontFamily:'system-ui, sans-serif',padding:'24px 16px',maxWidth:480,margin:'0 auto'}}>
-    <h1>知衡</h1>
+    <h1>知衡</h1>{modelNotice}
     {loading&&<p>正在准备…</p>}{error&&<p role="alert">{error}</p>}
     {!loading&&locked&&<button onClick={()=>void(async()=>{try{const {key}=await authenticatePasskey(),session=await resumeStore({unlockKey:key});if(!session)throw Error();storeRef.current=session.store;identityRef.current=session.identity;const saved=await session.store.get('settings','role') as {role?:Role}|undefined;setRole(saved?.role??null);setIdentity(session.identity);setLocked(false);setError('')}catch{setError('解锁未完成，请重试或使用恢复资料。')}})()}>刷脸解锁</button>}
     {!loading&&identity&&!role&&<section><h2>您是老师还是学生？</h2><button onClick={()=>void chooseRole('teacher')}>我是老师</button>{' '}<button onClick={()=>void chooseRole('student')}>我是学生</button></section>}
@@ -177,9 +193,9 @@ export function App() {
     </>}
     {store&&identity&&<details><summary>设置</summary>
       <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button disabled={role==='student'} onClick={()=>void chooseRole('student')}>我是学生</button></details>
-      <TeacherListSettings store={store}/>{role==='teacher'&&<PilotSettings store={store}/>}
+      {modelSettings}<TeacherListSettings store={store}/>{role==='teacher'&&<PilotSettings store={store}/>}
       <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p>
-      <BackupSettings identity={identity} store={store}/><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus}/>
+      <BackupSettings onRestored={setRestoreNotice} identity={identity} store={store}/><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus}/>
       <PasskeySettings identity={identity} store={store} defaults={defaultRelays}/>
       <PushSettings identity={identity}/>
       <AdvancedRecovery store={store} onRestore={replaceIdentity}/>

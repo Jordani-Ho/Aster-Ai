@@ -12,11 +12,11 @@ test('existing setup supports phone deployment code and rerun retains members an
  try{
   await mkdir(bin);await writeFile(path.join(bin,'docker'),'#!/bin/sh\nexit 0\n',{mode:0o755})
   if(process.platform==='win32'){const result=spawnSync('wsl.exe',['-d','Ubuntu','--exec','chmod','+x',linux(path.join(bin,'docker'))]);assert.equal(result.status,0)}
-  await writeFile(path.join(home,'.env'),'APP_DOMAIN=app.example\nRELAY_DOMAIN=relay.example\nVAPID_SUBJECT=mailto:synthetic@example.invalid\nVAPID_PUBLIC_KEY=synthetic\nVAPID_PRIVATE_KEY=synthetic\nSELF_TEST_MEMBER=0\nMEMBER_PUBKEYS=\n')
+  await writeFile(path.join(home,'.env'),'APP_DOMAIN=app.example\nRELAY_DOMAIN=relay.example\nVAPID_SUBJECT=mailto:synthetic@example.invalid\nVAPID_PUBLIC_KEY=synthetic\nVAPID_PRIVATE_KEY=synthetic\nSELF_TEST_MEMBER=0\nMEMBER_PUBKEYS=\nMODEL_FALLBACK_ENABLED=false\nMODEL_PROXY_ALLOWED_URLS=https://synthetic.example/v1/chat/completions\n')
   const env={SKIP_BUILD:'1',PATH:process.platform==='win32'?linux(bin)+':/usr/local/bin:/usr/bin:/bin':bin+':'+process.env.PATH},script=path.join(home,'setup.sh'),out=bash(script,env)
   const token=await readFile(path.join(home,'data/teacher-setup-code.txt'),'utf8'),seed=await readFile(path.join(home,'data/gateway/seed.json'),'utf8')
   assert.ok(token.trim().length>=40);assert.ok(!seed.includes(token.trim()));assert.ok(!out.includes(token.trim()))
-  const cfg=JSON.parse(await readFile(path.join(home,'data/gateway-config.json'),'utf8'));assert.equal(cfg.membersFile,'/app/data/members.json');assert.equal(cfg.seedTokenFile,'/app/data/seed.json')
+  const cfg=JSON.parse(await readFile(path.join(home,'data/gateway-config.json'),'utf8'));assert.equal(cfg.membersFile,'/app/data/members.json');assert.equal(cfg.seedTokenFile,'/app/data/seed.json');assert.equal(cfg.fallbackEnabled,false);assert.deepEqual(cfg.proxyAllowedUrls,['https://synthetic.example/v1/chat/completions']);assert.equal(cfg.upstreamModel,null)
   assert.match(await readFile(path.join(home,'data/relay-config.toml'),'utf8'),/community_open = true/)
   await writeFile(path.join(home,'data/gateway/members.json'),JSON.stringify(['a'.repeat(64)]));bash(script,env)
   assert.deepEqual(JSON.parse(await readFile(path.join(home,'data/gateway/members.json'),'utf8')),['a'.repeat(64)])

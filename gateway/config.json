@@ -1,8 +1,8 @@
 {
   "port": 8787,
   "publicUrl": null,
-  "upstreamBaseUrl": "https://api.deepseek.com",
-  "upstreamModel": "deepseek-chat",
+  "upstreamBaseUrl": null,
+  "upstreamModel": null,
   "upstreamApiKeyEnv": "UPSTREAM_API_KEY",
   "membersFile": "./members.json",
   "maxBodyBytes": 1048576,
@@ -13,5 +13,7 @@
   },
   "push": {
     "subscriptionsFile": "./push-subscriptions.json"
-  }
+  },
+  "fallbackEnabled": true,
+  "proxyAllowedUrls": []
 }

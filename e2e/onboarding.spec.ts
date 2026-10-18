@@ -1,10 +1,10 @@
-import {test,expect,runtime} from './fixtures'
+import {test,expect,runtime,connectModel,mockModel} from './fixtures'
 import {actors} from './actors.mjs'
 const forbidden=/密钥|助记词|公钥|npub|十六进制/
 async function settings(page:import('@playwright/test').Page){const manage=page.getByRole('button',{name:'管理',exact:true});if(await manage.count())await manage.click();const summary=page.locator('summary').filter({hasText:/^设置$/});if(await summary.locator('..').getAttribute('open')===null)await summary.click()}
-test('first open asks only role; invitation needs no student input and automatically adds teacher and book',async({people,browser})=>{
+test('first open asks role then model; invitation automatically registers student and automatically adds teacher and book',async({people,browser})=>{
  const fresh=await browser.newContext({baseURL:runtime.baseURL,viewport:{width:375,height:812}})
- try{const page=await fresh.newPage();await page.goto('/');await expect(page.getByRole('heading',{name:'您是老师还是学生？'})).toBeVisible();expect(await page.locator('body').innerText()).not.toMatch(forbidden);await page.getByRole('button',{name:'我是老师',exact:true}).click();await expect(page.getByRole('heading',{name:'今天',exact:true})).toBeVisible();expect(await page.locator('input:visible,textarea:visible').count()).toBe(0);await settings(page);expect(await page.locator('body').innerText()).not.toMatch(forbidden)}finally{await fresh.close()}
+ try{await mockModel(fresh);const page=await fresh.newPage();await page.goto('/');await expect(page.getByRole('heading',{name:'您是老师还是学生？'})).toBeVisible();expect(await page.locator('body').innerText()).not.toMatch(forbidden);await page.getByRole('button',{name:'我是老师',exact:true}).click();await connectModel(page);await expect(page.getByRole('heading',{name:'今天',exact:true})).toBeVisible();expect(await page.locator('input:visible,textarea:visible').count()).toBe(0);await settings(page);expect(await page.locator('body').innerText()).not.toMatch(forbidden)}finally{await fresh.close()}
  const student=people.student.page
  const state=await student.evaluate(async()=>{const p='/src/core/store/index.ts',session=await(await import(p)).resumeStore();try{return {teachers:await session.store.get('settings','teachers'),books:await session.store.list('ledger-index')}}finally{session.store.close();session.identity.privateKey.fill(0)}})
  expect(state.teachers).toContain(actors.teacher.pubkey);expect(state.books.some((v:any)=>v.value.teacher===actors.teacher.pubkey)).toBe(true)

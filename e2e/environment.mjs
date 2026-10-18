@@ -70,6 +70,7 @@ export async function startEnvironment(build) {
         if(Array.isArray(options.members))configText=configText.replace(/pubkey_whitelist = .*/, 'pubkey_whitelist = '+JSON.stringify(options.members))
         await writeFile(config,configText)
         if(!options.relayOnly)await gateway.resetMembers()
+        gateway.setFallbackEnabled(options.fallbackEnabled!==false)
         await stopRelay(); await rm(currentDatabase, { recursive: true, force: true })
         currentDatabase = await mkdtemp(path.join(directory, 'database-'))
         await bootRelay(); res.writeHead(200).end('{}')
@@ -82,7 +83,7 @@ export async function startEnvironment(build) {
     const app = await startWebApp({ gatewayUrl: gateway.url, relayUrl })
     closers.push(() => app.close())
     const baseURL = app.url
-    const runtime = { baseURL, relayUrl, controlURL, resetToken, gatewayUrl: gateway.url, build: { cached: build.cached, elapsedMs: build.elapsedMs, key: build.key }, phase: 'consultation-and-pilot' }
+    const runtime = { baseURL, upstreamUrl:gateway.upstreamUrl, relayUrl, controlURL, resetToken, gatewayUrl: gateway.url, build: { cached: build.cached, elapsedMs: build.elapsedMs, key: build.key }, phase: 'consultation-and-pilot' }
     const runtimeFile = path.join(directory, 'runtime.json'); await writeFile(runtimeFile, JSON.stringify(runtime))
     return { ...runtime, runtimeFile, close }
   } catch (error) { await close(); throw error }

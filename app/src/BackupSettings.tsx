@@ -5,18 +5,19 @@ import type { LocalStore } from './core/store'
 import { createBackupManager, type BackupStatus } from './core/backup'
 import { communityBackupRelay } from './core/backup/relay'
 const defaults=((import.meta as ImportMeta&{env:Record<string,string|undefined>}).env.VITE_COMMUNITY_RELAYS??'').split(',').map(value=>value.trim()).filter(Boolean)
-export function BackupSettings({identity,store}:{identity:Identity;store:LocalStore}) {
+export function BackupSettings({identity,store,onRestored}:{identity:Identity;store:LocalStore;onRestored?:(notice:string)=>void}) {
  const [status,setStatus]=useState<BackupStatus>({result:'never'}),[error,setError]=useState(''),[message,setMessage]=useState('')
  const [relaysText,setRelaysText]=useState(defaults.join('\n')),[revision,setRevision]=useState(0),[busy,setBusy]=useState(false),[monthly,setMonthly]=useState(true),[replace,setReplace]=useState(false)
  const managerRef=useRef<ReturnType<typeof createBackupManager>|null>(null)
  useEffect(()=>{
-  let disposed=false,manager:ReturnType<typeof createBackupManager>|undefined,relay:ReturnType<typeof communityBackupRelay>|undefined,pending=false
+  let disposed=false,manager:ReturnType<typeof createBackupManager>|undefined,relay:ReturnType<typeof communityBackupRelay>|undefined,pending=false,rerun=false
   const tick=async()=>{
-   if(pending||!manager||disposed)return
+   if(disposed||!manager)return
+   if(pending){rerun=true;return}
    pending=true;setBusy(true)
    try{await manager.ensureDaily();if(!disposed)setError('')}
    catch{if(!disposed)setError('自动备份未成功，下次打开应用会重试；也可先导出备份文件。')}
-   finally{if(!disposed){setStatus(await manager.status());setMonthly(await manager.monthlyFileDue());setBusy(false)}pending=false}
+   finally{if(!disposed){setStatus(await manager.status());setMonthly(await manager.monthlyFileDue());setBusy(false)}pending=false;if(rerun&&!disposed){rerun=false;void tick()}}
   }
   void (async()=>{
    const rows=await store.list('backup-config'),value=rows[0]?.value as {relays?:unknown}|undefined
@@ -27,8 +28,8 @@ export function BackupSettings({identity,store}:{identity:Identity;store:LocalSt
    await tick()
   })().catch(()=>{if(!disposed){setError('备份中继配置无效，请检查后保存。');setBusy(false)}})
   const timer=setInterval(()=>void tick(),60*60*1000),focus=()=>void tick()
-  window.addEventListener('focus',focus)
-  return()=>{disposed=true;clearInterval(timer);window.removeEventListener('focus',focus);manager?.close();relay?.close();managerRef.current=null}
+  window.addEventListener('focus',focus);window.addEventListener('aster:model-changed',focus)
+  return()=>{disposed=true;clearInterval(timer);window.removeEventListener('focus',focus);window.removeEventListener('aster:model-changed',focus);manager?.close();relay?.close();managerRef.current=null}
  },[identity,store,revision])
  const refresh=async()=>{const manager=managerRef.current;if(manager){setStatus(await manager.status());setMonthly(await manager.monthlyFileDue())}}
  const run=async(action:()=>Promise<unknown>)=>{setBusy(true);setError('');setMessage('');try{await action();await refresh()}catch(cause){setError(cause instanceof Error?cause.message:'备份操作失败，请重试')}finally{setBusy(false)}}
@@ -55,10 +56,10 @@ export function BackupSettings({identity,store}:{identity:Identity;store:LocalSt
   <p><button disabled={busy} onClick={()=>void download()}>导出加密备份文件（含照片）</button></p>
   <p>恢复会替换本机全部业务数据。中继备份不含照片；如果本机仍有照片，请先导出文件。</p>
   <label><input type="checkbox" checked={replace} onChange={e=>setReplace(e.target.checked)}/>我已保存需要保留的本机资料，允许替换</label>
-  <p><button disabled={busy||!replace} onClick={()=>void run(async()=>{if(!managerRef.current)throw Error('备份尚未就绪');await restoreWithLedgerPaused(()=>managerRef.current!.restoreLatest(true));setMessage('已从中继恢复')})}>从中继恢复最新备份</button></p>
+  <p><button disabled={busy||!replace} onClick={()=>void run(async()=>{if(!managerRef.current)throw Error('备份尚未就绪');await restoreWithLedgerPaused(()=>managerRef.current!.restoreLatest(true));onRestored?onRestored('已从中继恢复'):setMessage('已从中继恢复')})}>从中继恢复最新备份</button></p>
   <label>从加密备份文件恢复<input type="file" accept="application/json,.json" disabled={busy||!replace} onChange={event=>{
    const file=event.target.files?.[0];if(!file)return
-   void run(async()=>{if(file.size>64*1024*1024)throw Error('备份文件超过64MB，请在容量充足的设备恢复');if(!managerRef.current)throw Error('备份尚未就绪');const text=await file.text();await restoreWithLedgerPaused(()=>managerRef.current!.restoreFile(text,true));setMessage('已从加密文件恢复')})
+   void run(async()=>{if(file.size>64*1024*1024)throw Error('备份文件超过64MB，请在容量充足的设备恢复');if(!managerRef.current)throw Error('备份尚未就绪');const text=await file.text();await restoreWithLedgerPaused(()=>managerRef.current!.restoreFile(text,true));onRestored?onRestored('已从加密文件恢复'):setMessage('已从加密文件恢复')})
    event.target.value=''
   }}/></label>
  </details>

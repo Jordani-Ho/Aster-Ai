@@ -26,9 +26,11 @@ const config = {
   // 页面与网关同源（web 容器把 /push 与 /v1 反代到 gateway），
   // 所以 NIP-98 的 u 标签就是 https://APP_DOMAIN/... ，这里只需配置应用源。
   publicUrl: appOrigin,
-  upstreamBaseUrl: process.env.UPSTREAM_BASE_URL || 'https://api.deepseek.com',
-  upstreamModel: process.env.UPSTREAM_MODEL || 'deepseek-chat',
+  upstreamBaseUrl: process.env.UPSTREAM_BASE_URL || null,
+  upstreamModel: process.env.UPSTREAM_MODEL || null,
   upstreamApiKeyEnv: 'UPSTREAM_API_KEY',
+  fallbackEnabled: process.env.MODEL_FALLBACK_ENABLED !== 'false',
+  proxyAllowedUrls: (process.env.MODEL_PROXY_ALLOWED_URLS ?? '').split(',').map(value => value.trim()).filter(Boolean),
   membersFile: '/app/data/members.json',
   seedTokenFile: '/app/data/seed.json',
   maxBodyBytes: 1048576,

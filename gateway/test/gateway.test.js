@@ -285,7 +285,7 @@ describe('M1-07 模型网关验收', () => {
 
   it('6 改一行配置即可切换上游模型', async () => {
     const raw = readFileSync(new URL('../config.json', import.meta.url), 'utf8')
-    const switched = raw.replace('"upstreamModel": "deepseek-chat"', '"upstreamModel": "synthetic-model-b"')
+    const switched = raw.replace(/"upstreamModel": (?:null|"[^"]*")/, '"upstreamModel": "synthetic-model-b"')
     assert.notEqual(switched, raw, 'config.json 中应有 upstreamModel 一行')
     const config = JSON.parse(switched)
     config.upstreamBaseUrl = upstream.url

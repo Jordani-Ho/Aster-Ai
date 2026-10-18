@@ -9,7 +9,7 @@ export interface ChatOptions {
   temperature?: number
 }
 
-// baseUrl 是 OpenAI 兼容接口的根路径，以 /v1 结尾，例如 https://网关.example/v1。
+// baseUrl 是 OpenAI 兼容接口的根路径；后面追加 /chat/completions。
 export type LlmSource =
   | { kind: 'gateway'; baseUrl: string; secretKey: Uint8Array }
   | { kind: 'api-key'; baseUrl: string; apiKey: string; model: string }
@@ -59,15 +59,15 @@ function replyText(data: ChatResponse): string {
   return content
 }
 
-export function createLlmClient(source: LlmSource): LlmClient {
+export function createLlmClient(source: LlmSource, transport = send): LlmClient {
   checkSource(source)
   return {
     async complete(messages, options) {
-      const response = await send(source, requestBody(source, messages, false, options))
+      const response = await transport(source, requestBody(source, messages, false, options))
       return replyText(await response.json() as ChatResponse)
     },
     async stream(messages, onToken, options) {
-      const response = await send(source, requestBody(source, messages, true, options))
+      const response = await transport(source, requestBody(source, messages, true, options))
       if (!response.body) throw new Error('上游没有返回流式响应')
       let text = ''
       for await (const token of readTokens(response.body)) {
