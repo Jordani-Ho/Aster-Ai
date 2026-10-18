@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { createIdentity, type Identity } from '../identity'
 import { openStore, type LocalStore } from '../store'
-import { addTeacher, consultEnvelope, createInbox, listConsults, listReceivedRecords, completeConsultSigning } from '../inbox'
+import { addTeacher, consultEnvelope, consultChargeBook, createInbox, listConsults, listReceivedRecords, completeConsultSigning } from '../inbox'
 import { addUtterance, confirmAndSend, emptyProfile, loadProfile, markReviewed, organizeSession, saveProfile, skipFocus, startSession } from '../intake/session'
 import { dailyMirror } from '../mirror'
 import { append, balance, createLedger } from '../ledger/chain'
@@ -13,6 +13,7 @@ import type { ChainEventDraft, SignedLedgerEvent } from '../ledger/types'
 import type { Encounter, Field, Homework } from '../record/types'
 import type { Message } from '../transport'
 import { addFamilyMember, loadFamilyMembers, managedLabel, memberIdentity, memberStore, removeFamilyMember } from './index'
+import { createFamilyProof, FAMILY_PROOF_CONTENT, FAMILY_PROOF_KIND, verifyFamilyProof } from './proof'
 import template from '../../../../domain/tcm/templates/default.json'
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
 
@@ -105,13 +106,15 @@ describe('M1-22 family accounts', () => {
     }
     await confirmAndSend(memberScoped, session, dadProfile, [], [], async pkg => {
       await send(teacher.publicKey, consultEnvelope(pkg))
-    }, undefined, { manager: owner.publicKey })
-    // 老师端：问诊包里带代管人，展示“爸爸（王小明代管）”。
+    }, undefined, { manager: owner.publicKey, managerProof: createFamilyProof(owner, dadIdentity.publicKey) })
+    // 老师端：问诊包里带代管人与代管证明，展示“爸爸（王小明代管）”。
     const teacherInbox = createInbox({ identity: teacher, store: teacherStore })
     for (const envelope of sent) await teacherInbox.receive(message(dadIdentity.publicKey, envelope))
     const consults = await listConsults(teacherStore)
     expect(consults).toHaveLength(1)
     expect(consults[0].manager).toBe(owner.publicKey)
+    expect(consults[0].managerInvalid).toBeUndefined()
+    expect(consultChargeBook(consults[0])).toEqual({ student: owner.publicKey, forMember: '爸爸' })
     expect(consults[0].encounter.profile.alias.value).toBe('爸爸')
     expect(managedLabel(consults[0].encounter.profile)).toBe('爸爸（王小明代管）')
     // 老师签字：病历回到爸爸名下，扣费记在“老师 × 代管人”那一本账，并标注 forMember。
@@ -119,17 +122,19 @@ describe('M1-22 family accounts', () => {
     const final: Encounter = structuredClone(consults[0].encounter)
     final.plan.homework = [homework]
     const charges: ChainEventDraft[] = []
+    const chargeStudents: string[] = []
     const toMember: Message['envelope'][] = []
     const result = await completeConsultSigning({
       identity: teacher, store: teacherStore, consult: consults[0], draft: structuredClone(final), final,
       send: async (student, envelope) => { expect(student).toBe(dadIdentity.publicKey); toMember.push(envelope) },
-      ledger: { open: async () => {}, record: async (_teacher, _student, draft) => { charges.push(draft) } },
+      ledger: { open: async () => {}, record: async (_teacher, student, draft) => { chargeStudents.push(student); charges.push(draft) } },
       charge: 3,
-      chargeBook: { student: owner.publicKey, forMember: '爸爸' },
+      chargeBook: consultChargeBook(consults[0]),
     })
     expect(result.chargeError).toBeNull()
     expect(charges).toHaveLength(1)
     expect(charges[0]).toMatchObject({ type: 'charge', amount: 3, forMember: '爸爸' })
+    expect(chargeStudents).toEqual([owner.publicKey])
     // 爸爸的收件箱只认“我的老师”：签名病历与作业记在爸爸名下。
     const dadInbox = createInbox({ identity: dadIdentity, store: memberScoped })
     for (const envelope of toMember) await dadInbox.receive(message(teacher.publicKey, envelope))
@@ -172,6 +177,71 @@ describe('M1-22 family accounts', () => {
     expect(filterChargesByMember(ledger, null)).toHaveLength(2)
     const tampered: SignedLedgerEvent = { ...ledger.events[0], content: JSON.stringify({ ...JSON.parse(ledger.events[0].content), type: 'topup' }) }
     expect(verify({ ...ledger, events: [tampered] }).some(issue => issue.code === 'invalid-member' || issue.code === 'bad-signature')).toBe(true)
+  })
+
+  it('7: 代管证明只认代管人签给这位家人的 kind 2732 小事件', async () => {
+    const { owner, dadIdentity } = await setupFamily()
+    const other = createIdentity(OWNER_PHRASE, 'english', 6)
+    const proof = createFamilyProof(owner, dadIdentity.publicKey)
+    expect(proof.kind).toBe(FAMILY_PROOF_KIND)
+    expect(proof.content).toBe(FAMILY_PROOF_CONTENT)
+    expect(proof.tags).toEqual([['p', dadIdentity.publicKey]])
+    expect(verifyFamilyProof(proof, { manager: owner.publicKey, member: dadIdentity.publicKey, sender: dadIdentity.publicKey }).pubkey).toBe(owner.publicKey)
+    // 换成别的“代管人”就不认。
+    expect(() => verifyFamilyProof(proof, { manager: other.publicKey, member: dadIdentity.publicKey, sender: dadIdentity.publicKey })).toThrow('不是代管人签的')
+    // 篡改 content 或 p 标签后事件 id 与内容不一致，拒收。
+    expect(() => verifyFamilyProof({ ...proof, content: 'aster.other.v1' }, { manager: owner.publicKey, member: dadIdentity.publicKey, sender: dadIdentity.publicKey })).toThrow()
+    expect(() => verifyFamilyProof({ ...proof, tags: [['p', other.publicKey]] }, { manager: owner.publicKey, member: dadIdentity.publicKey, sender: dadIdentity.publicKey })).toThrow()
+    // 家人与发件人必须一致。
+    expect(() => verifyFamilyProof(proof, { manager: owner.publicKey, member: dadIdentity.publicKey, sender: other.publicKey })).toThrow('家人与发件人不一致')
+  })
+
+  it('8: 伪造的代管人（没有证明或证明是别人签的）不会把扣费记到另一位学生账上', async () => {
+    const { owner, teacher, ownerStore, teacherStore, dad, dadIdentity } = await setupFamily()
+    const otherStudent = createIdentity(OWNER_PHRASE, 'english', 6)
+    const memberScoped = memberStore(ownerStore, dad.account)
+    const dadProfile = await loadProfile(memberScoped)
+    const makeConsult = async (manager: string, managerProof: unknown) => {
+      let session = startSession({ student: dadIdentity.publicKey, teacher: teacher.publicKey, template: template as TeacherTemplate })
+      session = addUtterance(session, 'SYNTHETIC_FORGED_MANAGER')
+      session = await organizeSession(session, null)
+      while (session.phase !== 'confirm') { session = skipFocus(session, session.questions[0].focus); session = await organizeSession(session, null) }
+      session = markReviewed(session)
+      // 模拟恶意客户端：正常生成问诊包后，绕过界面往传输信封里塞 manager / 证明。
+      let sentPackage: Parameters<typeof consultEnvelope>[0] | undefined
+      await confirmAndSend(memberScoped, session, dadProfile, [], [], async pkg => { sentPackage = pkg })
+      const envelope = consultEnvelope(sentPackage!)
+      const payload = envelope.payload as Record<string, unknown>
+      payload.manager = manager
+      if (managerProof !== undefined) payload.managerProof = managerProof
+      await createInbox({ identity: teacher, store: teacherStore }).receive(message(dadIdentity.publicKey, envelope))
+      const consults = await listConsults(teacherStore)
+      return consults.find(consult => consult.encounter.id === session.encounterId)!
+    }
+    // 只填 manager、没有证明：老师端不认代管人。
+    const noProof = await makeConsult(otherStudent.publicKey, undefined)
+    expect(noProof.manager).toBeUndefined()
+    expect(noProof.managerInvalid).toBe(true)
+    expect(consultChargeBook(noProof)).toBeUndefined()
+    // 证明是本人（owner）签给爸爸的，却声称 manager 是另一位学生：同样不认。
+    const wrongSigner = await makeConsult(otherStudent.publicKey, createFamilyProof(owner, dadIdentity.publicKey))
+    expect(wrongSigner.manager).toBeUndefined()
+    expect(wrongSigner.managerInvalid).toBe(true)
+    expect(consultChargeBook(wrongSigner)).toBeUndefined()
+    // 老师按回落规则扣费：记在发件人（爸爸）自己那本账，绝不记到那位学生账上。
+    for (const consult of [noProof, wrongSigner]) {
+      const students: string[] = []
+      const final: Encounter = structuredClone(consult.encounter)
+      await completeConsultSigning({
+        identity: teacher, store: teacherStore, consult, draft: structuredClone(final), final,
+        send: async () => {},
+        ledger: { open: async () => {}, record: async (_teacher, student) => { students.push(student) } },
+        charge: 2,
+        ...(consultChargeBook(consult) ? { chargeBook: consultChargeBook(consult) } : {}),
+      })
+      expect(students).toEqual([dadIdentity.publicKey])
+      expect(students).not.toContain(otherStudent.publicKey)
+    }
   })
 })
 

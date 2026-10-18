@@ -252,7 +252,7 @@ export function buildConsultPackage(
   history: readonly HistoryCandidate[],
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
   trend?: ConsultPackage['trend'],
-  options: { manager?: string } = {},
+  options: { manager?: string; managerProof?: ConsultPackage['managerProof'] } = {},
 ): ConsultPackage {
   const checkResult = canConfirm(state)
   if (!checkResult.ok) throw new Error(checkResult.reason)
@@ -304,10 +304,12 @@ export function buildConsultPackage(
     ...(redFlag ? { redFlag } : {}),
     ...(trend ? { trend } : {}),
   }
-  // M1-22：家人代管问诊时带上代管人公钥，只走传输元数据，不改病历 schema。
+  // M1-22：家人代管问诊时带上代管人公钥与代管证明，只走传输元数据，不改病历 schema。
   if (options.manager !== undefined) {
     if (!/^[0-9a-f]{64}$/.test(options.manager)) throw new Error('代管人公钥格式无效')
+    if (options.managerProof === undefined) throw new Error('缺少代管证明，不能替家人问诊')
     pkg.manager = options.manager
+    pkg.managerProof = structuredClone(options.managerProof)
   }
   return pkg
 }
@@ -333,7 +335,7 @@ export async function confirmAndSend(
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
   send: SendConsultPackage,
   trend?: ConsultPackage['trend'],
-  options: { manager?: string } = {},
+  options: { manager?: string; managerProof?: ConsultPackage['managerProof'] } = {},
 ): Promise<ConsultPackage> {
   const pkg = buildConsultPackage(state, profile, history, attachments, trend, options)
   // 只有学生明确点“确认发送”才走到这里；之前任何一步都不调用 send。

@@ -103,6 +103,7 @@ export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: st
 export interface ConsultPackage {
   encounter: Encounter          // 只填了 profile 和 intake，来源都是 'student'
   manager?: string              // M1-22 传输元数据：家人代管问诊时为代管人（根身份）公钥，不进病历、不参与签字
+  managerProof?: FamilyProof    // M1-22 代管证明：代管人私钥签的 kind 2732，content 'aster.family.v1'，tags [['p', 家人公钥]]；老师端验过才认 manager
   history: string[]             // 学生授权附带的历史病历（签名事件 JSON 字符串），默认同一位老师的近 3 次
   attachments: { ref: AttachmentRef; data: Uint8Array }[]
 }

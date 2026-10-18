@@ -4,7 +4,7 @@ import type { TeacherTemplate } from '../../domain/tcm/templates/types'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
-import type { AttachmentRef, ConsultPackage } from './core/record/types'
+import type { AttachmentRef, ConsultPackage, Encounter } from './core/record/types'
 import {
   addPhoto, addUtterance, answerFocus, canConfirm, confirmAndSend,
   defaultHistorySelection, loadDraft, loadHistory, loadProfile, markReviewed,
@@ -12,6 +12,9 @@ import {
   type IntakeKey, type IntakeSession,
 } from './core/intake'
 import { loadTeachers } from './core/inbox'
+import { createFamilyProof } from './core/family/proof'
+import type { FamilyMember } from './core/family'
+import { MemberSwitcher } from './MemberSwitcher'
 import { listCheckins } from './core/homework'
 import { listSelfRatings, listStressRatings, last14DayTrend } from './core/mirror/trend'
 import { detectRegion } from './core/redflags'
@@ -34,15 +37,22 @@ export interface ConsultPageProps {
   identity: Identity
   llm: LlmClient | null
   sendConsult?: (pkg: ConsultPackage) => Promise<void>
+  /** M1-22：当前替哪位家人问诊、切换家人；managerIdentity 是代管人（根身份），用于签代管证明。 */
+  member?: Pick<FamilyMember, 'account' | 'alias'> | null
+  family?: readonly Pick<FamilyMember, 'account' | 'alias'>[]
+  active?: number
+  onSwitch?: (account: number) => void
+  managerIdentity?: Identity
 }
 
 // 学生问诊页（对话式）：一个输入框 + 相机；AI 追问以气泡出现，最多 3 轮；
 // 整理好的卡片可点开改，一个大按钮“发给老师”。急症只内联提示、不拦截、不给号码。
-export function ConsultPage({ store, identity, llm, sendConsult }: ConsultPageProps) {
+export function ConsultPage({ store, identity, llm, sendConsult, member, family = [], active = 0, onSwitch, managerIdentity }: ConsultPageProps) {
   const [session, setSession] = useState<IntakeSession | null>(null)
   const [teachers, setTeachers] = useState<string[]>([])
   const [draftText, setDraftText] = useState('')
   const [photos, setPhotos] = useState<{ ref: AttachmentRef; data: Uint8Array }[]>([])
+  const [profile, setProfile] = useState<Encounter['profile'] | null>(null)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -52,8 +62,12 @@ export function ConsultPage({ store, identity, llm, sendConsult }: ConsultPagePr
 
   useEffect(() => {
     void loadTeachers(store).then(setTeachers).catch(() => {})
+    void loadProfile(store).then(setProfile).catch(() => {})
     void loadDraft(store).then(draft => { if (draft) { setSession(draft); setStatus('已恢复上次未发送的草稿。') } }).catch(() => {})
   }, [store])
+
+  // 替家人问诊时把年龄带进追问提示词；本人问诊不带。
+  const memberOption = member && profile ? { member: { age: profile.age.value } } : undefined
 
   const apply = (next: IntakeSession, notice = '') => {
     setSession(next)
@@ -88,7 +102,7 @@ export function ConsultPage({ store, identity, llm, sendConsult }: ConsultPagePr
         next = addUtterance(next, text)
       }
       setDraftText('')
-      next = await organizeSession(next, llm)
+      next = await organizeSession(next, llm, memberOption)
       if (next.phase === 'confirm') next = markReviewed(next)
       apply(next, next.usedFallback && llm ? '模型暂不可用，已改用固定问句。' : '')
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -99,7 +113,7 @@ export function ConsultPage({ store, identity, llm, sendConsult }: ConsultPagePr
     setBusy(true); setError('')
     try {
       let next = skipFocus(session, session.questions[0].focus)
-      next = await organizeSession(next, llm)
+      next = await organizeSession(next, llm, memberOption)
       if (next.phase === 'confirm') next = markReviewed(next)
       apply(next)
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -137,7 +151,12 @@ export function ConsultPage({ store, identity, llm, sendConsult }: ConsultPagePr
       const sendFn = sendConsult ?? (async () => {})
       const [checkins, ratings, stress] = await Promise.all([listCheckins(store), listSelfRatings(store), listStressRatings(store)])
       const trend = last14DayTrend(checkins, ratings, stress)
-      await confirmAndSend(store, session, await loadProfile(store), history, photos, sendFn, trend)
+      const currentProfile = profile ?? await loadProfile(store)
+      // 替家人问诊：代管人（根身份）签一份代管证明，老师端验过才认代管、才记到代管人账上。
+      const managerOptions = managerIdentity
+        ? { manager: managerIdentity.publicKey, managerProof: createFamilyProof(managerIdentity, identity.publicKey) }
+        : {}
+      await confirmAndSend(store, session, currentProfile, history, photos, sendFn, trend, managerOptions)
       setSent(true)
       setSession({ ...session, phase: 'sent' })
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -152,7 +171,8 @@ export function ConsultPage({ store, identity, llm, sendConsult }: ConsultPagePr
 
   const pendingQuestion = session?.questions[0]
   return <main className="consult-page">
-    <header><p className="eyebrow">知衡 · 学生</p><h1>问诊</h1><p>哪里不舒服，说出来就行。</p><p className="consult-note">急症筛查在本机完成；所需原话交给您接入的模型整理，确认发送后交给老师。</p></header>
+    {family.length > 0 && <MemberSwitcher members={family} active={active} onChange={account => onSwitch?.(account)} />}
+    <header><p className="eyebrow">知衡 · 学生</p><h1>问诊</h1><p>哪里不舒服，说出来就行。</p>{member && <p role="status">替 {member.alias} 问诊</p>}<p className="consult-note">急症筛查在本机完成；所需原话交给您接入的模型整理，确认发送后交给老师。</p></header>
     {error && <p role="alert" className="consult-error">{error}</p>}
     {status && <p role="status" className="consult-status">{status}</p>}
 
@@ -172,6 +192,7 @@ export function ConsultPage({ store, identity, llm, sendConsult }: ConsultPagePr
 
     {session?.phase === 'confirm' && <section className="consult-card">
       <h2>整理好的卡片</h2>
+      {member && <p role="status">替 {member.alias} 问诊</p>}
       <p className="consult-note">每一项都可以改；只有你确认过的内容才会发给老师。</p>
       {(Object.keys(FIELD_LABELS) as IntakeKey[]).map(key => <label key={key}>{FIELD_LABELS[key]}
         <textarea rows={2} value={session.fields[key].value ?? ''} onChange={event => setSession(updateField(session, key, event.target.value))} onBlur={() => void saveDraft(store, session).catch(() => {})} />

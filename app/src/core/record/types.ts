@@ -1,6 +1,8 @@
 // 病历格式约定（Encounter）v1。定义来源：docs/schemas/encounter.md，修改须同步该文档（B 类）。
 // 由技术合伙人建立；M1-09、M1-10、M1-11、M1-13、M1-14 直接引用，不要重复定义。
 
+import type { FamilyProof } from '../family/proof'
+
 /** 每个字段的来源。界面用颜色区分；AI 推测永远不能显示成事实。 */
 export type Source = 'student' | 'teacher' | 'ai_draft' | 'external' | 'unknown'
 
@@ -81,4 +83,6 @@ export interface ConsultPackage {
   trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] }
   /** M1-22 传输元数据：家人代管问诊时填代管人（根身份）公钥；本人问诊省略。不进病历 schema。 */
   manager?: string
+  /** M1-22 代管证明：代管人私钥签名的 kind 2732 小事件，老师端验过才认 manager。不进病历 schema。 */
+  managerProof?: FamilyProof
 }

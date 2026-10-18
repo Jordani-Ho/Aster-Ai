@@ -6,6 +6,7 @@ import { RECORD_COLLECTIONS, UndeliveredError, completeSigning, retryHandover } 
 import { signEncounter, verifySignedEncounter, type SignedEncounterEvent, type SignedEncounterIndex } from '../record/sign'
 import type { AttachmentRef, ConsultPackage, Encounter, Homework } from '../record/types'
 import { CARE_PLAN_TYPE, parseSignedCarePlanEvent, storeCarePlan, verifySignedCarePlan } from '../careplan'
+import { verifyFamilyProof } from '../family/proof'
 import { INTAKE_COLLECTIONS, deleteDraft, restartAfterEmergency, type IntakeSession, type StoredPackage } from '../intake/session'
 import { localDay } from '../homework/schedule'
 
@@ -41,6 +42,8 @@ export interface ConsultEnvelopePayload {
   trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] }
   /** M1-22 传输元数据：家人代管问诊时是代管人（根身份）公钥。 */
   manager?: string
+  /** M1-22 代管证明：代管人私钥签名的 kind 2732 小事件，老师端验过才认 manager。 */
+  managerProof?: unknown
 }
 
 export interface AttachmentEnvelopePayload {
@@ -63,6 +66,8 @@ export interface StoredConsult {
   trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] } | null
   /** M1-22：家人代管问诊时为代管人公钥；一本账与回信都按它处理。 */
   manager?: string
+  /** M1-22：带 manager 但代管证明没通过校验，老师端据此提示且不按代管扣费。 */
+  managerInvalid?: boolean
 }
 
 export interface ConsultReadiness {
@@ -197,6 +202,14 @@ export function draftPackage(consult: StoredConsult): ConsultPackage {
   return { encounter: structuredClone(consult.encounter), history: [...consult.history], attachments: [] }
 }
 
+// M1-22 一家一本账：只有代管证明验过的问诊才把扣费记到代管人那本账；
+// 没有证明或证明无效时返回 undefined，调用方按发件人自己那本账处理。
+export function consultChargeBook(consult: StoredConsult): { student: string; forMember?: string } | undefined {
+  if (!consult.manager || consult.managerInvalid) return undefined
+  const forMember = consult.encounter.profile.alias.value ?? undefined
+  return forMember === undefined ? { student: consult.manager } : { student: consult.manager, forMember }
+}
+
 export function consultEnvelope(pkg: ConsultPackage): Envelope {
   return {
     type: CONSULT_TYPES.package,
@@ -208,6 +221,7 @@ export function consultEnvelope(pkg: ConsultPackage): Envelope {
       ...(pkg.redFlag ? { redFlag: pkg.redFlag } : {}),
       ...(pkg.trend ? { trend: pkg.trend } : {}),
       ...(pkg.manager ? { manager: pkg.manager } : {}),
+      ...(pkg.managerProof ? { managerProof: structuredClone(pkg.managerProof) } : {}),
     } satisfies ConsultEnvelopePayload,
   }
 }
@@ -309,6 +323,16 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
   if (value.encounter.student !== message.sender) return
   // 家人代管问诊时带代管人公钥；格式不对就整包丢弃，避免账本记到错误的书上。
   if (value.manager !== undefined && (typeof value.manager !== 'string' || !HEX64.test(value.manager) || value.manager === value.encounter.student)) return
+  // 代管人必须有代管证明（代管人私钥签的 kind 2732，p 标签指向家人且家人就是发件人）。
+  // 证明不通过时保留问诊但标 managerInvalid：老师端提示“代管证明无效”，扣费回落到发件人自己那本账。
+  let manager: string | undefined
+  let managerInvalid = false
+  if (value.manager !== undefined) {
+    try {
+      verifyFamilyProof(value.managerProof, { manager: value.manager, member: value.encounter.student, sender: message.sender })
+      manager = value.manager
+    } catch { managerInvalid = true }
+  }
   // Already handed back: relay replay must not resurrect deleted raw material.
   if (await store.get(RECORD_COLLECTIONS.signedEncounters, value.encounter.id + '-v' + value.encounter.version)) return
   if (!Array.isArray(value.attachments) || value.attachments.length > MAX_PHOTOS || !value.attachments.every(isRef)) return
@@ -338,7 +362,8 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
     droppedHistory: checked.dropped,
     redFlag,
     ...(trend ? { trend } : {}),
-    ...(value.manager === undefined ? {} : { manager: value.manager }),
+    ...(manager ? { manager } : {}),
+    ...(managerInvalid ? { managerInvalid: true } : {}),
   }
   await store.put(INBOX_COLLECTIONS.consult, value.encounter.id, stored as unknown as StoreValue)
 }
