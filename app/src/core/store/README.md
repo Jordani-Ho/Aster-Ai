@@ -179,3 +179,15 @@ M1-21：settings/personal-model -> {provider,baseUrl,model,apiKey,testedAt}，�
 - `student-adherence`（**老师端**，M1-23a 第 5 条）：键为学生公钥（家人身份就是家人自己的公钥），值 `{student, weekStart, weeklyRate, streak, practiceDays, scheduled, done, forMember?, receivedAt}`；只保存学生端主动上报的**本周练习小结数值**，不含作业原文、打卡时间、称呼或任何身份资料（`forMember` 是可选的家人称呼，仅家人代管时由学生端决定是否带）。同一学生的新周小结覆盖旧周；旧周小结迟到不会覆盖新周。AES-GCM 本机加密，随老师端备份恢复。
 - 学生端的 `homework`（M1-13 作业）与 `checkins`（打卡）沿用原集合；M1-23a 没有新增本地业务集合。打卡仍只在本机，老师端只能看到上报的数值小结。
 - `pilot-metrics`（M1-15b/M1-23a）：值新增可选 `homeworkAdherence`（0～1 或 null）；CSV 追加 `homework_adherence` 列，仍不含身份/内容。
+
+## M1-23b 个人练习视频
+
+- `practice-video-files`：随机 UUID 键 -> Uint8Array 密文字节；仍由 LocalStore AES-GCM 加密。绝不用文件哈希作明文键。
+- `practice-video-index`：随机 UUID 键 -> `{hash,dataKey}`，关联值加密。中继备份保留引用，默认排除二进制；加密文件备份包含二者，家人分片同样适用。
+- `practice-video-draft`：病历随机 id -> 附视频的未签面诊草稿；`practice-video-staged`：同 id -> 本次暂存视频哈希列表。成功交还时同时删除引用、索引和视频字节；失败保留以便原样重试。
+- `practice-outgoing`：随机回看请求 UUID -> `{id,encounterId,homework,original,practice,teacher,sent,at,reply?}`，学生持有自己的回看记录。
+- `practice-reviews`：同请求 UUID -> 临时回看请求、认证发送人、老师、收到时间与学生随信附的称呼/作业标题。老师回复成功后删除两段本机视频和整个临时授权。
+- `practice-reviewed`：请求 UUID -> `{at}`，仅防重放墓碑，不留回复内容、视频或下载信息。
+- `settings/video-weekly-reminder`：本人/家人各自最近跳过、进入录制或提交的时间；每 7 天最多提醒一次，不影响打卡或坚持率。
+
+列表按已有复合键范围查询一个集合，避免读取设置/作业时整库复制视频。数据库版本与既有记录格式不变。

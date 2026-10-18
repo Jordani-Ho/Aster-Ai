@@ -76,6 +76,7 @@ export interface Homework {
   durationDays?: number            // 持续多少天；省略表示直到下次复诊
   source: 'teacher' | 'ai_draft'   // 2026-10-16 补：作业也要有来源标签
   note?: string                    // 老师接受 AI 草稿时写 'ai_accepted'
+  video?: PracticeVideoRef          // M1-23b：人工附加，只给这一位学生的练习视频
 }
 
 export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: string; bytes: number }
@@ -83,6 +84,19 @@ export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: st
 
 > 修订记录：2026-10-16 给 `Homework` 补上 `source` 和 `note`（M1-10 审核时发现遗漏）。
 > 修订记录：2026-10-18（M1-23a）`Homework.schedule` 新增 `{ kind: 'habit'; anchor }`：`anchor` 是学生已有的日常习惯（如“起床后”“刷牙时”“拖地时”“通勤路上”“睡前”），1～12 个字、去掉首尾空白、不含控制字符；这类作业**不产生钟点提醒**，只出现在学生镜子页“今天做这些事的时候，记得……”一栏，打卡仍写进 M1-13 的 `checkins`（homeworkId + at）计入坚持率。老师端起草/改稿只接受上述锚点写法，不接受把 habit 改写成 daily/shichen；视频相关字段不在本卡（M1-23b）。
+
+M1-23b（2026-10-18）增加可选 `video`，旧 v1 病历不受影响。`PracticeVideoRef`：
+`{version:1,sha256,bytes,key,iv,plainSha256,mime,duration,context:{teacher,student,homework,role:'original'}}`。
+sha256/plainSha256 为 64 位十六进制，key 为 32 字节、iv 为 12 字节的十六进制；bytes 是密文长度，
+含 16 字节 GCM 标签，明文最多 60 MiB，duration 为秒数且不超过 180。AES-GCM AAD 固定序列为
+`['aster-practice-video',1,teacher,student,homework,role]` 的 UTF-8 JSON。签字和收件都校验绑定。
+媒体地址由本社区配置提供，不采信对方随信给出的网址。视频字节不进入病历或中继事件。
+
+视频只由老师手动为具体作业附加，模型不能生成或更换引用。改稿输入剔除视频引用，不把下载授权给模型。
+未改动作业继续保留人工视频；模型重写作业时不继承旧引用，界面提示为新作业重新添加，避免错配。
+签字后引用随原有 NIP-17 病历交还学生；老师的去标识医案和改稿记录剔除 `video`，成功交还才删本机字节。
+学生回传采用 `practice.submit` 小信封，重新授权老师读取这条作业的原片与当次练习，不重传病历原文。
+老师按已有签字索引验证学生与面诊归属；回复采用 `practice.reply`，成功后删两段本机视频及临时引用。
 
 ## 2. 签名后的病历
 

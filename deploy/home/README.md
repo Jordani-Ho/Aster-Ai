@@ -1,6 +1,6 @@
 # M1-16 内测部署：把知衡放在发起人家里的一台电脑上
 
-这台电脑跑四个容器：**中继（relay）**、**模型网关（gateway，含推送）**、**手机网页应用（web）**、**Cloudflare Tunnel（cloudflared）**。
+这台电脑跑五个容器：**中继（relay）**、**模型网关（gateway，含推送）**、**密文视频服务（media）**、**手机网页应用（web）**、**Cloudflare Tunnel（cloudflared）**。
 家里路由器**不开任何端口**，也不用公网 IP：cloudflared 从家里主动连到 Cloudflare，外面的人用 HTTPS 访问。
 
 ```
@@ -10,7 +10,7 @@
    └ https://gw.<域名>     → Cloudflare → cloudflared（家里）→ gateway 容器（直连排障用）
 ```
 
-- 中继/网关/网页的**访问日志全部关闭**；数据只在这台电脑的 `deploy/home/data/`（不进仓库）。
+- 中继/网关/视频服务/网页的**访问日志全部关闭**；数据只在这台电脑的 `deploy/home/data/`（不进仓库）。
 - 页面里的中继与网关地址是**构建时**常量，所以 `web` 容器每次启动时会用当前 `.env` 里的域名重新构建一次 app。
 - 这份手册面向发起人本人，每条命令都写了预期看到什么。
 
@@ -383,7 +383,7 @@ WSL2 在最后一个会话退出约 1 分钟后会被 Windows 回收，容器和
 ```bash
 cd deploy/home
 git -C ../.. pull --ff-only                  # 或按第 2 步更新仓库到最新 main
-docker compose build relay gateway web       # relay 首次 10–30 分钟；3.7 GiB 内存可能吃紧，OOM 时按第 2 步先加 swap
+docker compose build relay gateway media web       # relay 首次 10–30 分钟；3.7 GiB 内存可能吃紧，OOM 时按第 2 步先加 swap
 SKIP_BUILD=1 ./setup.sh
 SKIP_BUILD=1 ./quick-start.sh                # 无域名自测；域名模式改用 ./start.sh
 ./verify.sh                                  # 预期六项全 PASS，含“中继开放模式接受已认证连接”
@@ -404,7 +404,7 @@ SKIP_BUILD=1 ./quick-start.sh                # 无域名自测；域名模式改
 关闭开放模式 / 回滚：
 
 - 只关开放模式、保留新代码：在 `.env` 加一行 `RELAY_COMMUNITY_OPEN=false`，重跑 `SKIP_BUILD=1 ./setup.sh`（按成员重写白名单配置），再重启中继（无域名 `docker compose --profile quick up -d --force-recreate relay`，域名模式 `./start.sh`），最后 `./verify.sh` 应显示“中继拒绝非成员 AUTH”——此时新成员要先把公钥写进 `MEMBER_PUBKEYS` 再重跑 setup。
-- 回滚到旧代码：`git -C ../.. checkout <旧提交>`，再 `docker compose build relay gateway web` 并用 `./quick-start.sh` / `./start.sh` 重启；`data/` 是挂载卷，保留不动。
+- 回滚到旧代码：`git -C ../.. checkout <旧提交>`，再 `docker compose build relay gateway media web` 并用 `./quick-start.sh` / `./start.sh` 重启；`data/` 是挂载卷，保留不动。
 
 ---
 
@@ -454,3 +454,19 @@ Docker 装好后，在本机跑完了除“域名模式 + 真实模型 Key”以
 每个使用者在手机上接入自己的模型账户。家里网关只代理浏览器无法直连的请求，或在已接入用户的模型失败时提供内测后备。网关不保存用户凭证和内容，日志仍关闭。
 
 .env 的 MODEL_FALLBACK_ENABLED 默认为 true；推广时设 false，重跑原 setup.sh 并更新 gateway 容器使配置生效。额外地区或其他服务需代理时，在 MODEL_PROXY_ALLOWED_URLS 以逗号填写核实过的完整 HTTPS /chat/completions 地址，重跑 setup.sh；不要填内网或元数据地址。此项不影响手机直连。服务商清单与日期、美国/国内探测边界见 app/src/core/llm/README.md。真实账户与手机仍需内测验收。
+
+## M1-23b 密文视频服务
+
+新增 `media` 容器，使用 gateway 同一镜像中的独立 Node 进程。运行 `./setup.sh` 会一并构建，
+域名启动、无域名重建均包含 media。旧部署升级时执行 `docker compose build relay gateway media web`，
+再走原 `./start.sh` 或 `./quick-start.sh`；不需要新的域名、Public Hostname 或路由器端口。
+应用源 `/media/*` 经 web 转到 compose 内部 `media:3040`，仍经同一条 Cloudflare 隧道。
+
+文件放在 `data/media/`，只存密文，30 天到期。成员名单复用 `data/gateway/` 的只读目录挂载，
+邀请加入/撤销立即生效；挂单个 members.json 会错过原子替换，请勿改成单文件挂载。
+media 不输出请求日志，Docker 日志驱动 none，verify.sh 的扫描包含它。
+服务重启保留文件；首次启动会清除已过期文件，下载不续期。节点停机时无法下载，学生可重试；
+已下载到本机的视频可离线播放。永久保留请由学生导出加密备份文件。
+
+实现与 Blossom 评估见 [媒体服务说明](../../gateway/media/README.md)。新运行服务需按上述步骤部署，
+源码和模拟部署测试通过不等于家庭节点或 Cloudflare 外网已经实测。

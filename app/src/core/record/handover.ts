@@ -1,4 +1,5 @@
 import type { Encounter } from './types'
+import { deleteVideoCipher } from '../practice-video'
 import { deidentifiedCaseBook, modificationLog, type SignedEncounterEvent, type SignedEncounterIndex } from './sign'
 
 // 老师端本地存储的集合名（登记在 app/src/core/store/README.md）。
@@ -78,6 +79,11 @@ export interface PendingHandover {
 
 async function finishHandover(store: RecordStore, pending: PendingHandover): Promise<SignedEncounterIndex> {
   await destroyConsultPackage(store, pending.encounter.id, pending.attachmentIds)
+  const staged = await store.get('practice-video-staged', pending.encounter.id) as { hashes?: string[] } | undefined
+  const hashes = new Set([...(staged?.hashes ?? []), ...pending.encounter.plan.homework.flatMap(hw => hw.video ? [hw.video.sha256] : [])])
+  for (const hash of hashes) await deleteVideoCipher(store, hash)
+  await store.delete('practice-video-staged', pending.encounter.id)
+  await store.delete('practice-video-draft', pending.encounter.id)
   await saveCaseBook(store, pending.encounter, pending.draft, pending.event.id)
   const index = await saveSignedIndex(store, pending.event, pending.encounter)
   await store.delete(RECORD_COLLECTIONS.pendingHandover, pending.event.id)

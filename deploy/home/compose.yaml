@@ -35,6 +35,23 @@ services:
       driver: none
     networks: [internal]
 
+  media:
+    # Blossom-compatible ciphertext service; no host ports or access logs.
+    build:
+      context: ../..
+      dockerfile: deploy/home/gateway/Dockerfile
+    command: ["node", "media/server.js"]
+    restart: unless-stopped
+    environment:
+      MEDIA_PUBLIC_URL: https://${APP_DOMAIN:-placeholder.invalid}
+    volumes:
+      - ./data/media:/app/media
+      # Mount the directory so atomic replacement of members.json remains visible.
+      - ./data/gateway:/app/data:ro
+    logging:
+      driver: none
+    networks: [internal]
+
   web:
     build:
       context: ../..
@@ -48,7 +65,7 @@ services:
       VITE_MODEL_GATEWAY_URL: https://${APP_DOMAIN:-placeholder.invalid}/v1
       VITE_PUSH_GATEWAY_URL: https://${APP_DOMAIN:-placeholder.invalid}
       VITE_PUSH_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
-    depends_on: [gateway]
+    depends_on: [gateway, media]
     logging:
       driver: none
     networks: [internal]

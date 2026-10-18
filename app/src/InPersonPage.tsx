@@ -1,4 +1,6 @@
 import { loadTeacherTemplate } from './core/drafting/template'
+import { mediaBase, prepareAndUpload } from './core/practice-video/prepare'
+import { deleteVideoCipher } from './core/practice-video'
 import { reviseEncounter } from './core/drafting/revise'
 import { organizeIntake, fixedQuestions } from './core/intake/followup'
 import {uiError} from './core/onboarding/ui'
@@ -76,7 +78,7 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
     let cancelled = false
     void loadTeacherTemplate(store).then(value=>{if(!cancelled)setTemplate(value)}).catch(()=>{})
     void knownStudents(store).then(rows => { if (!cancelled) setKnown(rows) }).catch(() => {})
-    void loadInPersonDraft(store).then(saved => {
+    void loadInPersonDraft(store).then(async saved => {
       if (cancelled || !saved) return
       // 恢复草稿时把代录文字再过一遍红线，避免上次会话漏掉的提示。
       let current = saved
@@ -91,7 +93,9 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
       }
       setEncounter(current)
       setRedFlag(hit)
-      setPhase('intake')
+      const stagedReview=await store.get('practice-video-draft',current.id) as unknown as Encounter|undefined
+      if(cancelled)return
+      if(stagedReview){setDraftEncounter(stagedReview);setPhase('review')}else setPhase('intake')
       setStatus('已恢复上次未签字的面诊草稿，都还在本机。')
     }).catch(() => setError('本机草稿读取失败，可以重新新建。'))
     return () => { cancelled = true }
@@ -208,6 +212,8 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
         })
       }
       setPhase('sent')
+      setDraftEncounter(null)
+      setEncounter(null)
     } catch (cause) {
       if (cause instanceof InPersonUndeliveredError) {
         setPendingEventId(cause.eventId)
@@ -253,7 +259,29 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
     return <>
       {error && <p role="alert" className="in-person-error">{error}</p>}
       <SignEncounterPage
-        onRevise={llm ? (current,instruction)=>reviseEncounter(current,instruction,llm) : undefined}
+        onVideoChange={async(current,homework,file)=>{
+          const next=structuredClone(current),hw=next.plan.homework.find(item=>item.id===homework)
+          if(!hw)throw Error('请重新选择作业')
+          const previous=hw.video
+          if(file){
+            const ref=await prepareAndUpload(file,{teacher:identity.publicKey,student:current.student,homework,role:'original'},store,identity,mediaBase())
+            const staged=await store.get('practice-video-staged',current.id) as {hashes?:string[]}|undefined
+            await store.put('practice-video-staged',current.id,{hashes:[...new Set([...(staged?.hashes??[]),ref.sha256])]})
+            hw.video=ref
+          }else delete hw.video
+          await store.put('practice-video-draft',current.id,JSON.parse(JSON.stringify(next)))
+          if(previous)await deleteVideoCipher(store,previous.sha256)
+          setDraftEncounter(next)
+          return next
+        }}
+        onRevise={llm ? async(current,instruction)=>{
+          const next=await reviseEncounter(current,instruction,llm)
+          await store.put('practice-video-draft',current.id,JSON.parse(JSON.stringify(next)))
+          const retained=new Set(next.plan.homework.flatMap(hw=>hw.video?[hw.video.sha256]:[]))
+          for(const hw of current.plan.homework)if(hw.video&&!retained.has(hw.video.sha256))await deleteVideoCipher(store,hw.video.sha256)
+          setDraftEncounter(next)
+          return next
+        } : undefined}
         initial={draftEncounter}
         onConfirm={confirm}
         onCancel={() => { setPhase('intake'); setStatus('已返回录入页，内容都还在本机。') }}

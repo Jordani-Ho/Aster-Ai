@@ -96,7 +96,13 @@ export class LocalStore {
       const address = this.address(collection)
       validateAddress(address, 'validation')
       const result = []
-      for (const record of await this.snapshot()) if (record.c === address) result.push({ key: record.k, value: await decryptRecord(this.storageKey, record) })
+      // Camera files are large: ordinary settings/homework reads must not clone every video.
+      const records = typeof IDBKeyRange === 'undefined' ? await this.snapshot() : await transaction(this.db, ['meta', 'records'], 'readonly', async tx => {
+        const requested = requestResult(tx.objectStore('records').getAll(IDBKeyRange.bound([address, ''], [address, '\uffff'])))
+        await this.assertCurrent(tx)
+        return (await requested).map(validateRecord)
+      })
+      for (const record of records) if (record.c === address) result.push({ key: record.k, value: await decryptRecord(this.storageKey, record) })
       return result
     })
   }

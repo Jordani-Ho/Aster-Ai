@@ -4,6 +4,7 @@ import { createIdentity, generatePhrase } from '../identity'
 import { openStore, type LocalStore } from '../store'
 import type { Event } from 'nostr-tools/pure'
 import { createBackupManager, decodeBackupFile, type BackupRelay } from './index'
+import { writeVideoCipher, readVideoCipher } from '../practice-video'
 const phrase='leader monkey parrot ring guide accident before fence cannon height naive bean'
 const identity=()=>createIdentity(phrase,'english')
 class MemoryRelay implements BackupRelay {
@@ -14,6 +15,20 @@ class MemoryRelay implements BackupRelay {
 const handles:LocalStore[]=[]
 async function store(factory=new IDBFactory(),name=crypto.randomUUID(),who=identity()){const value=await openStore(who,{factory,name});handles.push(value);return value}
 afterEach(()=>handles.splice(0).forEach(handle=>handle.close()))
+it('practice video bytes stay out of relay snapshots; encrypted file restores a 20MB clip including family scope',async()=>{
+ const relay=new MemoryRelay(),source=await store(),scope=source.scoped('f1-'),hash='a'.repeat(64)
+ const video=new Uint8Array(20*1024*1024);video.fill(0x5a)
+ await writeVideoCipher(scope,hash,video)
+ expect((await scope.list('practice-video-files'))[0].key).not.toBe(hash)
+ const manager=createBackupManager({identity:identity(),store:source,relay})
+ try{
+  await manager.backupNow()
+  const without=await store(),restore=createBackupManager({identity:identity(),store:without,relay})
+  try{await restore.restoreLatest();expect(await readVideoCipher(without.scoped('f1-'),hash)).toBeUndefined()}finally{restore.close()}
+  const file=await manager.exportFile(),target=await store(),restoreFile=createBackupManager({identity:identity(),store:target,relay})
+  try{await restoreFile.restoreFile(file);const restored=await readVideoCipher(target.scoped('f1-'),hash);expect(restored instanceof Uint8Array).toBe(true);expect(Buffer.compare(restored as Uint8Array,video)).toBe(0)}finally{restoreFile.close()}
+ }finally{manager.close()}
+},120000)
 it('1备份后清空数据库，助记词在新库恢复；2连续五次只保留最近三份；照片不进中继',async()=>{
  const factory=new IDBFactory(),name=crypto.randomUUID(),relay=new MemoryRelay(),source=await store(factory,name),key=crypto.randomUUID(),photoKey=crypto.randomUUID()
  await source.put('notes',key,{text:'SYNTHETIC_PRIVATE_RECORD'});await source.put('photos',photoKey,new Uint8Array([1,2,255]))

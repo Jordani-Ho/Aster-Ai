@@ -1,5 +1,6 @@
 import { finalizeEvent, getEventHash, getPublicKey, verifyEvent } from 'nostr-tools/pure'
 import type { Encounter, Field } from './types'
+import { validateVideoRef } from '../practice-video'
 
 // 签字病历是一条 kind 2730 的 Nostr 签名事件，content 是完整的 Encounter JSON。
 // 这个模块（及其依赖）不得导入 core/llm：签字路径里不允许出现任何模型调用。
@@ -92,6 +93,7 @@ function validateEncounter(encounter: Encounter): void {
   if (!HEX32.test(encounter.id)) throw new Error('病历 id 必须是 32 位十六进制')
   if (!Number.isSafeInteger(encounter.version) || encounter.version < 1) throw new Error('病历版本号无效')
   if (!HEX64.test(encounter.student) || !HEX64.test(encounter.teacher)) throw new Error('病历中的公钥格式无效')
+  for (const hw of encounter.plan.homework) if (hw.video) validateVideoRef(hw.video, { student: encounter.student, teacher: encounter.teacher, homework: hw.id, role: 'original' })
 }
 
 export function signEncounter(encounter: Encounter, privateKey: Uint8Array): SignedEncounterEvent {
@@ -142,6 +144,7 @@ export function verifySignedEncounter(event: SignedEncounterEvent, options: Veri
   }
   if (!encounter || typeof encounter !== 'object') throw new Error('病历内容无效')
   if (!encounter.fourExams || !encounter.judgment || !encounter.plan || !encounter.intake) throw new Error('病历结构无效')
+  validateEncounter(encounter)
   if (encounter.student !== options.student) throw new Error('这份病历不属于当前学生')
   if (event.pubkey !== options.teacher) throw new Error('签名人不是这位学生的老师')
   if (encounter.teacher !== event.pubkey) throw new Error('病历里的老师与签名人不一致')
@@ -170,7 +173,7 @@ export function deidentifiedCaseBook(encounter: Encounter): CaseBookEntry {
     gender: encounter.profile.gender.value,
     ageBand: ageBand(encounter.profile.age.value),
     judgment: encounter.judgment,
-    plan: encounter.plan,
+    plan: { ...encounter.plan, homework: encounter.plan.homework.map(({ video: _video, ...homework }) => homework) },
   }
   if (encounter.outcome) entry.outcome = encounter.outcome
   return entry
@@ -187,7 +190,12 @@ function valueAt(encounter: Encounter, path: string): unknown {
 }
 
 function plainValue(value: unknown): unknown {
-  return isField(value) ? value.value : value
+  const plain = isField(value) ? value.value : value
+  if (plain && typeof plain === 'object' && 'video' in plain) {
+    const { video: _video, ...rest } = plain
+    return rest
+  }
+  return plain
 }
 
 // “草案 → 定稿”修改记录：只留 judgment 与 plan 的字段。
