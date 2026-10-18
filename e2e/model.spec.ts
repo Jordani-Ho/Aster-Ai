@@ -24,7 +24,10 @@ test('M1-21 browser network rejection proxies through actual signed member gatew
  expect(reply).toBe(true);expect(proxies).toBe(1)
 })
 test('M1-21 account failure shows house notice; switch off gives fixed intake questions',async({people,request})=>{
- const page=people.student.page;await people.student.context.route('https://model.synthetic.example/**',r=>r.fulfill({status:402,body:'SYNTHETIC_BALANCE_ERROR'}))
+ const page=people.student.page
+ // 先等首次建议写入缓存，再删缓存制造后备场景；不能与首页的在途写入竞争。
+ await expect(page.getByRole('region',{name:'每日建议'})).toContainText('SYNTHETIC_DAILY')
+ await people.student.context.route('https://model.synthetic.example/**',r=>r.fulfill({status:402,body:'SYNTHETIC_BALANCE_ERROR'}))
  await page.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{for(const r of await s.store.list('mirror'))await s.store.delete('mirror',r.key)}finally{s.store.close();s.identity.privateKey.fill(0)}});await page.reload()
  await expect(page.getByText('今天用的是备用模型，请检查您的模型账户',{exact:true})).toBeVisible()
  expect((await request.post(runtime.controlURL+'/reset',{headers:{authorization:'Bearer '+runtime.resetToken},data:{relayOnly:true,fallbackEnabled:false}})).status()).toBe(200)
