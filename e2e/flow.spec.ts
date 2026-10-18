@@ -159,7 +159,8 @@ test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' r
       await settings(student);await student.getByText('备份状态',{exact:true}).click()
       await student.getByRole('checkbox',{name:'我已保存需要保留的本机资料，允许替换'}).check()
       await student.getByRole('button',{name:'从中继恢复最新备份'}).click()
-      await expect(student.getByText('已从中继恢复',{exact:true})).toBeVisible()
+      // 恢复成功后角色从备份里的 role 读回 'student'，学生壳切回镜子页。
+      await expect(student.getByRole('heading',{name:'镜子',exact:true})).toBeVisible()
     }
     expect((await stored(student,'student-records')).map((r: { key: string })=>r.key)).toEqual(records.map((r: { key: string })=>r.key))
     expect((await stored(student,'homework'))[0].value.homework.id).toBe(assignments[0].value.homework.id)
