@@ -6,7 +6,6 @@ export type {
   DisputeFields,
   Ledger,
   LedgerEventType,
-  Pricing,
   SignedLedgerEvent,
   VerifyIssue,
 } from './types'
@@ -21,7 +20,7 @@ export {
   parseChainFields,
   parseDisputeFields,
 } from './types'
-export { append, appendDispute, balance, createLedger, declarePricing, overdueSince, signDispute, signEvent } from './chain'
+export { append, appendDispute, balance, createLedger, overdueSince, signDispute, signEvent } from './chain'
 export { verify } from './verify'
 
 export { createLedgerSync } from './sync'

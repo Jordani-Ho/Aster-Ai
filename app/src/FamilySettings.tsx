@@ -48,7 +48,7 @@ export function FamilySettings({ store, identity, onChanged }: { store: LocalSto
   }
 
   return <details><summary>添加家人</summary>
-    <p className="privacy-note">给没有独立自理或支付能力的老人、孩子用。家人共用您接入的大模型，不需要各自接入；康币仍记在您这一本账上。</p>
+    <p className="privacy-note">给没有独立自理或支付能力的老人、孩子用。家人共用您接入的大模型，不需要各自接入；钱账记在您这一本账上，每笔可以注明家人。</p>
     {error && <p role="alert">{error}</p>}
     {status && <p role="status">{status}</p>}
     {members.length > 0 && <ul>

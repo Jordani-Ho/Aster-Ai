@@ -649,6 +649,7 @@ export interface ConsultSigningOptions {
   send: SendEnvelope
   ledger?: LedgerRecorder
   charge?: number
+  currency?: string
   /** M1-22 一家一本账：扣费记在代管人（根身份）那本账上，并标注家人称呼。 */
   chargeBook?: { student: string; forMember?: string }
 }
@@ -665,13 +666,17 @@ async function recordCharge(
   eventId: string,
   charge: number | undefined,
   forMember?: string,
+  currency?:string,
 ): Promise<string | null> {
   if (charge === undefined) return null
   try {
     if (!ledger) throw new Error('还没有登记这份师生账本')
+    if(!currency)throw Error('请先设置钱账币种')
     await ledger.open?.(teacher,student)
     await ledger.record(teacher, student, {
       type: 'charge',
+      currency,
+      confirmationId:eventId,
       amount: charge,
       chargeReason: 'consult',
       recordHash: eventId,
@@ -692,7 +697,7 @@ export async function completeConsultSigning(options: ConsultSigningOptions): Pr
   if (options.chargeBook?.student !== undefined && (typeof options.chargeBook.student !== 'string' || !HEX64.test(options.chargeBook.student))) throw new Error('代管人公钥格式无效')
   const signed = signEncounter(options.final, options.identity.privateKey)
   await options.send(options.consult.sender, { type: 'record.signed', version: 1, payload: signed })
-  const chargeError = await recordCharge(options.ledger, options.final.teacher, bookStudent, signed.id, options.charge, options.chargeBook?.forMember)
+  const chargeError = await recordCharge(options.ledger, options.final.teacher, bookStudent, signed.id, options.charge, options.chargeBook?.forMember,options.currency)
   return { signed, chargeError }
 }
 

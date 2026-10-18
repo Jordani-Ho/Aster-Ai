@@ -71,7 +71,7 @@ function checked(ledger: Ledger) {
   if (issues.length) throw Error('账本校验失败：' + issues[0].message)
 }
 
-// One controller per unlocked identity. Every book mutation and its outbox commit share one encrypted record.
+// One controller per identity. Each book mutation and its outbox share one IndexedDB record.
 export function createLedgerSync(options: Options) {
   const { store } = options, owner = options.identity.publicKey, key = new Uint8Array(options.identity.privateKey)
   const now = options.now ?? Date.now
@@ -264,11 +264,39 @@ export function createLedgerSync(options: Options) {
     record(teacher: string, student: string, draft: ChainEventDraft) {
       return serial(() => book(teacher, student, async (state, ref) => {
         if (state.conflicts.length) throw Error('账本有冲突，请与老师核对')
+        if(owner!==teacher)throw Error('钱账只能由老师确认')
+        if(draft.confirmationId){
+          checked(state.ledger)
+          const previous=state.ledger.events.find(e=>parseChainFields(e).confirmationId===draft.confirmationId)
+          if(previous){const fields=parseChainFields(previous) as unknown as Record<string,unknown>;if(Object.entries(draft).some(([k,v])=>fields[k]!==v))throw Error('确认编号已用于另一笔交易');return previous}
+        }
         state.ledger = append(state.ledger, key, draft)
         checked(state.ledger)
         const event = state.ledger.events.at(-1)!
         queue(state, envelope('ledger.event', event)); await save(ref, state)
         return event
+      }))
+    },
+    recordBatch(teacher:string,student:string,drafts:ChainEventDraft[],confirmationId:string) {
+      return serial(()=>book(teacher,student,async(state,ref)=>{
+        if(owner!==teacher)throw Error('钱账只能由老师确认')
+        if(!/^[A-Za-z0-9_-]{1,64}$/.test(confirmationId)||!drafts.length||drafts.length>8)throw Error('记账确认无效')
+        if(drafts.some(d=>d.confirmationId!==undefined&&d.confirmationId!==confirmationId))throw Error('记账确认编号不一致')
+        if(state.conflicts.length)throw Error('账本有冲突，请与老师核对')
+        checked(state.ledger)
+        const previous=state.ledger.events.filter(event=>parseChainFields(event).confirmationId===confirmationId)
+        if(previous.length){
+          if(previous.length!==drafts.length||previous.some((event,index)=>{const fields=parseChainFields(event);return Object.entries(drafts[index]).some(([key,value])=>(fields as unknown as Record<string,unknown>)[key]!==value)}))throw Error('确认编号已用于另一份草稿')
+          return previous
+        }
+        let candidate=state.ledger
+        for(const draft of drafts)candidate=append(candidate,key,{...draft,confirmationId})
+        checked(candidate)
+        const events=candidate.events.slice(state.ledger.events.length)
+        state.ledger=candidate
+        for(const event of events)queue(state,envelope('ledger.event',event))
+        await save(ref,state)
+        return events
       }))
     },
     dispute(teacher: string, student: string, draft: DisputeDraft) {

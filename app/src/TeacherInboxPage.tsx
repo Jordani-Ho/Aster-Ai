@@ -1,4 +1,6 @@
 import { TongueFigure } from './TongueFigure'
+import { toMinor, moneyCurrencyFor } from './core/ledger/money'
+import { recordObservation } from './core/kangbi'
 import { CarePlanStudentPicker } from './TeacherCarePlan'
 import { loadTeacherTemplate } from './core/drafting/template'
 import { reviseEncounter } from './core/drafting/revise'
@@ -68,6 +70,8 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
   const [selected, setSelected] = useState<StoredConsult | null>(null)
   const [draft, setDraft] = useState<Encounter | null>(null)
   const [charge, setCharge] = useState('')
+  const [currency,setCurrency]=useState('')
+  useEffect(()=>{let active=true;setCurrency('');const student=selected?(consultChargeBook(selected)?.student??selected.encounter.student):undefined;void moneyCurrencyFor(store,identity.publicKey,student).then(value=>{if(active)setCurrency(value??'')}).catch(()=>{if(active)setError('钱账币种读取失败，请核对钱账')});return()=>{active=false}},[store,identity.publicKey,selected])
   const [done, setDone] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -126,21 +130,22 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
 
   const confirm = async (final: Encounter) => {
     if (!selected) return
-    const amount = charge.trim() === '' ? undefined : Number(charge)
     setError(''); setStatus('')
     try {
-      if (amount !== undefined && (!Number.isSafeInteger(amount) || amount <= 0)) throw Error('扣费金额必须是正整数')
+      const amount=charge.trim()===''?undefined:toMinor(charge.trim(),currency)
       signedAt.current ??= Date.now()
       // M1-23a：试点指标多一列“作业坚持率”（学生发来的本周坚持率；没有就留空）。
       const metric = calculateMetric(draft ?? final, final, startedAt.current, signedAt.current, currentReport(selected.sender)?.weeklyRate ?? null)
       // M1-22 一家一本账：只有代管证明验过的问诊才把扣费记到代管人那本账；否则按发件人自己处理。
       const chargeBook = consultChargeBook(selected)
-      const result = await completeConsultSigning({ identity, consult: selected, final, send, ledger, charge: amount, ...(chargeBook ? { chargeBook } : {}) })
+      const result = await completeConsultSigning({ identity, consult: selected, final, send, ledger, charge: amount,currency, ...(chargeBook ? { chargeBook } : {}) })
       if (result.chargeError) setStatus('已签字交还；扣费没有记上：' + result.chargeError)
       else setStatus('已签字交还。')
       try { await saveMetric(store, metricKey.current, metric); setRatingKey(metricKey.current) }
       catch { setStatus(previous => previous + ' 试点指标未能保存，不影响已交还病历。') }
       setSelected(null); setDraft(null)
+      try {await recordObservation(store,{id:result.signed.id,student:selected.encounter.student,teacher:identity.publicKey,at:new Date(signedAt.current!).toISOString(),practiceDays:0,teacherMinutes:Math.max(0,(signedAt.current!-startedAt.current)/60000),consultations:1,effects:{teacher:null,self:null,measurement:null}})}
+      catch {setStatus(previous=>previous+' 观察时长暂未保存，不影响已交还病历。')}
       setDone(true)
     } catch (cause) {
       signedAt.current = null
@@ -171,7 +176,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
   if (selected && draft) {
     return <>
       <div className="inbox-charge">
-        <label>本次扣费（可选，康币）<input type="number" min={1} step={1} inputMode="numeric" value={charge} onChange={event => setCharge(event.target.value)} placeholder="不填就不扣" /></label>
+        <label>本次扣费（可选，{currency||'请先在管理页设置钱账币种'}）<input type="text" inputMode="decimal" value={charge} onChange={event => setCharge(event.target.value)} placeholder="不填就不扣" /></label>
         <p className="inbox-note">签字交还成功后，由老师端账本记一笔扣费；不填就不扣。</p>
         {status && <p role="status" className="inbox-status">{status}</p>}
         {error && <p role="alert" className="inbox-error">{error}</p>}

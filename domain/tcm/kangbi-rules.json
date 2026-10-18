@@ -1,0 +1,8 @@
+{
+  "weights": { "teacher": null, "self": null, "measurement": null },
+  "kePerPracticeDay": null,
+  "declinePerUnit": null,
+  "kePerConsultation": null,
+  "minutesPerKe": null,
+  "dailyCap": null
+}
