@@ -19,5 +19,6 @@
 | [V2-04](V2-04-two-ledgers.md) | 两本账：钱账（老师一句话记账）与康币账（可调规则 + 观察接口） | Codex | V2-01 |
 | [V2-05](V2-05-retention-mutual-backup.md) | 保留期限由老师定；师生互为备份 | DeepSeek | V2-01 |
 | [V2-06](V2-06-heaven-on-records.md) | 天地人进问诊包和病历；家人的城市 | DeepSeek | V2-02 |
+| [V2-07](V2-07-reidentify.md) | 换手机：靠师生互认找回身份 | DeepSeek | V2-05 |
 
 第二批（地基合并后再展开）：自我调整（表层配置化）、门面、物流（本地资源）、观察。
