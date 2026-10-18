@@ -2,7 +2,7 @@ import { test, expect, runtime } from './fixtures'
 import { actors } from './actors.mjs'
 
 test('two automatically generated contexts persist isolated identities without visible technical terms',async({people})=>{
- for(const person of [people.teacher,people.student]){expect(await person.page.locator('body').innerText()).not.toMatch(/密钥|助记词|公钥|npub|十六进制/);await person.page.reload();await expect(person.page.getByRole('heading',{name:person===people.teacher?'老师首页':'问诊首页',exact:true})).toBeVisible();const key=await person.page.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return s.identity.publicKey}finally{s.store.close();s.identity.privateKey.fill(0)}});expect(key).toBe(person.actor.pubkey)}
+ for(const person of [people.teacher,people.student]){expect(await person.page.locator('body').innerText()).not.toMatch(/密钥|助记词|公钥|npub|十六进制/);await person.page.reload();await expect(person.page.getByRole('heading',{name:person===people.teacher?'今天':'问诊首页',exact:true})).toBeVisible();const key=await person.page.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return s.identity.publicKey}finally{s.store.close();s.identity.privateKey.fill(0)}});expect(key).toBe(person.actor.pubkey)}
 })
 
 test('real patched relay authenticates two members and carries actual encrypted transport messages', async ({ people }) => {

@@ -1,8 +1,10 @@
+import { CarePlanStudentPicker } from './TeacherCarePlan'
+import { loadTeacherTemplate } from './core/drafting/template'
+import { reviseEncounter } from './core/drafting/revise'
+import { prioritizeConsults, urgentConsult } from './core/inbox/priority'
 import {uiError} from './core/onboarding/ui'
 import { calculateMetric, saveMetric, rateMetric } from './core/pilot'
 import { useEffect, useRef, useState } from 'react'
-import template from '../../domain/tcm/templates/default.json'
-import type { TeacherTemplate } from '../../domain/tcm/templates/types'
 import { draftEncounter } from './core/drafting'
 import type { Identity } from './core/identity'
 import {
@@ -18,19 +20,11 @@ import {
   type SendEnvelope,
   type StoredConsult,
 } from './core/inbox'
-import { intakeDisplayLabel } from './core/record/in-person'
 import type { Encounter } from './core/record/types'
 import type { LlmClient } from './core/llm'
 import type { LocalStore } from './core/store'
 import { SignEncounterPage } from './SignEncounterPage'
 import './inbox.css'
-
-const INTAKE_LABELS = {
-  chiefComplaint: '主诉',
-  presentIllness: '现病史',
-  history: '既往史',
-  medsAllergies: '在吃的药、过敏',
-} as const
 
 function textField(field: { value: string | null } | undefined): string {
   return field && field.value !== null && field.value !== '' ? field.value : '未知'
@@ -46,12 +40,13 @@ export interface TeacherInboxPageProps {
   onBack: () => void
   send: SendEnvelope
   ledger?: LedgerRecorder
+  renderCarePlan?: (student: string) => import('react').ReactNode
   llm?: LlmClient | null
 }
 
 // 老师端问诊箱：列出收到的问诊包；照片到齐才能起草，缺照片时显示“照片还在路上”。
 // 起草复用 M1-10，审改签字与交还复用 M1-11，扣费走 M1-14b 的账本记录。
-export function TeacherInboxPage({ identity, store, onBack, send, ledger, llm = null }: TeacherInboxPageProps) {
+export function TeacherInboxPage({ identity, store, onBack, send, ledger, renderCarePlan, llm = null }: TeacherInboxPageProps) {
   const startedAt = useRef(0), signedAt = useRef<number | null>(null), metricKey = useRef('')
   const [ratingKey, setRatingKey] = useState<string | null>(null)
   const [ratingBusy, setRatingBusy] = useState(false)
@@ -69,7 +64,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, llm = 
 
   const refresh = async () => {
     const rows = await listConsults(store)
-    setConsults(rows)
+    setConsults(prioritizeConsults(rows))
     const map: Record<string, ConsultReadiness> = {}
     for (const consult of rows) map[consult.encounter.id] = await consultReadiness(store, consult.encounter.id)
     setReadiness(map)
@@ -93,8 +88,11 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, llm = 
       const pkg = draftPackage(ready)
       let next: Encounter
       if (llm) {
-        setStatus('正在起草：AI 推测会逐项标为“AI 草稿”，老师采用或修改后才能签字。')
-        next = await draftEncounter(pkg, template as TeacherTemplate, [], llm, { level: 'prescription' })
+        setStatus('正在整理草稿，老师看过整张卡片后签字发出。')
+        let draftError = ''
+        next = await draftEncounter(pkg, await loadTeacherTemplate(store), [], llm, { level: 'prescription', onError: message => { draftError = message } })
+        if (draftError) throw Error(draftError)
+        setStatus('草稿尚未签字，改稿不会自动发出。')
       } else {
         setStatus('未配置模型：没有 AI 草稿，请核对问诊资料后直接签字（判断与处理为空）。')
         next = structuredClone(ready.encounter)
@@ -160,9 +158,11 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, llm = 
         {status && <p role="status" className="inbox-status">{status}</p>}
         {error && <p role="alert" className="inbox-error">{error}</p>}
       </div>
+      <section className="inbox-card"><h2>这位学生的调养方案</h2>{renderCarePlan ? renderCarePlan(selected.sender) : null}</section>
       <SignEncounterPage
         initial={draft}
         onConfirm={confirm}
+        onRevise={llm ? (encounter, instruction) => reviseEncounter(encounter, instruction, llm) : undefined}
         onCancel={() => {
           setSelected(null); setDraft(null); setPendingEventId(null)
           void refresh().catch(() => setError('问诊箱刷新失败，请稍后重试。'))
@@ -171,45 +171,10 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, llm = 
     </>
   }
 
-  if (selected) {
-    const status = readiness[selected.encounter.id]
-    const total = status?.total ?? selected.attachments.length
-    const arrived = status?.arrived ?? 0
-    return <main className="inbox-page">
-      <header className="inbox-head">
-        <button className="inbox-back" onClick={() => { setSelected(null); setError('') }}>返回</button>
-        <h1>问诊详情</h1>
-        <p>学生 {selected.sender.slice(0, 8)}… · {new Date(selected.receivedAt).toLocaleString()}</p>
-      </header>
-      {error && <p role="alert" className="inbox-error">{error}</p>}
-      {status && !status.ready && <section className="inbox-alert"><h2>照片还在路上（{arrived}/{total}）</h2><p>照片到齐后才能起草，避免只看到一半资料就写病历。</p></section>}
-      <section className="inbox-card">
-        <h2>主诉与病史</h2>
-        {(Object.keys(INTAKE_LABELS) as (keyof typeof INTAKE_LABELS)[]).map(key => <div className="inbox-field" key={key}>
-          <p className="inbox-label">{INTAKE_LABELS[key]} <span className="inbox-source">{intakeDisplayLabel(selected.encounter, key)}</span></p>
-          <p className="inbox-value">{textField(selected.encounter.intake[key])}</p>
-        </div>)}
-      </section>
-      <section className="inbox-card">
-        <h2>照片</h2>
-        <p>{total === 0 ? '没有附照片。' : '已到 ' + arrived + ' / ' + total + ' 张（老师端只保留处理后、去 EXIF 的字节）。'}</p>
-      </section>
-      <section className="inbox-card">
-        <h2>附带的历史病历</h2>
-        <p>{selected.history.length === 0 ? '没有附带历史病历。' : '已附带 ' + selected.history.length + ' 份，全部验签通过。'}</p>
-        {selected.droppedHistory > 0 && <p className="inbox-note">另有 {selected.droppedHistory} 份没有通过验签，已丢弃，不会用于起草。</p>}
-      </section>
-      <footer className="inbox-actions">
-        <button className="inbox-primary" disabled={busy || !status?.ready} onClick={() => void startDraft(selected)}>起草并审改</button>
-        <button onClick={onBack}>返回首页</button>
-      </footer>
-    </main>
-  }
-
   return <main className="inbox-page">
     <header className="inbox-head">
       <button className="inbox-back" onClick={onBack}>返回</button>
-      <h1>问诊箱</h1>
+      <h1>远程工作台</h1>
       <p>学生确认发送后才会出现。照片到齐才能起草；签字交还后原始资料会从老师端删除。</p>
     </header>
     {error && <p role="alert" className="inbox-error">{error}</p>}
@@ -221,11 +186,12 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, llm = 
       const total = state?.total ?? consult.attachments.length
       const arrived = state?.arrived ?? 0
       return <article className="inbox-card" key={consult.encounter.id}>
-        <h2>{textField(consult.encounter.intake.chiefComplaint)}</h2>
+        {urgentConsult(consult) && <p className="inbox-alert" role="note">急症提醒 · 请优先查看</p>}<h2>{textField(consult.encounter.intake.chiefComplaint)}</h2>
         <p className="inbox-meta">学生 {consult.sender.slice(0, 8)}… · {new Date(consult.receivedAt).toLocaleString()}</p>
         <p className={state?.ready ? 'inbox-status' : 'inbox-error'}>照片 {arrived}/{total}{state?.ready ? '' : ' · 照片还在路上'}</p>
-        <div className="inbox-actions"><button onClick={() => { setSelected(consult); setError('') }}>查看</button></div>
+        <div className="inbox-actions"><button disabled={busy || !state?.ready} onClick={() => void startDraft(consult)}>打开问诊</button></div>
       </article>
     })}
+    {renderCarePlan && <CarePlanStudentPicker store={store} render={renderCarePlan}/>}
   </main>
 }

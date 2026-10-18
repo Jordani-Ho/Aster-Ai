@@ -23,7 +23,7 @@ function field<T>(raw: unknown, validate: (value: unknown) => value is T): Field
   return { value: structuredClone(raw.value), source: 'ai_draft' }
 }
 
-function prescription(value: unknown): value is Prescription {
+export function prescription(value: unknown): value is Prescription {
   if (!object(value) || !Array.isArray(value.items) || !value.items.length) return false
   if (!value.items.every(item => object(item) && text(item.herb) && text(item.dose) && (item.note === undefined || text(item.note)))) return false
   if (value.method !== undefined && !text(value.method)) return false
@@ -64,7 +64,7 @@ function schedule(value: unknown): Homework['schedule'] | null {
   }
 }
 
-function homework(raw: unknown): Homework[] {
+export function homework(raw: unknown): Homework[] {
   if (!Array.isArray(raw)) return []
   return raw.flatMap((item): Homework[] => {
     if (!object(item) || !text(item.title) || !text(item.detail)) return []

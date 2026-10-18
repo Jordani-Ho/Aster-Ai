@@ -1,3 +1,4 @@
+import { DailyMirrorCard } from './DailyMirrorCard'
 import { PasskeySettings, configuredRelays } from './PasskeySettings'
 import { authenticatePasskey } from './core/onboarding/passkey'
 import { recoverPasskey } from './core/onboarding/identity-relay'
@@ -14,7 +15,6 @@ import { PushSettings } from './PushSettings'
 
 import type { Identity } from './core/identity'
 import { AdvancedRecovery } from './AdvancedRecovery'
-import { InviteSettings } from './InviteSettings'
 import { bootstrapIdentity, readInviteLink, acceptInvite, gatewayBase, INVITE_ERROR } from './core/onboarding'
 import { clearStore } from './core/store'
 import { openStore, type LocalStore } from './core/store'
@@ -23,10 +23,10 @@ import { createWiring, type Wiring } from './core/wiring'
 import { createPushClient } from './core/push'
 import { TeacherListSettings } from './TeacherListSettings'
 
+const TeacherWorkspace = lazy(() => import('./TeacherWorkspace').then(module => ({default:module.TeacherWorkspace})))
 const HomeworkPage = lazy(() => import('./HomeworkPage').then(module => ({ default: module.HomeworkPage })))
 const IntakePage = lazy(() => import('./IntakePage').then(module => ({ default: module.IntakePage })))
 const StudentRecordsPage = lazy(() => import('./StudentRecordsPage').then(module => ({ default: module.StudentRecordsPage })))
-const TeacherInboxPage = lazy(() => import('./TeacherInboxPage').then(module => ({ default: module.TeacherInboxPage })))
 
 type Role = 'student' | 'teacher'
 type LinkStatus = 'offline' | 'connecting' | 'ready' | 'rejected' | 'invalid-message'
@@ -43,7 +43,6 @@ export function App() {
   const [homeworkPage, setHomeworkPage] = useState(false)
   const [intakePage, setIntakePage] = useState(false)
   const [recordsPage, setRecordsPage] = useState(false)
-  const [inboxPage, setInboxPage] = useState(false)
   const [stackRevision, setStackRevision] = useState(0)
   const [role, setRole] = useState<Role | null>(null)
   const [stackStatus, setStackStatus] = useState<LinkStatus>('offline')
@@ -141,7 +140,7 @@ export function App() {
     setIdentity(null);setRole(null)
     await clearStore()
     const fresh=await openStore(result);storeRef.current=fresh;identityRef.current=result;await after?.(fresh);const saved=await fresh.get('settings','role') as {role?:Role}|undefined;setRole(saved?.role??null);setIdentity(result);setLocked(false)
-    setIntakePage(false);setRecordsPage(false);setHomeworkPage(false);setInboxPage(false);setError('')
+    setIntakePage(false);setRecordsPage(false);setHomeworkPage(false);setError('')
   }
   const chooseRole = async (next: Role) => {
     setError('')
@@ -156,17 +155,15 @@ export function App() {
   if (homeworkPage && store && identity) return <><div hidden><BackupSettings identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={store} onBack={() => setHomeworkPage(false)} /></Suspense></>
   if (intakePage && store && identity) return <><div hidden><BackupSettings identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开采集页…</p>}><IntakePage store={store} identity={identity} sendConsult={stack?.sendConsult} onBack={() => setIntakePage(false)} /></Suspense></>
   if (recordsPage && store && identity) return <Suspense fallback={<p>正在打开病历…</p>}><StudentRecordsPage identity={identity} store={store} onBack={() => setRecordsPage(false)} /></Suspense>
-  if (inboxPage && store && identity) {
-    return <Suspense fallback={<p>正在打开问诊箱…</p>}>
-      {stack
-        ? <TeacherInboxPage llm={llm} identity={identity} store={store} send={stack.send} ledger={stack.ledger} onBack={() => setInboxPage(false)} />
-        : <main style={{ padding: 24 }}>
-          <h1>问诊箱</h1>
-          <p role="alert">还没有配置社区中继，暂时收不到问诊。请先在“设置 → 社区备份中继”里填写中继地址。</p>
-          <button onClick={() => setInboxPage(false)}>返回</button>
-        </main>}
-    </Suspense>
-  }
+  if (role==='teacher' && store && identity) return <Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherWorkspace identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} status={<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p>} ledgerPanel={<LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus}/>} settings={<details><summary>设置</summary>
+      <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button onClick={()=>void chooseRole('student')}>我是学生</button></details>
+      <TeacherListSettings store={store}/>{role==='teacher'&&<PilotSettings store={store}/>}
+      <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p>
+      <BackupSettings identity={identity} store={store}/>
+      <PasskeySettings identity={identity} store={store} defaults={defaultRelays}/>
+      <PushSettings identity={identity}/>
+      <AdvancedRecovery store={store} onRestore={replaceIdentity}/>
+    </details>} /></Suspense>
   return <main style={{fontFamily:'system-ui, sans-serif',padding:'24px 16px',maxWidth:480,margin:'0 auto'}}>
     <h1>知衡</h1>
     {loading&&<p>正在准备…</p>}{error&&<p role="alert">{error}</p>}
@@ -175,7 +172,8 @@ export function App() {
     {identity&&role&&<>
       <h2>{role==='teacher'?'老师首页':'问诊首页'}</h2>
       <p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':stackStatus==='rejected'?'连接未成功，请联系老师':'尚未连接'}</p>
-      {role==='teacher'?<><InviteSettings identity={identity} gateway={gateway}/><p><button onClick={()=>setInboxPage(true)}>问诊箱</button></p></>:<><p><button onClick={()=>setIntakePage(true)}>开始采集</button></p><p><button onClick={()=>setRecordsPage(true)}>我的病历</button></p><p><button onClick={()=>setHomeworkPage(true)}>今日作业</button></p></>}
+      {store&&<section><h2>我的镜子</h2><DailyMirrorCard store={store} llm={llm}/></section>}
+      {<><p><button onClick={()=>setIntakePage(true)}>开始采集</button></p><p><button onClick={()=>setRecordsPage(true)}>我的病历</button></p><p><button onClick={()=>setHomeworkPage(true)}>今日作业</button></p></>}
     </>}
     {store&&identity&&<details><summary>设置</summary>
       <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button disabled={role==='student'} onClick={()=>void chooseRole('student')}>我是学生</button></details>

@@ -13,12 +13,14 @@ export const test=base.extend<{people:{teacher:Person;student:Person};seedLedger
   try{
    const teacher={context:tc,page:await tc.newPage(),actor:actors.teacher},student={context:sc,page:await sc.newPage(),actor:actors.student}
    await teacher.page.goto('/');await expect(teacher.page.getByRole('heading',{name:'您是老师还是学生？'})).toBeVisible()
-   await teacher.page.getByRole('button',{name:'我是老师',exact:true}).click();await expect(teacher.page.getByRole('heading',{name:'老师首页',exact:true})).toBeVisible()
+   await teacher.page.getByRole('button',{name:'我是老师',exact:true}).click();await expect(teacher.page.getByRole('heading',{name:'今天',exact:true})).toBeVisible()
+   await teacher.page.getByRole('button',{name:'管理',exact:true}).click()
    await teacher.page.getByText('我是这个社区的老师',{exact:true}).click()
    await teacher.page.getByLabel('部署口令',{exact:true}).fill('SYNTHETIC_DEPLOYMENT_TOKEN')
    await teacher.page.getByRole('button',{name:'登记为社区老师',exact:true}).click();await expect(teacher.page.getByText('社区已建立，可以邀请学生。',{exact:true})).toBeVisible()
    await teacher.page.getByRole('button',{name:'邀请学生',exact:true}).click();const link=teacher.page.getByLabel('邀请链接',{exact:true});await expect(link).toBeVisible()
    await student.page.goto(await link.inputValue());await expect(student.page.getByRole('heading',{name:'问诊首页',exact:true})).toBeVisible()
+   await teacher.page.getByRole('button',{name:'今天',exact:true}).click()
    setActors(await actualActor(teacher.page),await actualActor(student.page))
    for(const page of [teacher.page,student.page])await expect(page.getByText('中继：已连接',{exact:true})).toBeVisible()
    if(!communityOpen){expect((await request.post(runtime.controlURL+'/reset',{headers,data:{communityOpen:false,members:[actors.teacher.pubkey,actors.student.pubkey],relayOnly:true}})).status()).toBe(200);for(const page of [teacher.page,student.page]){await page.reload();await expect(page.getByText('中继：已连接',{exact:true})).toBeVisible()}}

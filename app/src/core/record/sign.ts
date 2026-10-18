@@ -221,3 +221,19 @@ export function nextVersion(
     ...(updates.outcome ? { outcome: updates.outcome } : {}),
   }
 }
+
+// 仅由真人点击“签字发出”调用；纯数据转换，不起草、不签名、不访问模型。
+export function acceptDraftForSigning(encounter: Encounter): Encounter {
+  const result = structuredClone(encounter)
+  for (const section of [result.fourExams, result.judgment, result.plan, result.outcome]) {
+    if (!section) continue
+    for (const item of Object.values(section)) {
+      for (const field of Array.isArray(item) ? item : [item]) {
+        if (field && typeof field === 'object' && 'source' in field && field.source === 'ai_draft') {
+          field.source = 'teacher'; field.note = 'ai_accepted'
+        }
+      }
+    }
+  }
+  return result
+}

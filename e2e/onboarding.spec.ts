@@ -1,15 +1,15 @@
 import {test,expect,runtime} from './fixtures'
 import {actors} from './actors.mjs'
 const forbidden=/密钥|助记词|公钥|npub|十六进制/
-async function settings(page:import('@playwright/test').Page){const summary=page.locator('summary').filter({hasText:/^设置$/});if(await summary.locator('..').getAttribute('open')===null)await summary.click()}
+async function settings(page:import('@playwright/test').Page){const manage=page.getByRole('button',{name:'管理',exact:true});if(await manage.count())await manage.click();const summary=page.locator('summary').filter({hasText:/^设置$/});if(await summary.locator('..').getAttribute('open')===null)await summary.click()}
 test('first open asks only role; invitation needs no student input and automatically adds teacher and book',async({people,browser})=>{
  const fresh=await browser.newContext({baseURL:runtime.baseURL,viewport:{width:375,height:812}})
- try{const page=await fresh.newPage();await page.goto('/');await expect(page.getByRole('heading',{name:'您是老师还是学生？'})).toBeVisible();expect(await page.locator('body').innerText()).not.toMatch(forbidden);await page.getByRole('button',{name:'我是老师',exact:true}).click();await expect(page.getByRole('heading',{name:'老师首页',exact:true})).toBeVisible();expect(await page.locator('input:visible,textarea:visible').count()).toBe(0);await settings(page);expect(await page.locator('body').innerText()).not.toMatch(forbidden)}finally{await fresh.close()}
+ try{const page=await fresh.newPage();await page.goto('/');await expect(page.getByRole('heading',{name:'您是老师还是学生？'})).toBeVisible();expect(await page.locator('body').innerText()).not.toMatch(forbidden);await page.getByRole('button',{name:'我是老师',exact:true}).click();await expect(page.getByRole('heading',{name:'今天',exact:true})).toBeVisible();expect(await page.locator('input:visible,textarea:visible').count()).toBe(0);await settings(page);expect(await page.locator('body').innerText()).not.toMatch(forbidden)}finally{await fresh.close()}
  const student=people.student.page
  const state=await student.evaluate(async()=>{const p='/src/core/store/index.ts',session=await(await import(p)).resumeStore();try{return {teachers:await session.store.get('settings','teachers'),books:await session.store.list('ledger-index')}}finally{session.store.close();session.identity.privateKey.fill(0)}})
  expect(state.teachers).toContain(actors.teacher.pubkey);expect(state.books.some((v:any)=>v.value.teacher===actors.teacher.pubkey)).toBe(true)
  await settings(student);await expect(student.getByRole('region',{name:'我的老师'})).toBeVisible();expect(await student.locator('body').innerText()).not.toMatch(forbidden)
- await people.teacher.page.getByRole('button',{name:'邀请学生',exact:true}).click();await expect(people.teacher.page.getByAltText('学生扫码即可加入')).toBeVisible()
+ await people.teacher.page.getByRole('button',{name:'管理',exact:true}).click();await people.teacher.page.getByRole('button',{name:'邀请学生',exact:true}).click();await expect(people.teacher.page.getByAltText('学生扫码即可加入')).toBeVisible()
 })
 test('expired and nonmember invitation links fail with plain explanation and no registration',async({people,browser})=>{
  const links=await people.teacher.page.evaluate(async({outsider,base})=>{const p='/src/core/onboarding/index.ts',q='/src/core/store/index.ts',identity='/src/core/identity/index.ts',{makeInvite,inviteLink}=await import(p),session=await(await import(q)).resumeStore();try{const other=(await import(identity)).restoreIdentity(outsider),url=base+'/invite/redeem';return [inviteLink(base,makeInvite(session.identity,url,Math.floor(Date.now()/1000)-604801)),inviteLink(base,makeInvite(other,url))]}finally{session.store.close();session.identity.privateKey.fill(0)}},{outsider:actors.outsider.phrase,base:runtime.baseURL})
