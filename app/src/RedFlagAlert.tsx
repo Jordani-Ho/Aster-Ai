@@ -21,7 +21,7 @@ export function RedFlagAlert({ result, region }: RedFlagAlertProps) {
             : <p className="redflag-hotline">请拨打当地心理援助热线，或让可信任的人陪着你。</p>}
         </>
       ) : (
-        <p>您说的情况需要尽快去医院，请不要耽误。</p>
+        <p>您说的情况需要尽快去医院，请不要耽误</p>
       )}
     </div>
   )

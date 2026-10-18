@@ -68,8 +68,14 @@ export function ConsultPage({ store, identity, llm, sendConsult }: ConsultPagePr
     try {
       let next = session
       if (!next) {
-        if (!/^[0-9a-f]{64}$/.test(teacher)) { setError('请先打开老师的邀请链接。'); setBusy(false); return }
-        next = startSession({ student: identity.publicKey, teacher, template: template as TeacherTemplate })
+        let currentTeacher = teacher
+        if (!/^[0-9a-f]{64}$/.test(currentTeacher)) {
+          const loaded = await loadTeachers(store)
+          setTeachers(loaded)
+          currentTeacher = loaded[0] ?? ''
+        }
+        if (!/^[0-9a-f]{64}$/.test(currentTeacher)) { setError('请先打开老师的邀请链接。'); setBusy(false); return }
+        next = startSession({ student: identity.publicKey, teacher: currentTeacher, template: template as TeacherTemplate })
       }
       const text = draftText.trim()
       if (next.questions.length > 0) {
@@ -154,7 +160,7 @@ export function ConsultPage({ store, identity, llm, sendConsult }: ConsultPagePr
         <p className="bubble-focus">{pendingQuestion.focus}</p>
         <p>{pendingQuestion.text}</p>
         <div className="bubble-actions">
-          <button onClick={() => void skip()}>跳过</button>
+          <button disabled={busy} onClick={() => void skip()}>跳过</button>
         </div>
       </div>}
       {session && session.questions.length === 0 && session.phase !== 'confirm' && <div className="bubble ai">还在听你说，可以继续说。</div>}
