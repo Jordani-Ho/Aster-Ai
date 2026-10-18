@@ -73,7 +73,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, persist
         <p role="status" className="other-relay">中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : '尚未连接'}</p>
         {error && <p role="alert">{error}</p>}
         <details><summary>设置</summary>
-          <details><summary>康币账本与对账</summary><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></details>
+          <LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} />
           <TeacherListSettings store={store} />
           <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p>
           <BackupSettings identity={identity} store={store} />
