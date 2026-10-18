@@ -9,7 +9,12 @@ async function settings(page: Page) {
   const summary = page.locator('summary').filter({ hasText: /^设置$/ })
   if (await summary.locator('..').getAttribute('open') === null) await summary.click()
 }
-async function role(page:Page,value:'老师'|'学生') {await expect(page.getByRole('heading',{name:value==='老师'?'今天':'问诊首页',exact:true})).toBeVisible();await expect(page.getByText('中继：已连接',{exact:true})).toBeVisible()}
+async function role(page:Page,value:'老师'|'学生') {await expect(page.getByRole('heading',{name:value==='老师'?'今天':'镜子',exact:true})).toBeVisible();await expect(page.getByText('中继：已连接',{exact:true})).toBeVisible()}
+// 学生端三页：其他页内的入口。
+async function studentOther(page: Page) { await page.getByRole('button',{name:'其他',exact:true}).click() }
+async function studentSettings(page: Page) { await studentOther(page); await settings(page) }
+async function studentRecords(page: Page) { await studentOther(page); await page.getByRole('button',{name:'我的病历',exact:true}).click() }
+async function studentHomework(page: Page) { await studentOther(page); await page.getByRole('button',{name:'今日作业',exact:true}).click() }
 async function stored(page: Page, collection: string) {
   return page.evaluate(async name => {
     const module='/src/core/store/index.ts', { resumeStore }=await import(module), session=await resumeStore().catch(async()=>{const p='/src/core/onboarding/passkey.ts',{authenticatePasskey}=await import(p);return resumeStore({unlockKey:(await authenticatePasskey()).key})})
@@ -21,24 +26,21 @@ async function book(page: Page) {
   return page.evaluate(async ({teacher,student}) => {
     const storePath='/src/core/store/index.ts', syncPath='/src/core/ledger/sync.ts'
     const { resumeStore }=await import(storePath), session=await resumeStore().catch(async()=>{const p='/src/core/onboarding/passkey.ts',{authenticatePasskey}=await import(p);return resumeStore({unlockKey:(await authenticatePasskey()).key})}), { createLedgerSync }=await import(syncPath)
-    // Read-only controller; never start a second transport or mutate the live book.
     const sync=createLedgerSync({ identity:session.identity,store:session.store,send:async()=>{throw Error('read only')} })
     try { const v=await sync.view(teacher,student);return { balance:v.balance,code:v.code } }
     finally { await sync.close();session.store.close();session.identity.privateKey.fill(0) }
   }, {teacher:actors.teacher.pubkey,student:actors.student.pubkey})
 }
 async function intake(page: Page, quote: string) {
-  await page.getByRole('button',{name:'开始采集',exact:true}).click()
-  await page.getByRole('button',{name:'开始采集',exact:true}).click()
-  await page.getByRole('textbox',{name:'用输入法的语音输入，或直接打字'}).fill(quote)
-  await page.getByRole('button',{name:'加入这一句',exact:true}).click()
-  await expect(page.getByRole('heading',{name:/还想问一下/})).toBeVisible()
-  for(let i=0;i<3;i++) await page.getByRole('button',{name:'跳过',exact:true}).first().click()
-  await expect(page.getByRole('heading',{name:'确认后发送'})).toBeVisible()
-  await page.getByRole('textbox',{name:'最不舒服的地方（主诉）'}).fill(quote)
-  await page.getByRole('textbox',{name:'现在的情况（现病史）'}).fill('SYNTHETIC_PRESENT')
-  await page.getByRole('textbox',{name:'以前的病（既往史）'}).fill('SYNTHETIC_HISTORY')
-  await page.getByRole('textbox',{name:'在吃的药、过敏'}).fill('SYNTHETIC_NO_MEDS')
+  await page.getByRole('button',{name:'问诊',exact:true}).click()
+  await page.getByLabel('按键盘上的🎤说话就行').fill(quote)
+  await page.getByRole('button',{name:'发送',exact:true}).click()
+  for(let i=0;i<3;i++) { const skip=page.getByRole('button',{name:'跳过',exact:true}).first(); try { await skip.waitFor({state:'visible',timeout:10000}) } catch { break } await skip.click() }
+  await expect(page.getByRole('button',{name:'发给老师',exact:true})).toBeVisible()
+  await page.getByLabel('最不舒服的地方（主诉）').fill(quote)
+  await page.getByLabel('现在的情况（现病史）').fill('SYNTHETIC_PRESENT')
+  await page.getByLabel('以前的病（既往史）').fill('SYNTHETIC_HISTORY')
+  await page.getByLabel('在吃的药、过敏').fill('SYNTHETIC_NO_MEDS')
 }
 async function decrypted(page: Page) {
   return page.evaluate(async () => {
@@ -64,8 +66,8 @@ test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' r
   const jpeg=await student.evaluate(()=>{const c=document.createElement('canvas');c.width=32;c.height=24;const ctx=c.getContext('2d')!;ctx.fillStyle='#1a829e';ctx.fillRect(0,0,32,24);return c.toDataURL('image/jpeg').split(',')[1]})
   await student.locator('input[type=file][accept="image/*"]').setInputFiles({name:'synthetic.jpg',mimeType:'image/jpeg',buffer:Buffer.from(jpeg,'base64')})
   await expect(student.getByText(/照片已在本机缩小/)).toBeVisible()
-  await student.getByRole('button',{name:'确认发送',exact:true}).click()
-  await expect(student.getByRole('heading',{name:'已确认',exact:true})).toBeVisible()
+  await student.getByRole('button',{name:'发给老师',exact:true}).click()
+  await expect(student.getByRole('heading',{name:'已发给老师',exact:true})).toBeVisible()
   await expect(teacher.getByRole('heading',{name:quote,exact:true})).toBeVisible()
   await expect(teacher.getByText('照片 1/1',{exact:true})).toBeVisible()
   const photos=await stored(teacher,'attachments');expect(photos).toHaveLength(1)
@@ -82,12 +84,11 @@ test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' r
   await expect(teacher.getByRole('dialog',{name:'像不像我评分'})).toBeVisible()
   await teacher.getByRole('button',{name:'5分',exact:true}).click()
   await expect(teacher.getByRole('dialog',{name:'像不像我评分'})).toHaveCount(0)
-  await student.getByRole('button',{name:'返回',exact:true}).click()
-  await student.getByRole('button',{name:'我的病历',exact:true}).click()
+  await studentRecords(student)
   await expect(student.getByText('证候：SYNTHETIC_PATTERN',{exact:true})).toBeVisible()
   await expect(student.getByText('SYNTHETIC_HOMEWORK',{exact:true})).toBeVisible()
   await student.getByRole('button',{name:'返回',exact:true}).click()
-  await student.getByRole('button',{name:'今日作业',exact:true}).click()
+  await studentHomework(student)
   await student.getByRole('button',{name:'已完成',exact:true}).click()
   await expect(student.getByRole('button',{name:'今日已完成 ✓',exact:true})).toBeDisabled()
   await student.getByRole('button',{name:'返回',exact:true}).click()
@@ -97,7 +98,6 @@ test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' r
   await test.step('hard: teacher decrypted IndexedDB has no original quote or processed JPEG, including after relay replay',async()=>{
     await teacher.getByRole('button',{name:'返回首页',exact:true}).click()
     await teacher.reload();await expect(teacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible()
-    // Reconnect replays history; a completed consult must stay erased.
     await expect(teacher.getByText('中继：已连接',{exact:true})).toBeVisible()
     await teacher.getByRole('button',{name:'远程',exact:true}).click()
     await expect(teacher.getByText(/还没有收到问诊/)).toBeVisible()
@@ -110,7 +110,8 @@ test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' r
   await test.step('hard: both displayed balances and comparison codes agree',async()=>{
     await expect.poll(async()=> (await book(student)).balance).toBe(7)
     const t=await book(teacher),s=await book(student);expect(t.balance).toBe(7);expect(t.code).toBe(s.code)
-    for(const page of [teacher,student]) {await settings(page);await page.getByText('康币账本与对账',{exact:true}).click();await expect(page.getByText('余额：7 康币 · 对账码：'+s.code,{exact:true})).toBeVisible()}
+    await settings(teacher);await teacher.getByText('康币账本与对账',{exact:true}).click();await expect(teacher.getByText('余额：7 康币 · 对账码：'+s.code,{exact:true})).toBeVisible()
+    await studentSettings(student);await student.getByText('康币账本与对账',{exact:true}).click();await expect(student.getByText('余额：7 康币 · 对账码：'+s.code,{exact:true})).toBeVisible()
   })
   const exportRequests:string[]=[]
   const observe=(request:any)=>{if(/^https?:/.test(request.url()))exportRequests.push(request.url())}
@@ -129,8 +130,10 @@ test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' r
       passkeySession=await people.student.context.newCDPSession(student)
       await passkeySession.send('WebAuthn.enable',{enableUI:false})
       await passkeySession.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',ctap2Version:'ctap2_1',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true,hasPrf:true}})
+      await studentSettings(student)
       const toggle=student.getByRole('switch',{name:'用刷脸保护并自动备份',exact:true});await toggle.click();await expect(toggle).toHaveAttribute('aria-checked','true')
     }
+    await studentSettings(student)
     await student.getByText('备份状态',{exact:true}).click()
     await student.getByRole('button',{name:'立即备份',exact:true}).click()
     await expect(student.getByText('中继备份成功',{exact:true})).toBeVisible()
@@ -143,10 +146,10 @@ test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' r
       await student.getByText('换手机后找回备份',{exact:true}).click()
       await student.getByLabel('允许用备份替换本机资料',{exact:true}).check()
       await student.getByRole('button',{name:'用刷脸找回备份',exact:true}).click()
-      await expect(student.getByRole('heading',{name:'问诊首页',exact:true})).toBeVisible()
+      await expect(student.getByRole('heading',{name:'镜子',exact:true})).toBeVisible()
       await student.reload();await expect(student.getByRole('button',{name:'刷脸解锁',exact:true})).toBeVisible()
-      await expect(student.getByRole('button',{name:'开始采集',exact:true})).toHaveCount(0)
-      await student.getByRole('button',{name:'刷脸解锁',exact:true}).click();await expect(student.getByRole('heading',{name:'问诊首页',exact:true})).toBeVisible()
+      await expect(student.getByRole('button',{name:'问诊',exact:true})).toHaveCount(0)
+      await student.getByRole('button',{name:'刷脸解锁',exact:true}).click();await expect(student.getByRole('heading',{name:'镜子',exact:true})).toBeVisible()
     }else{
       await settings(student);await student.getByText('换手机时用（高级）',{exact:true}).click()
       await student.getByLabel('输入12个词',{exact:true}).fill(actors.student.phrase)
@@ -156,22 +159,22 @@ test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' r
       await settings(student);await student.getByText('备份状态',{exact:true}).click()
       await student.getByRole('checkbox',{name:'我已保存需要保留的本机资料，允许替换'}).check()
       await student.getByRole('button',{name:'从中继恢复最新备份'}).click()
-      await expect(student.getByText('已从中继恢复',{exact:true})).toBeVisible()
+      // 恢复成功后角色从备份里的 role 读回 'student'，学生壳切回镜子页。
+      await expect(student.getByRole('heading',{name:'镜子',exact:true})).toBeVisible()
     }
     expect((await stored(student,'student-records')).map((r: { key: string })=>r.key)).toEqual(records.map((r: { key: string })=>r.key))
     expect((await stored(student,'homework'))[0].value.homework.id).toBe(assignments[0].value.homework.id)
     expect((await book(student)).balance).toBe(7)
-    await student.getByRole('button',{name:'我的病历',exact:true}).click()
+    await studentRecords(student)
     await expect(student.getByText('证候：SYNTHETIC_PATTERN',{exact:true})).toBeVisible()
     await student.getByRole('button',{name:'返回',exact:true}).click()
-    await student.getByRole('button',{name:'今日作业',exact:true}).click()
+    await studentHomework(student)
     await expect(student.getByRole('button',{name:'今日已完成 ✓',exact:true})).toBeDisabled()
     await student.getByRole('button',{name:'返回',exact:true}).click()
   })
   await intake(student,'SYNTHETIC_FOLLOWUP')
-  const old=student.locator('.intake-history input[type=checkbox]');await expect(old).toHaveCount(1);await expect(old).toBeChecked()
-  await student.getByRole('button',{name:'确认发送',exact:true}).click()
-  await expect(student.getByRole('heading',{name:'已确认',exact:true})).toBeVisible()
+  await student.getByRole('button',{name:'发给老师',exact:true}).click()
+  await expect(student.getByRole('heading',{name:'已发给老师',exact:true})).toBeVisible()
   await expect.poll(async()=> (await stored(teacher,'consult-package')).length).toBe(1)
   const followup=(await stored(teacher,'consult-package'))[0].value
   expect(followup.history).toHaveLength(1);expect(JSON.parse(followup.history[0]).id).toBe(records[0].key)
@@ -190,19 +193,36 @@ test('hard: student displays only the valid signature after tampered then valid 
     const channel=createTransport({privateKey:Uint8Array.from(key),relays:[relay],onMessage:()=>{}});channel.start()
     try {await channel.send(student,{type:'record.signed',version:1,payload:tampered});await channel.send(student,{type:'record.signed',version:1,payload:valid})}finally{channel.close()}
   },{key:actors.teacher.key,student:actors.student.pubkey,teacher:actors.teacher.pubkey,relay:runtime.relayUrl})
-  await student.getByRole('button',{name:'我的病历',exact:true}).click()
+  await studentRecords(student)
   await expect(student.getByText('SYNTHETIC_VALID_RECORD',{exact:false})).toBeVisible()
   await expect(student.getByText('TAMPERED_RECORD_MUST_NOT_DISPLAY',{exact:false})).toHaveCount(0)
   expect(await stored(student,'student-records')).toHaveLength(1)
 })
-test('emergency screening interrupts collection before any consultation can be sent',async({people})=>{
-  const page=people.student.page;await role(page,'学生')
-  await page.getByRole('button',{name:'开始采集',exact:true}).click()
-  await page.getByRole('button',{name:'开始采集',exact:true}).click()
-  await page.getByRole('textbox',{name:'用输入法的语音输入，或直接打字'}).fill('胸口压着疼，出冷汗')
-  await page.getByRole('button',{name:'加入这一句',exact:true}).click()
-  await expect(page.getByText(/请立即就医|请立即去医院|请立即拨打/).first()).toBeVisible()
-  await expect(page.getByRole('button',{name:'确认发送',exact:true})).toHaveCount(0)
-  expect(await stored(people.teacher.page,'consult-package')).toHaveLength(0)
+test('emergency prompts inline without phone numbers and still sends with redFlag',async({people})=>{
+  const student=people.student.page;await role(student,'学生')
+  await student.getByRole('button',{name:'问诊',exact:true}).click()
+  await student.getByLabel('按键盘上的🎤说话就行').fill('胸口压着疼，出冷汗')
+  await student.getByRole('button',{name:'发送',exact:true}).click()
+  await expect(student.getByText('您说的情况需要尽快去医院，请不要耽误',{exact:true})).toBeVisible()
+  const body=await student.locator('body').innerText()
+  for(const num of ['120','911','999','119','995','988']) expect(body).not.toContain(num)
+  for(let i=0;i<3;i++){const skip=student.getByRole('button',{name:'跳过',exact:true}).first();try{await skip.waitFor({state:'visible',timeout:10000})}catch{break};await skip.click()}
+  await student.getByRole('button',{name:'发给老师',exact:true}).click()
+  await expect(student.getByRole('heading',{name:'已发给老师',exact:true})).toBeVisible()
+  await expect.poll(async()=> (await stored(people.teacher.page,'consult-package')).length).toBe(1)
+  expect((await stored(people.teacher.page,'consult-package'))[0].value.redFlag).toEqual({hit:true,crisis:false})
 })
-
+test('self-harm shows only the crisis hotline and marks crisis redFlag',async({people})=>{
+  const student=people.student.page;await role(student,'学生')
+  await student.getByRole('button',{name:'问诊',exact:true}).click()
+  await student.getByLabel('按键盘上的🎤说话就行').fill('不想活了')
+  await student.getByRole('button',{name:'发送',exact:true}).click()
+  await expect(student.getByText('你并不孤单',{exact:false})).toBeVisible()
+  const body=await student.locator('body').innerText()
+  for(const num of ['120','911','999','119','995']) expect(body).not.toContain(num)
+  for(let i=0;i<3;i++){const skip=student.getByRole('button',{name:'跳过',exact:true}).first();try{await skip.waitFor({state:'visible',timeout:10000})}catch{break};await skip.click()}
+  await student.getByRole('button',{name:'发给老师',exact:true}).click()
+  await expect(student.getByRole('heading',{name:'已发给老师',exact:true})).toBeVisible()
+  await expect.poll(async()=> (await stored(people.teacher.page,'consult-package')).length).toBe(1)
+  expect((await stored(people.teacher.page,'consult-package'))[0].value.redFlag).toEqual({hit:true,crisis:true})
+})

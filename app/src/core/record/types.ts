@@ -73,4 +73,8 @@ export interface ConsultPackage {
   encounter: Encounter          // 只填了 profile 和 intake，来源都是 'student'
   history: string[]             // 学生授权附带的历史病历（签名事件 JSON 字符串），默认同一位老师的近 3 次
   attachments: { ref: AttachmentRef; data: Uint8Array }[]
+  /** 急症/自伤标记（M1-19）：只随传输信封给老师端看，不进 Encounter schema。 */
+  redFlag?: { hit: boolean; crisis: boolean }
+  /** 最近 14 天状态与压力走势（M1-19）：只随传输信封给老师端看，不进 Encounter schema。 */
+  trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] }
 }

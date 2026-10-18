@@ -72,6 +72,14 @@ export function emptyProfile(): Encounter['profile'] {
   }
 }
 
+// 问诊包上的急症标记：只给老师端看，不进 Encounter schema（M1-19）。
+export interface RedFlagMark { hit: boolean; crisis: boolean }
+
+function redFlagMark(result: RedFlagResult | null): RedFlagMark | null {
+  if (!result || !result.hit) return null
+  return { hit: true, crisis: result.actions.includes('crisis') }
+}
+
 export function startSession(options: { student: string; teacher: string; template: TeacherTemplate; now?: Date; id?: string }): IntakeSession {
   const { student, teacher, template } = options
   if (!HEX64.test(student) || !HEX64.test(teacher)) throw new Error('公钥格式无效')
@@ -100,17 +108,15 @@ export function startSession(options: { student: string; teacher: string; templa
   }
 }
 
-// 每说一句都先过本地急症筛查；命中就中断采集，不能再发送。
+// 每说一句都先过本地急症筛查；命中只记录标记（M1-19 起不再阻断），发送前仍会再查一遍。
 export function addUtterance(state: IntakeSession, text: string): IntakeSession {
-  if (state.emergency) throw new Error('请先处理急症提示')
   if (state.phase !== 'collecting') throw new Error('这次采集已经进入确认页')
   const value = text.trim()
   if (value === '') throw new Error('这句话还是空的')
   if (value.length > 2000) throw new Error('一次说得太长了，请分几次说')
   const result = check(value)
   const texts = [...state.texts, value]
-  if (result.hit) return { ...state, texts, emergency: result, questions: [], reviewed: false }
-  return { ...state, texts, reviewed: false }
+  return { ...state, texts, emergency: result.hit ? result : state.emergency, reviewed: false }
 }
 
 function assertFocus(state: IntakeSession, focus: string): void {
@@ -119,7 +125,6 @@ function assertFocus(state: IntakeSession, focus: string): void {
 }
 
 export function answerFocus(state: IntakeSession, focus: string, text: string): IntakeSession {
-  if (state.emergency) throw new Error('请先处理急症提示')
   assertFocus(state, focus)
   const value = text.trim()
   if (value === '') throw new Error('回答还是空的')
@@ -127,12 +132,10 @@ export function answerFocus(state: IntakeSession, focus: string, text: string): 
   const result = check(value)
   const answers = { ...state.answers, [focus]: { status: 'answered' as const, text: value } }
   const questions = state.questions.filter(question => question.focus !== focus)
-  if (result.hit) return { ...state, answers, questions, emergency: result, reviewed: false }
-  return { ...state, answers, questions, reviewed: false }
+  return { ...state, answers, questions, emergency: result.hit ? result : state.emergency, reviewed: false }
 }
 
 export function skipFocus(state: IntakeSession, focus: string): IntakeSession {
-  if (state.emergency) throw new Error('请先处理急症提示')
   assertFocus(state, focus)
   return {
     ...state,
@@ -148,7 +151,6 @@ export async function organizeSession(
   llm: LlmClient | null | undefined,
   options: { timeoutMs?: number } = {},
 ): Promise<IntakeSession> {
-  if (state.emergency) throw new Error('请先处理急症提示')
   if (state.phase === 'sent') throw new Error('这次采集已经发送')
   const focusAnswers: Record<string, string> = {}
   for (const [focus, record] of Object.entries(state.answers)) {
@@ -189,10 +191,9 @@ export function updateField(state: IntakeSession, key: IntakeKey, value: string)
   const trimmed = value.trim()
   if (trimmed.length > 2000) throw new Error('这一项太长了，请精简一下')
   const fields = { ...state.fields, [key]: textField(trimmed === '' ? null : trimmed) }
-  // 学生在确认页改写的文字同样过本地急症红线；命中就中断，不能再发送。
+  // 学生在确认页改写的文字同样过本地急症红线；命中只记录标记，不阻断（M1-19）。
   const result = check(trimmed)
-  if (result.hit) return { ...state, fields, emergency: result, reviewed: false }
-  return { ...state, fields }
+  return { ...state, fields, emergency: result.hit ? result : state.emergency }
 }
 
 export function addPhoto(state: IntakeSession, photo: PhotoResult): IntakeSession {
@@ -208,7 +209,6 @@ export function removePhoto(state: IntakeSession, refId: string): IntakeSession 
 export interface ConfirmCheck { ok: boolean; reason?: string }
 
 export function canConfirm(state: IntakeSession): ConfirmCheck {
-  if (state.emergency) return { ok: false, reason: '有急症提示未处理，暂时不能发送' }
   if (state.phase === 'sent') return { ok: false, reason: '这次采集已经发送过了' }
   if (state.phase !== 'confirm') return { ok: false, reason: '还没到确认页' }
   if (!state.reviewed) return { ok: false, reason: '请先在确认页核对整理后的内容' }
@@ -250,13 +250,18 @@ export function buildConsultPackage(
   profile: Encounter['profile'],
   history: readonly HistoryCandidate[],
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
+  trend?: ConsultPackage['trend'],
 ): ConsultPackage {
   const checkResult = canConfirm(state)
   if (!checkResult.ok) throw new Error(checkResult.reason)
-  // 纵深防御：发送前把 intake 全部字段再过一遍急症红线，不只依赖状态里的 emergency。
+  // 纵深防御：发送前把 intake 全部字段再过一遍急症红线，命中就标记，不阻断（M1-19）。
+  let redFlag: RedFlagMark | null = redFlagMark(state.emergency)
   for (const key of INTAKE_KEYS) {
     const value = state.fields[key].value
-    if (value !== null && value !== '' && check(value).hit) throw new Error('问诊包里还有急症描述，请先处理急症提示')
+    if (value !== null && value !== '') {
+      const hit = check(value)
+      if (hit.hit) redFlag = { hit: true, crisis: (redFlag?.crisis ?? false) || hit.actions.includes('crisis') }
+    }
   }
   for (const candidate of history) {
     if (candidate.teacher !== state.teacher) throw new Error('附带的病历不是这位老师的')
@@ -294,6 +299,8 @@ export function buildConsultPackage(
     encounter,
     history: history.map(candidate => candidate.eventJson),
     attachments: attachments.map(item => ({ ref: { ...item.ref }, data: item.data })),
+    ...(redFlag ? { redFlag } : {}),
+    ...(trend ? { trend } : {}),
   }
 }
 
@@ -317,8 +324,9 @@ export async function confirmAndSend(
   history: readonly HistoryCandidate[],
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
   send: SendConsultPackage,
+  trend?: ConsultPackage['trend'],
 ): Promise<ConsultPackage> {
-  const pkg = buildConsultPackage(state, profile, history, attachments)
+  const pkg = buildConsultPackage(state, profile, history, attachments, trend)
   // 只有学生明确点“确认发送”才走到这里；之前任何一步都不调用 send。
   await send(pkg)
   await saveStoredPackage(store, pkg, INTAKE_COLLECTIONS.sent, state.encounterId)

@@ -35,6 +35,10 @@ export interface ConsultEnvelopePayload {
   encounter: Encounter
   history: string[]
   attachments: AttachmentRef[]
+  /** 急症/自伤标记（M1-19）：只给老师端看，不进 Encounter schema。 */
+  redFlag?: { hit: boolean; crisis: boolean }
+  /** 最近 14 天状态与压力走势（M1-19）：只给老师端看，不进 Encounter schema。 */
+  trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] }
 }
 
 export interface AttachmentEnvelopePayload {
@@ -51,6 +55,10 @@ export interface StoredConsult {
   receivedAt: string
   sender: string
   droppedHistory: number
+  /** 急症/自伤标记（M1-19）：老师问诊箱据此醒目标出，只做展示不进入病历。 */
+  redFlag?: { hit: boolean; crisis: boolean } | null
+  /** 最近 14 天状态与压力走势（M1-19）：老师草稿卡片上显示一条小走势。 */
+  trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] } | null
 }
 
 export interface ConsultReadiness {
@@ -193,6 +201,8 @@ export function consultEnvelope(pkg: ConsultPackage): Envelope {
       encounter: structuredClone(pkg.encounter),
       history: [...pkg.history],
       attachments: pkg.attachments.map(item => ({ ...item.ref })),
+      ...(pkg.redFlag ? { redFlag: pkg.redFlag } : {}),
+      ...(pkg.trend ? { trend: pkg.trend } : {}),
     } satisfies ConsultEnvelopePayload,
   }
 }
@@ -297,6 +307,21 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
   if (!Array.isArray(value.attachments) || value.attachments.length > MAX_PHOTOS || !value.attachments.every(isRef)) return
   const history = Array.isArray(value.history) ? value.history : []
   const checked = validHistory({ ...value, history }, identity)
+  const redFlagRaw = value.redFlag as unknown
+  const redFlag = typeof redFlagRaw === 'object' && redFlagRaw !== null && !Array.isArray(redFlagRaw)
+    && typeof (redFlagRaw as { hit?: unknown }).hit === 'boolean' && typeof (redFlagRaw as { crisis?: unknown }).crisis === 'boolean'
+    ? { hit: (redFlagRaw as { hit: boolean }).hit, crisis: (redFlagRaw as { crisis: boolean }).crisis }
+    : null
+  const trendRaw = value.trend as unknown
+  const trend = typeof trendRaw === 'object' && trendRaw !== null && !Array.isArray(trendRaw)
+    && Array.isArray((trendRaw as { days?: unknown }).days) && Array.isArray((trendRaw as { scores?: unknown }).scores) && Array.isArray((trendRaw as { stress?: unknown }).stress)
+    ? {
+      days: (trendRaw as { days: string[] }).days.filter(day => typeof day === 'string'),
+      checkins: Array.isArray((trendRaw as { checkins?: unknown }).checkins) ? (trendRaw as { checkins: number[] }).checkins : [],
+      scores: (trendRaw as { scores: (number | null)[] }).scores,
+      stress: (trendRaw as { stress: (number | null)[] }).stress,
+    }
+    : null
   const stored: StoredConsult = {
     encounter: value.encounter,
     history: checked.history,
@@ -304,6 +329,8 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
     receivedAt: new Date().toISOString(),
     sender: message.sender,
     droppedHistory: checked.dropped,
+    redFlag,
+    ...(trend ? { trend } : {}),
   }
   await store.put(INBOX_COLLECTIONS.consult, value.encounter.id, stored as unknown as StoreValue)
 }
