@@ -3,7 +3,7 @@ import type { LocalStore } from './core/store'
 import type { Homework } from './core/record/types'
 import { checkIn, dueReminders, listCheckins, sevenDayProgress, type Assignment, type Checkin } from './core/homework'
 import { localDay, checkinDay, schedule } from './core/homework/schedule'
-import { shichenAt } from '../../domain/tcm/calendar'
+import { formatHeavenTime, heavenNow, heavenStampOf, type HeavenTime } from './core/heaven'
 
 export function HomeworkPage({store,onBack,onCheckedIn}:{store:LocalStore;onBack:()=>void;onCheckedIn?:()=>void}) {
   const shown = useRef(new Set<string>())
@@ -15,6 +15,13 @@ export function HomeworkPage({store,onBack,onCheckedIn}:{store:LocalStore;onBack
   const [busy,setBusy]=useState(false)
   const [notes,setNotes]=useState<Record<string,string>>({})
   const [status,setStatus]=useState('')
+  const [heaven,setHeaven]=useState<HeavenTime|null>(null)
+  useEffect(()=>{
+    let cancelled=false
+    void heavenNow(store,now).then(time=>{if(!cancelled)setHeaven(time)}).catch(()=>{})
+    return()=>{cancelled=true}
+    // 每 15 秒的 now 更新会带上天时一起刷新，时辰仍按当地真太阳时算。
+  },[store,now])
   useEffect(()=>{
     let cancelled=false
     void Promise.all([store.list('homework'),listCheckins(store)]).then(([rows,records])=>{
@@ -55,11 +62,11 @@ export function HomeworkPage({store,onBack,onCheckedIn}:{store:LocalStore;onBack
   }
   const complete=async(id:string)=>{
     setBusy(true);setError('')
-    try{const record=await checkIn(store,id,notes[id]);setCheckins(previous=>[...previous,record]);setStatus('已保存在本机');setNow(new Date());onCheckedIn?.()}
+    try{const record=await checkIn(store,id,notes[id],new Date(),heaven?heavenStampOf(heaven):undefined);setCheckins(previous=>[...previous,record]);setStatus('已保存在本机');setNow(new Date());onCheckedIn?.()}
     catch{setError('打卡未能保存，请重试')}finally{setBusy(false)}
   }
   return <main className="homework-page">
-    <header><button onClick={onBack}>返回</button><p className="eyebrow">知衡 · 学生</p><h1>今日作业</h1><p>{localDay(now)} · {shichenAt(now).name}时</p></header>
+    <header><button onClick={onBack}>返回</button><p className="eyebrow">知衡 · 学生</p><h1>今日作业</h1><p>{localDay(now)} · {heaven ? formatHeavenTime(heaven) : '—'}</p></header>
     {due.length>0&&<aside role="status" className="due-banner">有 {due.length} 项作业到时间了，方便时记得完成。</aside>}
     <p className="privacy-note">打卡只保存在你的手机上。</p>
     <details><summary>提醒设置</summary><p>应用打开时显示到点提醒；关闭后暂时无法定时提醒。</p><button onClick={()=>{if('Notification' in window)void Notification.requestPermission().then(permission=>{setNotificationsAllowed(permission==='granted');setStatus(permission==='granted'?'已允许通知':'保留页面内提醒');setNow(new Date())});else setStatus('当前浏览器使用页面内提醒')}}>允许系统通知</button></details>

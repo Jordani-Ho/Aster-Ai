@@ -5,5 +5,6 @@
 - `dailyMirror({carePlan, jieqi, weather, recentCheckins, recentSymptoms})` 返回 `{greeting, today, trend}`：有网时经 `core/llm` 网关 + `prompts/student/daily-mirror.md` 生成（≤5 条，只谈起居/饮食/情志，不下诊断、不开药）；断网或模型失败时用「调养方案 + 节气养生」拼固定建议。
 - `getDailyMirror(store, input)` 加了本机缓存：同一天只生成一次，集合 `mirror`（键为 YYYY-MM-DD）。
 - `trend.ts`：自评 1～5 分（集合 `self-ratings`，同日覆盖）与 M1-13 打卡一起，输出最近 14 天序列供界面画走势。
+- V2-02：每条镜子记录（状态、压力）带上 `{shichen, jieqi, city}`（天时，见 `core/heaven`）。`last14DayTrend(..., {shichen})` 只拿同一时辰的记录对照，其他时辰计入 `excluded` 并用 `mirrorTrendNote` 提示“时辰不同，不参与对照”；`mirrorShichenNotice` 给出“到时辰了，照照镜子吧”的提醒。
 
 提示词在 `prompts/student/daily-mirror.md`；节气数据在 `domain/tcm/seasonal.json`，中医逻辑不写进本模块。

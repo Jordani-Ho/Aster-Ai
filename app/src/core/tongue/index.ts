@@ -1,10 +1,17 @@
-import type { LocalStore } from '../store'
+import type { LocalStore, StoreValue } from '../store'
+import type { HeavenStamp } from '../heaven'
 import { processPhoto, type PhotoCodec, type PhotoInput } from '../intake/photo'
 import { addDays, localDay } from '../homework/schedule'
 
 // 舌象日记：每天最多一张，复用 intake/photo.ts 压缩去 EXIF（长边 ≤1600、JPEG、无元数据），
-// 加密存本机（字节进 LocalStore 的 bin 记录）。M1 只存与列，不做自动分析。
+// 只存本机（V2 起不加密）。M1 只存与列，不做自动分析。
 export const TONGUE_COLLECTION = 'tongue-photos'
+
+export interface TongueRecord {
+  bytes: Uint8Array
+  /** 拍这张时的天时（V2-02 第 5 条）；老调用不传时为 null。 */
+  heaven: HeavenStamp | null
+}
 
 export interface TonguePhoto {
   date: string
@@ -14,6 +21,7 @@ export interface TonguePhoto {
 export interface SaveTongueOptions {
   codec?: PhotoCodec
   now?: () => Date
+  heaven?: HeavenStamp
 }
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/
@@ -26,14 +34,21 @@ export async function saveTonguePhoto(
 ): Promise<{ date: string; ref: { id: string; sha256: string } }> {
   const result = await processPhoto(input, { codec: options.codec })
   const date = localDay(options.now?.() ?? new Date())
-  await store.put(TONGUE_COLLECTION, date, result.data)
+  const record: TongueRecord = { bytes: result.data, heaven: options.heaven ?? null }
+  await store.put(TONGUE_COLLECTION, date, record as unknown as StoreValue)
   return { date, ref: { id: result.ref.id, sha256: result.ref.sha256 } }
 }
 
-export async function tongueBytes(store: LocalStore, date: string): Promise<Uint8Array | null> {
+export async function tongueRecord(store: LocalStore, date: string): Promise<TongueRecord | null> {
   if (!DAY.test(date)) throw new Error('日期须为 YYYY-MM-DD')
   const value = await store.get(TONGUE_COLLECTION, date)
-  return value instanceof Uint8Array ? value : null
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Partial<TongueRecord>
+  return record.bytes instanceof Uint8Array ? { bytes: record.bytes, heaven: record.heaven ?? null } : null
+}
+
+export async function tongueBytes(store: LocalStore, date: string): Promise<Uint8Array | null> {
+  return (await tongueRecord(store, date))?.bytes ?? null
 }
 
 // 按日期升序列出有记录的日期。
