@@ -1,5 +1,7 @@
 import { expect, it } from 'vitest'
-import { currentStreak, dailyAdherence, needsNudge, weeklyRate } from './index'
+import { adherenceReport, currentStreak, dailyAdherence, needsNudge, rankStudentAdherence, weekStart, weeklyRate } from './index'
+import { checkinDay } from '../homework/schedule'
+import { NUDGE_SUGGESTION, dailyMirror } from '../mirror'
 import type { Assignment, Checkin } from '../homework'
 import type { Homework } from '../record/types'
 
@@ -96,4 +98,60 @@ it('10: at 不是合法时间的打卡被忽略，不抛错', () => {
   expect(dailyAdherence([item], checkins as Checkin[], '2026-10-01', '2026-10-03').map(day => day.done)).toEqual([1, 0, 0])
   expect(currentStreak([item], checkins as Checkin[], '2026-10-01')).toBe(1)
   expect(weeklyRate([item], checkins as Checkin[], '2026-10-01')).toBeCloseTo(1 / 1, 10)
+})
+
+it('11（M1-23a）: 子时跨零点归日——26 日子时练、27 日 00:10 打卡，26 日算完成', () => {
+  // 归日口径：本地 00:00:00–00:59:59 算前一天；01:00 起算当天。夏令时切换在凌晨 2 点，不影响零点归属。
+  expect(checkinDay(new Date(2026, 9, 27, 0, 10))).toBe('2026-10-26')
+  expect(checkinDay(new Date(2026, 9, 27, 0, 59, 59))).toBe('2026-10-26')
+  expect(checkinDay(new Date(2026, 9, 27, 1, 0))).toBe('2026-10-27')
+  const item = assignment(daily('h1', { durationDays: 2 }), '2026-10-26')
+  const checkins = [check('h1', '2026-10-27', '00:10:00')]
+  expect(dailyAdherence([item], checkins, '2026-10-26', '2026-10-27')).toEqual([
+    { day: '2026-10-26', scheduled: 1, done: 1 },
+    { day: '2026-10-27', scheduled: 1, done: 0 },
+  ])
+  // 27 日看：26 日已完成，27 日今天还没完成不算中断 → 连续 1 天。
+  expect(currentStreak([item], checkins, '2026-10-27')).toBe(1)
+})
+
+it('12（M1-23a）: 随习惯作业每个生效日算一条，打卡计入坚持率与提醒判断', () => {
+  const habit = homework('h1', { kind: 'habit', anchor: '拖地时' }, { durationDays: 10 })
+  const item = assignment(habit, '2026-10-10')
+  expect(dailyAdherence([item], [], '2026-10-10', '2026-10-12').map(day => day.scheduled)).toEqual([1, 1, 1])
+  const checked = [check('h1', '2026-10-12')]
+  expect(weeklyRate([item], checked, '2026-10-12')).toBeCloseTo(1 / 3, 10)
+  // 13 日看：12 日完成，10、11 两天没完成 → 最近两个有作业日（12 已完成）不成立，13 日不提醒。
+  expect(needsNudge([item], checked, '2026-10-13')).toBe(false)
+  expect(needsNudge([item], [], '2026-10-13')).toBe(true)
+})
+
+it('13（M1-23a 验收 4）: 连续两天没练时镜子建议多一条温和提醒；老师端把低坚持率排前面', async () => {
+  const item = assignment(daily(), '2026-10-01')
+  expect(needsNudge([item], [], '2026-10-03')).toBe(true)
+  // 镜子建议：只多一条，不说教；没有提醒参数时行为不变。
+  const result = await dailyMirror({ carePlan: null, jieqi: '寒露', weather: null, recentCheckins: [], recentSymptoms: [], nudge: true })
+  expect(result.today).toContain(NUDGE_SUGGESTION)
+  expect(result.today.length).toBeLessThanOrEqual(5)
+  const quiet = await dailyMirror({ carePlan: null, jieqi: '寒露', weather: null, recentCheckins: [], recentSymptoms: [] })
+  expect(quiet.today).not.toContain(NUDGE_SUGGESTION)
+  // 老师端排序：低坚持率在前（升序），没有作业（null）最后，旧周不参与。2026-10-03 是周六，本周从 09-28 周一开始。
+  const ordered = rankStudentAdherence([
+    { student: 'a'.repeat(64), weekStart: '2026-09-28', weeklyRate: 0.8 },
+    { student: 'b'.repeat(64), weekStart: '2026-09-28', weeklyRate: 0.2 },
+    { student: 'c'.repeat(64), weekStart: '2026-09-28', weeklyRate: null },
+    { student: 'd'.repeat(64), weekStart: '2026-09-21', weeklyRate: 0.1 },
+    { student: 'e'.repeat(64), weekStart: '2026-09-28', weeklyRate: 0.3 },
+  ], '2026-10-03')
+  expect(ordered.map(report => report.student[0])).toEqual(['b', 'e', 'a', 'c'])
+})
+
+it('14（M1-23a 验收 4）: 本周坚持率与练习天数小结（学生端发给老师端的同口径）', () => {
+  const item = assignment(daily('h1', { durationDays: 30 }), '2026-10-01')
+  const checkins = ['01', '02', '04', '05'].map(day => check('h1', `2026-10-${day}`))
+  const today = '2026-10-05' // 周一；本周窗口内只有今天一条作业且已完成
+  expect(weekStart(today)).toBe('2026-10-05')
+  const report = adherenceReport([item], checkins, today)
+  expect(report).toMatchObject({ weekStart: '2026-10-05', scheduled: 1, done: 1, practiceDays: 1, streak: 2 })
+  expect(report.weeklyRate).toBe(1)
 })

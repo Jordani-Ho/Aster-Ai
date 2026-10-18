@@ -1,8 +1,8 @@
 # 本机试点指标（M1-15b）
 
 只计算/加密保存数值并本机导出，不调用模型、不上传。`pilot-metrics` 随机UUID键保存
-`idPrefix`（病历id前8位）、`durationMs`、`modificationRate`、`missingRate`、`resemblance`（1～5或null）。
-CSV固定五列，白名单重建与范围校验阻止附加内容/公式，不含时间戳、身份、全文、照片或修改原文。
+`idPrefix`（病历id前8位）、`durationMs`、`modificationRate`、`missingRate`、`resemblance`（1～5或null）、`homeworkAdherence`（学生本周作业坚持率 0～1 或 null，M1-23a 第 5 条；旧记录没有该字段）。
+CSV固定六列（`record_id_prefix,draft_to_sign_ms,modification_rate,missing_rate,resemblance,homework_adherence`），白名单重建与范围校验阻止附加内容/公式，不含时间戳、身份、全文、照片或修改原文。坚持率只取学生端 `homework.adherence` 上报的本周数值，没有上报就留空；家人代管问诊同样按家人身份上报的数值记录。
 
 耗时从老师点“起草”前到首次点“签字”，包括模型耗时，不包括交还耗时；当前页面重发沿用首次时间，
 取消/重新起草是新一次。不记录失败的未交还操作，成功后保存一次并弹一次可跳过的评分；指标失败不阻断临床交还。

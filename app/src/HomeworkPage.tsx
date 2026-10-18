@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { LocalStore } from './core/store'
 import type { Homework } from './core/record/types'
 import { checkIn, dueReminders, listCheckins, sevenDayProgress, type Assignment, type Checkin } from './core/homework'
-import { localDay, schedule } from './core/homework/schedule'
+import { localDay, checkinDay, schedule } from './core/homework/schedule'
 import { shichenAt } from '../../domain/tcm/calendar'
 
-export function HomeworkPage({store,onBack}:{store:LocalStore;onBack:()=>void}) {
+export function HomeworkPage({store,onBack,onCheckedIn}:{store:LocalStore;onBack:()=>void;onCheckedIn?:()=>void}) {
   const shown = useRef(new Set<string>())
   const [notificationsAllowed,setNotificationsAllowed]=useState(typeof Notification !== 'undefined' && Notification.permission==='granted')
   const [assignments,setAssignments]=useState<Assignment[]>([])
@@ -55,7 +55,7 @@ export function HomeworkPage({store,onBack}:{store:LocalStore;onBack:()=>void}) 
   }
   const complete=async(id:string)=>{
     setBusy(true);setError('')
-    try{const record=await checkIn(store,id,notes[id]);setCheckins(previous=>[...previous,record]);setStatus('已保存在本机');setNow(new Date())}
+    try{const record=await checkIn(store,id,notes[id]);setCheckins(previous=>[...previous,record]);setStatus('已保存在本机');setNow(new Date());onCheckedIn?.()}
     catch{setError('打卡未能保存，请重试')}finally{setBusy(false)}
   }
   return <main className="homework-page">
@@ -70,7 +70,7 @@ export function HomeworkPage({store,onBack}:{store:LocalStore;onBack:()=>void}) 
       const habitAnchorText=homework.schedule.kind==='habit'?homework.schedule.anchor:null
       const habitual=habitAnchorText!==null
       const progress=sevenDayProgress(homework,checkins,startsOn,now)
-      const completed=checkins.some(item=>item.homeworkId===homework.id&&localDay(new Date(item.at))===localDay(now))
+      const completed=checkins.some(item=>item.homeworkId===homework.id&&checkinDay(new Date(item.at))===localDay(now))
       return <section className="homework-card" key={homework.id}>
         <div className="card-heading"><h2>{homework.title}</h2><span className="time-pill">{habitAnchorText!==null?'随习惯：'+habitAnchorText:reminders.length?reminders[0].at.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',hour12:false}):'今日无安排'}</span></div>
         <p>{homework.detail}</p>

@@ -121,7 +121,7 @@ test('nine-step consultation: signing, erasure, ledger, homework, '+recovery+' r
   const csv=await readFile((await (await downloadPromise).path())!,'utf8'),lines=csv.trim().split(/\r?\n/),cells=lines[1].split(',')
   if (!process.env.CI) await writeFile(path.resolve('.cache/e2e/pilot-synthetic-local.csv'),csv)
   teacher.off('request',observe);expect(exportRequests).toHaveLength(0)
-  expect(lines).toHaveLength(2);expect(cells).toHaveLength(5);expect(cells[0]===records[0].value.id.slice(0,8)).toBe(true)
+  expect(lines).toHaveLength(2);expect(cells).toHaveLength(6);expect(lines[0].includes('homework_adherence')).toBe(true);expect(cells[0]===records[0].value.id.slice(0,8)).toBe(true)
   expect(Number(cells[1])>0).toBe(true);expect(Math.abs(Number(cells[2])-1/6)<0.00001).toBe(true);expect(Number(cells[3])===3/8).toBe(true);expect(cells[4]==='5').toBe(true)
   for(const secret of [quote,actors.teacher.pubkey,actors.student.pubkey,'SYNTHETIC_FINAL_SUMMARY','SYNTHETIC_HOMEWORK'])expect(!csv.includes(secret)).toBe(true)
   await test.step('hard: clear student storage, restore with mnemonic and real relay backup, recover records/homework/book',async()=>{

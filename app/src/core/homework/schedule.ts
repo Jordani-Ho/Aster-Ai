@@ -21,6 +21,13 @@ export function parseDay(value: string): Date {
   return date
 }
 export function addDays(date: Date, count: number): Date { return new Date(date.getFullYear(),date.getMonth(),date.getDate()+count) }
+// M1-23a 边界：子时跨零点归日。本地 00:00:00–00:59:59 的打卡算前一天（26 日子时练、27 日 00:10 打卡 → 记 26 日）。
+// 用本地日期构造比较，夏令时切换在凌晨 2 点，不影响零点这一刻的归属；调用方传入合法 Date。
+export function checkinDay(at: Date): string {
+  if (!(at instanceof Date) || !Number.isFinite(at.getTime())) throw new Error('打卡时间无效')
+  if (at.getHours() !== 0) return localDay(at)
+  return localDay(addDays(new Date(at.getFullYear(), at.getMonth(), at.getDate()), -1))
+}
 function dayNumber(date: Date): number { return Date.UTC(date.getFullYear(),date.getMonth(),date.getDate())/86400000 }
 function timeParts(value: string): [number,number] {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw new Error('时间须为HH:MM')

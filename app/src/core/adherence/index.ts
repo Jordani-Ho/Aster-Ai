@@ -1,5 +1,5 @@
 import type { Assignment, Checkin } from '../homework'
-import { addDays, localDay, parseDay, schedule } from '../homework/schedule'
+import { addDays, checkinDay, localDay, parseDay, schedule } from '../homework/schedule'
 import type { Homework } from '../record/types'
 
 // M1-24 坚持率纯逻辑：只读作业排程与打卡记录，不写存储、不改界面、不改病历格式。
@@ -41,26 +41,39 @@ function assignmentHomework(value: Assignment): Homework | null {
 }
 
 // 每天应完成的作业 id（同一天同一作业去重）。排程坏掉的作业静默跳过，不把整页算错。
+// M1-23a：随习惯作业没有钟点提醒，但每个生效日算一条“有作业”，打卡计入坚持率。
 function scheduledIds(assignments: Assignment[], from: string, to: string): Map<string, Set<string>> {
   const days = spanDays(from, to)
   const result = new Map<string, Set<string>>()
+  const add = (day: string, id: string) => {
+    if (day < from || day > to) return
+    const ids = result.get(day) ?? new Set<string>()
+    ids.add(id)
+    result.set(day, ids)
+  }
   for (const assignment of assignments) {
     const homework = assignmentHomework(assignment)
     if (!homework) continue
     let reminders
     try { reminders = schedule([homework], assignment.startsOn, days, from) } catch { continue }
-    for (const reminder of reminders) {
-      const day = localDay(reminder.at)
-      if (day < from || day > to) continue
-      const ids = result.get(day) ?? new Set<string>()
-      ids.add(homework.id)
-      result.set(day, ids)
+    if (homework.schedule.kind === 'habit') {
+      // 随习惯作业按“生效日期起每天一条”计：子时归日只影响打卡归属，不影响排程日期。
+      const startMs = Date.parse(assignment.startsOn + 'T00:00:00Z')
+      for (const day of range(from, to)) {
+        const elapsed = (Date.parse(day + 'T00:00:00Z') - startMs) / 86_400_000
+        if (!Number.isFinite(elapsed) || elapsed < 0) continue
+        if (homework.durationDays !== undefined && (!Number.isInteger(homework.durationDays) || homework.durationDays <= 0 || elapsed >= homework.durationDays)) continue
+        add(day, homework.id)
+      }
+      continue
     }
+    for (const reminder of reminders) add(localDay(reminder.at), homework.id)
   }
   return result
 }
 
 // 每天已打卡的作业 id（同一天多次打卡只算一次；at 不是合法时间的记录忽略，不抛错）。
+// M1-23a 边界：本地 00:00–00:59 的打卡算前一天（子时跨零点归日），见 checkinDay。
 function completedIds(checkins: Checkin[], from: string, to: string): Map<string, Set<string>> {
   const result = new Map<string, Set<string>>()
   for (const checkin of checkins) {
@@ -69,7 +82,7 @@ function completedIds(checkins: Checkin[], from: string, to: string): Map<string
     if (typeof checkin.at !== 'string') continue
     const at = Date.parse(checkin.at)
     if (!Number.isFinite(at)) continue
-    const day = localDay(new Date(at))
+    const day = checkinDay(new Date(at))
     if (day < from || day > to) continue
     const ids = result.get(day) ?? new Set<string>()
     ids.add(checkin.homeworkId)
@@ -171,4 +184,56 @@ export function needsNudge(assignments: Assignment[], checkins: Checkin[], today
     cursor = localDay(addDays(parseDay(cursor), -1))
   }
   return recent.length === 2 && recent.every(entry => !entry.complete)
+}
+
+// 本周从周一算起（卡片口径“本周坚持率”；周日 6 → 周一偏移 6 天）。
+export function weekStart(today: string): string {
+  assertDay(today)
+  const day = parseDay(today)
+  const offset = (day.getDay() + 6) % 7
+  return localDay(addDays(day, -offset))
+}
+
+export interface AdherenceReport {
+  /** 本周周一，YYYY-MM-DD */
+  weekStart: string
+  /** 含今天最近 7 天完成率；没有作业为 null */
+  weeklyRate: number | null
+  /** 从今天往回数的连续完成天数 */
+  streak: number
+  /** 本周有完成记录的天数（“本周练习天数”） */
+  practiceDays: number
+  scheduled: number
+  done: number
+}
+
+// 学生端把这份小结发给老师（不知道对方界面的还原方式也能直接显示/排序），也用于本机展示。
+export function adherenceReport(assignments: Assignment[], checkins: Checkin[], today: string): AdherenceReport {
+  assertDay(today)
+  const start = weekStart(today)
+  let scheduled = 0
+  let done = 0
+  let practiceDays = 0
+  for (const entry of dailyAdherence(assignments, checkins, start, today)) {
+    scheduled += entry.scheduled
+    done += entry.done
+    if (entry.done > 0) practiceDays += 1
+  }
+  return { weekStart: start, weeklyRate: scheduled === 0 ? null : done / scheduled, streak: currentStreak(assignments, checkins, today), practiceDays, scheduled, done }
+}
+
+// 老师端“今天”页排序：同一周的报告里，坚持率低于一半的排前面（升序），无作业（null）不参与排序、排最后。
+export function rankStudentAdherence<T extends { weekStart: string; weeklyRate: number | null }>(reports: readonly T[], today: string): T[] {
+  const start = weekStart(today)
+  const low = (value: number | null): value is number => value !== null && value < 0.5
+  return reports
+    .filter(report => report.weekStart === start)
+    .slice()
+    .sort((left, right) => {
+      const leftLow = low(left.weeklyRate), rightLow = low(right.weeklyRate)
+      if (leftLow && rightLow) return (left.weeklyRate as number) - (right.weeklyRate as number)
+      if (leftLow !== rightLow) return leftLow ? -1 : 1
+      const leftValue = left.weeklyRate ?? 2, rightValue = right.weeklyRate ?? 2
+      return leftValue - rightValue
+    })
 }
