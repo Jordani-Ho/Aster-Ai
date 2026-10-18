@@ -71,8 +71,8 @@ async function pair() {
   const a = await node(teacher), b = await node(student)
   return { a, b, relay, node, setTime: (day: number) => { time = Date.parse(at(day)) } }
 }
-const topup = { type: 'topup' as const, amount: 10, at: at(0) }
-const charge = { type: 'charge' as const, amount: 3, chargeReason: 'consult' as const, at: at(0) }
+const topup = { type: 'topup' as const, currency: 'CNY', amount: 10, at: at(0) }
+const charge = { type: 'charge' as const, currency: 'CNY', amount: 3, chargeReason: 'consult' as const, at: at(0) }
 async function charged(p: Awaited<ReturnType<typeof pair>>) {
   await p.a.sync.record(teacherPub, studentPub, topup)
   const event = await p.a.sync.record(teacherPub, studentPub, charge)

@@ -8,11 +8,10 @@ import {
   type ChainFields,
   type DisputeDraft,
   type Ledger,
-  type Pricing,
   type SignedLedgerEvent,
 } from './types'
 
-const OPTIONAL_FIELDS = ['amount', 'memo', 'chargeReason', 'recordHash', 'refundFor', 'forMember'] as const
+const OPTIONAL_FIELDS = ['amount', 'memo', 'chargeReason', 'recordHash', 'refundFor', 'forMember', 'confirmationId'] as const
 
 function draftTime(at?: string): { at: string; atMs: number } {
   const value = at ?? new Date().toISOString()
@@ -32,6 +31,7 @@ export function signEvent(ledger: Ledger, privateKey: Uint8Array, draft: ChainEv
   const { at, atMs } = draftTime(draft.at)
   const fields: ChainFields = {
     type: draft.type,
+    currency: draft.currency,
     at,
     prev: ledger.events.length === 0 ? null : ledger.events[ledger.events.length - 1].id,
   }
@@ -88,6 +88,7 @@ export function balance(ledger: Ledger): number {
     const fields = parseChainFields(event)
     const amount = amountOf(fields)
     total += fields.type === 'topup' || fields.type === 'gift' ? amount : -amount
+    if(!Number.isSafeInteger(total))throw Error('累计金额超出安全整数范围')
   }
   return total
 }
@@ -107,12 +108,4 @@ export function overdueSince(ledger: Ledger): string | null {
     }
   }
   return since
-}
-
-// 老师资料里的计价声明，只写“1 康币相当于多少钱”；账本本身只记整数康币。
-export function declarePricing(pricing: Pricing): Pricing {
-  if (typeof pricing !== 'object' || pricing === null) throw new Error('计价声明格式无效')
-  if (!/^[A-Z]{3}$/.test(pricing.currency)) throw new Error('币种必须是三位大写字母代码')
-  if (!Number.isFinite(pricing.perCoin) || pricing.perCoin <= 0) throw new Error('每康币价格必须是正数')
-  return { currency: pricing.currency, perCoin: pricing.perCoin }
 }

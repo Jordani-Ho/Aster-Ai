@@ -112,12 +112,12 @@ describe('M1-22 family accounts', () => {
       identity: teacher, consult: consults[0], final,
       send: async (student, envelope) => { expect(student).toBe(dadIdentity.publicKey); toMember.push(envelope) },
       ledger: { open: async () => {}, record: async (_teacher, student, draft) => { chargeStudents.push(student); charges.push(draft) } },
-      charge: 3,
+      charge: 3, currency:'CNY',
       chargeBook: consultChargeBook(consults[0]),
     })
     expect(result.chargeError).toBeNull()
     expect(charges).toHaveLength(1)
-    expect(charges[0]).toMatchObject({ type: 'charge', amount: 3, forMember: '爸爸' })
+    expect(charges[0]).toMatchObject({ type: 'charge', currency: 'CNY', amount: 3, forMember: '爸爸' })
     expect(chargeStudents).toEqual([owner.publicKey])
     // 爸爸的收件箱只认“我的老师”：签名病历与作业记在爸爸名下。
     const dadInbox = createInbox({ identity: dadIdentity, store: memberScoped })
@@ -150,14 +150,14 @@ describe('M1-22 family accounts', () => {
   it('6: two family charges share one book, sum into one balance and can be filtered by family member', async () => {
     const { owner, teacher } = await setupFamily()
     let ledger = createLedger(teacher.publicKey, owner.publicKey)
-    ledger = append(ledger, teacher.privateKey, { type: 'charge', amount: 2, chargeReason: 'consult', recordHash: 'b'.repeat(64), forMember: '爸爸' })
-    ledger = append(ledger, teacher.privateKey, { type: 'charge', amount: 3, chargeReason: 'consult', recordHash: 'c'.repeat(64), forMember: '孩子' })
+    ledger = append(ledger, teacher.privateKey, { type: 'charge', currency: 'CNY', amount: 2, chargeReason: 'consult', recordHash: 'b'.repeat(64), forMember: '爸爸' })
+    ledger = append(ledger, teacher.privateKey, { type: 'charge', currency: 'CNY', amount: 3, chargeReason: 'consult', recordHash: 'c'.repeat(64), forMember: '孩子' })
     expect(verify(ledger)).toEqual([])
     expect(balance(ledger)).toBe(-5)
     expect(filterChargesByMember(ledger, '爸爸').map(event => (JSON.parse(event.content) as { amount: number }).amount)).toEqual([2])
     expect(filterChargesByMember(ledger, '孩子').map(event => (JSON.parse(event.content) as { amount: number }).amount)).toEqual([3])
     expect(filterChargesByMember(ledger, null)).toHaveLength(2)
-    const tampered: SignedLedgerEvent = { ...ledger.events[0], content: JSON.stringify({ ...JSON.parse(ledger.events[0].content), type: 'topup' }) }
+    const tampered: SignedLedgerEvent = { ...ledger.events[0], content: JSON.stringify({ ...JSON.parse(ledger.events[0].content), type: 'topup', currency: 'CNY' }) }
     expect(verify({ ...ledger, events: [tampered] }).some(issue => issue.code === 'invalid-member' || issue.code === 'bad-signature')).toBe(true)
   })
 
@@ -218,7 +218,7 @@ describe('M1-22 family accounts', () => {
         identity: teacher, consult, final,
         send: async () => {},
         ledger: { open: async () => {}, record: async (_teacher, student) => { students.push(student) } },
-        charge: 2,
+        charge: 2, currency:'CNY',
         ...(consultChargeBook(consult) ? { chargeBook: consultChargeBook(consult) } : {}),
       })
       expect(students).toEqual([dadIdentity.publicKey])
@@ -236,8 +236,8 @@ describe('M1-22 family wiring keeps one ledger on the manager account', () => {
       ownerSync = createLedgerSync({ identity: owner, store: ownerStore, send: async () => 'synthetic' })
       await teacherSync.open(teacher.publicKey, owner.publicKey)
       await ownerSync.open(teacher.publicKey, owner.publicKey)
-      await teacherSync.record(teacher.publicKey, owner.publicKey, { type: 'charge', amount: 2, chargeReason: 'consult', forMember: '爸爸' })
-      await teacherSync.record(teacher.publicKey, owner.publicKey, { type: 'charge', amount: 3, chargeReason: 'consult', forMember: '孩子' })
+      await teacherSync.record(teacher.publicKey, owner.publicKey, { type: 'charge', currency: 'CNY', amount: 2, chargeReason: 'consult', forMember: '爸爸' })
+      await teacherSync.record(teacher.publicKey, owner.publicKey, { type: 'charge', currency: 'CNY', amount: 3, chargeReason: 'consult', forMember: '孩子' })
       const view = await teacherSync.view(teacher.publicKey, owner.publicKey)
       expect(view.balance).toBe(-5)
       expect(view.ledger.events).toHaveLength(2)

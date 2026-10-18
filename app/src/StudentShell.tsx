@@ -16,6 +16,8 @@ import { adherenceReport } from './core/adherence'
 import { adherenceEnvelope, loadTeachers } from './core/inbox'
 import { localDay } from './core/homework/schedule'
 import './student.css'
+import { observationId, recordObservation } from './core/kangbi'
+import { checkinDay } from './core/homework/schedule'
 
 const HomeworkPage = lazy(() => import('./HomeworkPage').then(module => ({ default: module.HomeworkPage })))
 const StudentRecordsPage = lazy(() => import('./StudentRecordsPage').then(module => ({ default: module.StudentRecordsPage })))
@@ -62,6 +64,11 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
         if (!teacher) return
         const [rows, checkins] = await Promise.all([pagesStore.list('homework'), listCheckins(pagesStore)])
         const assignments = rows.map(row => row.value as unknown as Assignment)
+        const today=localDay(new Date())
+        if(checkins.some(c=>checkinDay(new Date(c.at))===today)) {
+          const id=await observationId(['practice',pagesIdentity.publicKey,teacher,today])
+          if(!await pagesStore.get('kangbi-observations',id))await recordObservation(pagesStore,{id,student:pagesIdentity.publicKey,teacher,at:new Date().toISOString(),practiceDays:1,teacherMinutes:0,consultations:0,effects:{teacher:null,self:null,measurement:null}})
+        }
         await sendEnvelope(teacher, adherenceEnvelope(adherenceReport(assignments, checkins, localDay(new Date()))))
       } catch { /* 上报不是打卡成功条件。 */ }
     })()

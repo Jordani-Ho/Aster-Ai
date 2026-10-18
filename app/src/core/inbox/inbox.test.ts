@@ -262,7 +262,7 @@ it('2 老师起草、签字、填扣费 3：学生病历页、作业、账本余
   const final = acceptDraft(draft)
   await completeConsultSigning({
     identity: teacherId, consult, final,
-    send: teacher.send, ledger: teacher.ledger, charge: 3,
+    send: teacher.send, ledger: teacher.ledger, charge: 3, currency:'CNY',
   })
 
   const records = await waitFor(async () => {
@@ -468,7 +468,7 @@ it('invited student opens only their book; teacher first signing opens empty cou
  await student.sendConsult(await syntheticPackage(0))
  const consult=await waitFor(async()=>{const rows=await listConsults(teacherStore);return rows[0]??null})
  const draft=await draftEncounter(draftPackage(consult),template as TeacherTemplate,[],fakeLlm(),{level:'prescription'}),final=acceptDraft(draft)
- const result=await completeConsultSigning({identity:teacherId,consult,final,send:teacher.send,ledger:teacher.ledger,charge:3})
+ const result=await completeConsultSigning({identity:teacherId,consult,final,send:teacher.send,ledger:teacher.ledger,charge:3, currency:'CNY'})
  expect(result.chargeError).toBe(null)
  const paired=await waitFor(async()=>{const a=await teacher.ledger.view(teacherPub,studentPub),b=await student.ledger.view(teacherPub,studentPub);return a.balance===-3&&b.balance===-3&&a.code===b.code?true:null})
  expect(paired).toBe(true);expect(await studentStore.list('student-records')).toHaveLength(1)

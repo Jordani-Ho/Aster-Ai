@@ -25,6 +25,10 @@ await store.clearScope('f1-') // 删除某位家人的全部记录
 
 ## 应用数据集合（登记）
 
+V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`money-drafts`（待恢复原话/待确认草稿，键学生公钥）、`settings/money-currency`（老师所在地币种）。`ledger-index` 与 `ledger-*` 继续保存钱账签名链、异议和待发队列，金额改为最小单位整数并绑定币种；不迁移旧版积分。
+
+`kangbi-observations` 记录 id、师生、公历时刻、练习天数、老师分钟数、问诊次数和三方数值/空值。是个人健康观察记录，需 V2-05 纳入保留期限；不是钱账或已发行康币，生产不写 `kangbi-events`。运营端只调用匿名汇总接口。
+
 | 集合 | 用途与字段 | 备注 |
 | :-- | :-- | :-- |
 | `redflag-log` | 用户点“我已知晓”关闭急症提示后的本地日志：`categoryId`、`action`、`at`、`region` | 不含对话原文 |

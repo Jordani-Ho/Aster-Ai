@@ -46,8 +46,9 @@ export const test=base.extend<{people:{teacher:Person;student:Person};seedLedger
    if(seedLedger)await teacher.page.evaluate(async({teacher,student})=>{
     const runtimePath='/src/core/ledger/runtime.ts',storePath='/src/core/store/index.ts',syncPath='/src/core/ledger/sync.ts'
     const {restoreWithLedgerPaused}=await import(runtimePath)
-    await restoreWithLedgerPaused(async()=>{const {resumeStore}=await import(storePath),session=await resumeStore(),{createLedgerSync}=await import(syncPath),sync=createLedgerSync({identity:session.identity,store:session.store,send:async()=>{throw Error('fixture queues funding while shared controller is paused')}});try{await sync.open(teacher,student);await sync.record(teacher,student,{type:'topup',amount:10})}finally{await sync.close();session.store.close();session.identity.privateKey.fill(0)}})
+    await restoreWithLedgerPaused(async()=>{const {resumeStore}=await import(storePath),session=await resumeStore(),{createLedgerSync}=await import(syncPath),sync=createLedgerSync({identity:session.identity,store:session.store,send:async()=>{throw Error('fixture queues funding while shared controller is paused')}});try{await sync.open(teacher,student);await sync.record(teacher,student,{type:'topup', currency: 'CNY',amount:1000})}finally{await sync.close();session.store.close();session.identity.privateKey.fill(0)}})
    },{teacher:actors.teacher.pubkey,student:actors.student.pubkey})
+   await teacher.page.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{await s.store.put('settings','money-currency','CNY')}finally{s.store.close();s.identity.privateKey.fill(0)}})
    await use({teacher,student})
   }finally{await tc.close();await sc.close()}
  }

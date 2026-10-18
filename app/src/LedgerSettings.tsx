@@ -6,6 +6,10 @@ import { startLedgerSync } from './core/ledger/runtime'
 import { createLedgerSync, type LedgerView } from './core/ledger/sync'
 import { filterChargesByMember, SELF_MEMBER } from './core/ledger/filter'
 import type { TransportOptions } from './core/transport'
+import type { LlmClient } from './core/llm'
+import { MoneyEntry } from './MoneyEntry'
+import { formatMoney } from './core/ledger/money'
+import { parseChainFields } from './core/ledger'
 
 const defaults = ((import.meta as ImportMeta & { env: Record<string, string | undefined> }).env.VITE_COMMUNITY_RELAYS ?? '').split(',').map(s => s.trim()).filter(Boolean)
 const labels = { topup: '充值', gift: '赠送', charge: '扣费', refund: '退款' }
@@ -13,13 +17,14 @@ type LinkStatus = Parameters<NonNullable<TransportOptions['onStatus']>>[0]
 
 // 账本设置：默认自己起一个 transport；M1-15a 之后 App 传入已有的同步控制器（同一个 transport），
 // 避免同一份加密存储上同时跑两个账本控制器。
-export function LedgerSettings({ identity, store, ledger, managed = false, status: sharedStatus, members = [] }: {
+export function LedgerSettings({ identity, store, ledger, managed = false, status: sharedStatus, members = [],llm=null }: {
   identity: Identity
   store: LocalStore
   managed?: boolean
   ledger?: ReturnType<typeof createLedgerSync>
   status?: LinkStatus
   members?: readonly { alias: string }[]
+  llm?:LlmClient|null
 }) {
   const [books, setBooks] = useState<LedgerView[]>([]), [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
@@ -66,12 +71,15 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
     window.addEventListener('aster:store-restoring', pause)
     window.addEventListener('aster:relays-changed', reload)
     window.addEventListener('aster:store-restored', reload)
+    const changed=()=>{void refresh().catch(fail)}
+    window.addEventListener('aster:data-changed',changed)
     return () => {
       disposed = true
       if (started) started.close()
       runtimeRef.current = null
       window.removeEventListener('aster:store-restoring', pause)
       window.removeEventListener('aster:relays-changed', reload); window.removeEventListener('aster:store-restored', reload)
+      window.removeEventListener('aster:data-changed',changed)
     }
   }, [identity, store, revision, ledger, managed])
   const run = async (action: (runtime: ReturnType<typeof createLedgerSync>) => Promise<unknown>) => {
@@ -81,14 +89,15 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
       await action(runtimeRef.current)
     } catch (cause) { setError(uiError(cause,'账本同步失败，请重试')) }
   }
-  return <details><summary>康币账本与对账</summary>
+  return <details><summary>钱账与对账</summary>
     <p role="status">{status === 'ready' ? '已连接社区中继' : status === 'connecting' ? '正在连接社区中继' : status === 'rejected' ? '中继拒绝连接，请核对成员资格' : '等待连接社区中继'}</p>
     {error && <p role="alert">{error}</p>}
     <p>打开老师邀请后会自动建立师生账本。</p><button type="button" onClick={()=>void run(runtime=>runtime.requestSync())}>立即对账</button>
     {!books.length && <p>尚未登记账本。</p>}
     {books.map(book => <section key={book.ledger.teacher + book.ledger.student}>
       <p style={{ overflowWrap: 'anywhere' }}>对方：{identity.publicKey === book.ledger.teacher ? '学生' : '老师'}</p>
-      {book.code !== null && <p>余额：{book.balance} 康币 · 对账码：{book.code}</p>}
+      {book.code !== null && <p>钱账余额：{book.ledger.events.length?formatMoney(book.balance!,parseChainFields(book.ledger.events[0]).currency):'尚未记账'} · 对账码：{book.code}</p>}
+      {identity.publicKey===book.ledger.teacher&&runtimeRef.current&&<MoneyEntry store={store} book={book.ledger} writer={runtimeRef.current} llm={llm} onConfirmed={()=>setRevision(v=>v+1)}/>}
       {book.code === null && <p role="alert">{book.conflict ? '账本有冲突，请与老师核对' : '本机账本校验失败，请与对方核对'}</p>}
       {book.notices.map(text => <p role="status" key={text}>{text}</p>)}
       {(() => {
@@ -106,10 +115,10 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
             <option value="all">全部</option><option value={SELF_MEMBER}>本人</option>
             {aliases.map(alias => <option key={alias} value={alias}>{alias}</option>)}
           </select></label>}
-          <ol>{filterChargesByMember(book.ledger, memberFilter).map(event => {
+          <ol>{(memberFilter===null?book.ledger.events:filterChargesByMember(book.ledger, memberFilter)).map(event => {
             try {
-              const fields = JSON.parse(event.content) as { type: keyof typeof labels; amount: number; at: string; forMember?: string }
-              return <li key={event.id}>{fields.at} · {labels[fields.type]} {fields.amount}{fields.forMember ? ' · ' + fields.forMember : ''}</li>
+              const fields = parseChainFields(event)
+              return <li key={event.id}>{fields.at} · {labels[fields.type]} {formatMoney(fields.amount!,fields.currency)}{fields.forMember ? ' · ' + fields.forMember : ''}</li>
             } catch { return <li key={event.id}>记录内容无效，请与对方核对</li> }
           })}</ol>
         </>

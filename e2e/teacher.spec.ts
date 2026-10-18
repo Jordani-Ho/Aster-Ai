@@ -22,7 +22,7 @@ test('M1-20 four pages: urgent first, three taps to sign, revision stays draft, 
  await picture(teacher,'today')
  await teacher.getByRole('button',{name:'管理',exact:true}).click()
  await teacher.getByText('设置',{exact:true}).click()
- await expect(teacher.getByText('康币账本与对账',{exact:true})).toBeVisible()
+ await expect(teacher.getByText('钱账与对账',{exact:true})).toBeVisible()
  await picture(teacher,'manage')
  await teacher.getByRole('button',{name:'面诊',exact:true}).click()
  await teacher.getByLabel('选择学生').selectOption(people.student.actor.pubkey)

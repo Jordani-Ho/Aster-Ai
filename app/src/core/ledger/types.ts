@@ -1,4 +1,4 @@
-// 康币账本的纯数据定义。签名与校验复用已批准的 nostr-tools，不自造签名算法。
+// 钱账的纯数据定义。金额为币种最小单位整数，签名复用 nostr-tools。
 // 内部 nostr kind：账本事件只作为礼物包裹的内层（rumor）传输，不裸发到中继。
 export const LEDGER_EVENT_KIND = 2729
 // 参数 P7：扣费后 7 天内可以提异议（含第 7 天）。
@@ -35,6 +35,8 @@ export interface Ledger {
 // 追加记账事件时由调用方给出的字段；prev、时间与签名由 signEvent 补全。
 export interface ChainEventDraft {
   type: LedgerEventType
+  currency: string
+  confirmationId?: string
   at?: string
   amount?: number
   memo?: string
@@ -54,6 +56,8 @@ export interface DisputeDraft {
 // 记账事件真正进入 content 的字段；prev 指向上一条事件的 id（即哈希）。
 export interface ChainFields {
   type: LedgerEventType
+  currency: string
+  confirmationId?: string
   at: string
   prev: string | null
   amount?: number
@@ -70,11 +74,6 @@ export interface DisputeFields {
   at: string
   disputeFor: string
   memo: string
-}
-
-export interface Pricing {
-  currency: string
-  perCoin: number
 }
 
 export interface VerifyIssue {
@@ -109,6 +108,8 @@ function parseAt(value: unknown): string {
 export function parseChainFields(event: SignedLedgerEvent): ChainFields {
   const fields = parseJson(event.content, '事件内容')
   if (!EVENT_TYPES.includes(fields.type as LedgerEventType)) throw new Error('事件类型无效')
+  if(typeof fields.currency!=='string'||!Intl.supportedValuesOf('currency').includes(fields.currency))throw Error('钱账币种无效')
+  if(fields.confirmationId!==undefined&&(typeof fields.confirmationId!=='string'||!/^[A-Za-z0-9_-]{1,64}$/.test(fields.confirmationId)))throw Error('确认编号无效')
   parseAt(fields.at)
   if (fields.prev !== null && !isHex64(fields.prev)) throw new Error('上一条事件引用无效')
   if (fields.forMember !== undefined) {

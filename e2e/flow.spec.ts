@@ -81,7 +81,7 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   await teacher.getByRole('button',{name:'按意见改稿',exact:true}).click()
   await expect(teacher.getByText('SYNTHETIC_FINAL_SUMMARY',{exact:true})).toBeVisible()
   await expect(teacher.getByText('AI 草稿',{exact:true}).first()).toBeVisible()
-  await teacher.getByRole('spinbutton',{name:'本次扣费（可选，康币）'}).fill('3')
+  await teacher.getByLabel('本次扣费（可选，CNY）',{exact:true}).fill('3')
   await teacher.getByRole('button',{name:'签字发出',exact:true}).click()
   await expect(teacher.getByRole('heading',{name:'已签字交还',exact:true})).toBeVisible()
   await expect(teacher.getByRole('dialog',{name:'像不像我评分'})).toBeVisible()
