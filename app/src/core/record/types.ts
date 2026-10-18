@@ -66,6 +66,7 @@ export interface Homework {
     | { kind: 'shichen'; shichen: string }             // 每天某个时辰，例如 '酉'
     | { kind: 'jieqi'; jieqi: string }                 // 某个节气当天
     | { kind: 'once'; date: string; time?: string }    // 某一天
+    | { kind: 'habit'; anchor: string }                // M1-23a：嵌进学生已有的日常习惯（如“拖地时”），不按钟点提醒
   durationDays?: number            // 持续多少天；省略表示直到下次复诊
   source: 'teacher' | 'ai_draft'   // 2026-10-16 补：作业也要有来源标签
   note?: string                    // 老师接受 AI 草稿时写 'ai_accepted'

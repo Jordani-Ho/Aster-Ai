@@ -72,6 +72,7 @@ export interface Homework {
     | { kind: 'shichen'; shichen: string }             // 每天某个时辰，例如 '酉'
     | { kind: 'jieqi'; jieqi: string }                 // 某个节气当天
     | { kind: 'once'; date: string; time?: string }    // 某一天
+    | { kind: 'habit'; anchor: string }                // M1-23a：嵌进学生已有的日常习惯（如“拖地时”），不按钟点提醒
   durationDays?: number            // 持续多少天；省略表示直到下次复诊
   source: 'teacher' | 'ai_draft'   // 2026-10-16 补：作业也要有来源标签
   note?: string                    // 老师接受 AI 草稿时写 'ai_accepted'
@@ -81,6 +82,7 @@ export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: st
 ```
 
 > 修订记录：2026-10-16 给 `Homework` 补上 `source` 和 `note`（M1-10 审核时发现遗漏）。
+> 修订记录：2026-10-18（M1-23a）`Homework.schedule` 新增 `{ kind: 'habit'; anchor }`：`anchor` 是学生已有的日常习惯（如“起床后”“刷牙时”“拖地时”“通勤路上”“睡前”），1～12 个字、去掉首尾空白、不含控制字符；这类作业**不产生钟点提醒**，只出现在学生镜子页“今天做这些事的时候，记得……”一栏，打卡仍写进 M1-13 的 `checkins`（homeworkId + at）计入坚持率。老师端起草/改稿只接受上述锚点写法，不接受把 habit 改写成 daily/shichen；视频相关字段不在本卡（M1-23b）。
 
 ## 2. 签名后的病历
 

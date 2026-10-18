@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { LocalStore } from './core/store'
 import type { Homework } from './core/record/types'
 import { checkIn, dueReminders, listCheckins, sevenDayProgress, type Assignment, type Checkin } from './core/homework'
-import { localDay, schedule } from './core/homework/schedule'
+import { localDay, checkinDay, schedule } from './core/homework/schedule'
 import { shichenAt } from '../../domain/tcm/calendar'
 
-export function HomeworkPage({store,onBack}:{store:LocalStore;onBack:()=>void}) {
+export function HomeworkPage({store,onBack,onCheckedIn}:{store:LocalStore;onBack:()=>void;onCheckedIn?:()=>void}) {
   const shown = useRef(new Set<string>())
   const [notificationsAllowed,setNotificationsAllowed]=useState(typeof Notification !== 'undefined' && Notification.permission==='granted')
   const [assignments,setAssignments]=useState<Assignment[]>([])
@@ -55,7 +55,7 @@ export function HomeworkPage({store,onBack}:{store:LocalStore;onBack:()=>void}) 
   }
   const complete=async(id:string)=>{
     setBusy(true);setError('')
-    try{const record=await checkIn(store,id,notes[id]);setCheckins(previous=>[...previous,record]);setStatus('已保存在本机');setNow(new Date())}
+    try{const record=await checkIn(store,id,notes[id]);setCheckins(previous=>[...previous,record]);setStatus('已保存在本机');setNow(new Date());onCheckedIn?.()}
     catch{setError('打卡未能保存，请重试')}finally{setBusy(false)}
   }
   return <main className="homework-page">
@@ -67,14 +67,18 @@ export function HomeworkPage({store,onBack}:{store:LocalStore;onBack:()=>void}) 
     {!assignments.length&&<section className="homework-card"><h2>还没有作业</h2><p>老师布置的作业会出现在这里。</p><button disabled={busy} onClick={()=>void demo()}>加载示例作业（仅本机演示）</button></section>}
     {assignments.map(({homework,startsOn})=>{
       const reminders=schedule([homework],startsOn,1,localDay(now))
+      const habitAnchorText=homework.schedule.kind==='habit'?homework.schedule.anchor:null
+      const habitual=habitAnchorText!==null
       const progress=sevenDayProgress(homework,checkins,startsOn,now)
-      const completed=checkins.some(item=>item.homeworkId===homework.id&&localDay(new Date(item.at))===localDay(now))
+      const completed=checkins.some(item=>item.homeworkId===homework.id&&checkinDay(new Date(item.at))===localDay(now))
       return <section className="homework-card" key={homework.id}>
-        <div className="card-heading"><h2>{homework.title}</h2><span className="time-pill">{reminders.length?reminders[0].at.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',hour12:false}):'今日无安排'}</span></div>
+        <div className="card-heading"><h2>{homework.title}</h2><span className="time-pill">{habitAnchorText!==null?'随习惯：'+habitAnchorText:reminders.length?reminders[0].at.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',hour12:false}):'今日无安排'}</span></div>
         <p>{homework.detail}</p>
-        {reminders.length>0&&<><label>备注（可选）<textarea rows={2} value={notes[homework.id]??''} onChange={e=>setNotes(previous=>({...previous,[homework.id]:e.target.value}))}/></label><button className="checkin-button" disabled={busy||completed} onClick={()=>void complete(homework.id)}>{completed?'今日已完成 ✓':'已完成'}</button></>}
-        <div className="progress-heading"><h3>近 7 天</h3><span>{progress.completed}/{progress.expected} 次完成</span></div>
-        <ol className="week-progress" aria-label={`${homework.title}近7天完成情况`}>{progress.days.map(day=><li key={day.day}><span>{day.day.slice(5)}</span><span className={day.completed?'day-dot done':'day-dot'} aria-label={day.completed?'已完成':day.scheduled?'未完成':'无安排'}>{day.completed?'✓':day.scheduled?'○':'—'}</span></li>)}</ol>
+        {(reminders.length>0||habitual)&&<><label>备注（可选）<textarea rows={2} value={notes[homework.id]??''} onChange={e=>setNotes(previous=>({...previous,[homework.id]:e.target.value}))}/></label><button className="checkin-button" disabled={busy||completed} onClick={()=>void complete(homework.id)}>{completed?'今日已完成 ✓':'已完成'}</button></>}
+        {habitual
+          ? <p className="privacy-note">随习惯作业：今天做这件事的时候点一下打卡，不按钟点提醒；打卡会计入坚持率。</p>
+          : <><div className="progress-heading"><h3>近 7 天</h3><span>{progress.completed}/{progress.expected} 次完成</span></div>
+            <ol className="week-progress" aria-label={`${homework.title}近7天完成情况`}>{progress.days.map(day=><li key={day.day}><span>{day.day.slice(5)}</span><span className={day.completed?'day-dot done':'day-dot'} aria-label={day.completed?'已完成':day.scheduled?'未完成':'无安排'}>{day.completed?'✓':day.scheduled?'○':'—'}</span></li>)}</ol></>}
       </section>
     })}
     <footer>只记录完成情况，不根据打卡作健康判断。</footer>

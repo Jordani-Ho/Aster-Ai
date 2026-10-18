@@ -7,14 +7,18 @@ import { signEncounter, verifySignedEncounter, type SignedEncounterEvent, type S
 import type { AttachmentRef, ConsultPackage, Encounter, Homework } from '../record/types'
 import { CARE_PLAN_TYPE, parseSignedCarePlanEvent, storeCarePlan, verifySignedCarePlan } from '../careplan'
 import { verifyFamilyProof } from '../family/proof'
+import type { AdherenceReport } from '../adherence'
 import { INTAKE_COLLECTIONS, deleteDraft, restartAfterEmergency, type IntakeSession, type StoredPackage } from '../intake/session'
 import { localDay } from '../homework/schedule'
 
 // M1-15a 串联：一个 createTransport 实例收到的信封按 type 分发给各模块。
 // - consult.package / consult.attachment：老师端问诊箱与附件（照片单独一条，避免 2 MB 单条上限）。
 // - record.signed：学生端验签后入库，并把作业写进 M1-13 集合。
+// - homework.adherence：学生端把本周坚持率小结发给老师（M1-23a 第 5 条），只含数值、不含原文。
 // - ledger.*：交给 createLedgerSync().receive；不认识的类型丢弃。
 export const CONSULT_TYPES = { package: 'consult.package', attachment: 'consult.attachment' } as const
+export const ADHERENCE_TYPE = 'homework.adherence'
+export const ADHERENCE_COLLECTION = 'student-adherence'
 
 export const INBOX_COLLECTIONS = {
   consult: 'consult-package',
@@ -228,6 +232,86 @@ export function consultEnvelope(pkg: ConsultPackage): Envelope {
 
 export function attachmentEnvelope(encounterId: string, ref: AttachmentRef, data: Uint8Array): Envelope {
   return { type: CONSULT_TYPES.attachment, version: 1, payload: { encounterId, ref: { ...ref }, data: toBase64(data) } satisfies AttachmentEnvelopePayload }
+}
+
+// M1-23a：学生端把“本周坚持率”小结发给老师。只有数值（周起始、完成率、连续天数、本周练习天数、条数），
+// 不含作业原文、身份或打卡时间；老师端按发件人覆盖保存最新一周。
+export interface StudentAdherence {
+  student: string
+  weekStart: string
+  weeklyRate: number | null
+  streak: number
+  practiceDays: number
+  scheduled: number
+  done: number
+  forMember?: string
+  receivedAt: string
+}
+
+export function adherenceEnvelope(report: AdherenceReport): Envelope {
+  return {
+    type: ADHERENCE_TYPE,
+    version: 1,
+    payload: {
+      weekStart: report.weekStart,
+      weeklyRate: report.weeklyRate,
+      streak: report.streak,
+      practiceDays: report.practiceDays,
+      scheduled: report.scheduled,
+      done: report.done,
+    },
+  }
+}
+
+function parseAdherence(payload: Record<string, unknown>): Omit<StudentAdherence, 'student' | 'receivedAt'> | null {
+  const weekStart = payload.weekStart
+  if (typeof weekStart !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) return null
+  const parsed = new Date(weekStart + 'T00:00:00Z')
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== weekStart) return null
+  const weeklyRate = payload.weeklyRate
+  if (!(weeklyRate === null || (typeof weeklyRate === 'number' && Number.isFinite(weeklyRate) && weeklyRate >= 0 && weeklyRate <= 1))) return null
+  const counts = ['streak', 'practiceDays', 'scheduled', 'done'] as const
+  for (const key of counts) {
+    const value = payload[key]
+    if (!Number.isSafeInteger(value) || (value as number) < 0) return null
+  }
+  if ((payload.done as number) > (payload.scheduled as number)) return null
+  if ((payload.practiceDays as number) > 7) return null
+  const forMember = payload.forMember
+  if (forMember !== undefined && (typeof forMember !== 'string' || forMember.trim() === '' || forMember.length > 12 || /[\u0000-\u001f\u007f]/.test(forMember))) return null
+  return {
+    weekStart,
+    weeklyRate: weeklyRate as number | null,
+    streak: payload.streak as number,
+    practiceDays: payload.practiceDays as number,
+    scheduled: payload.scheduled as number,
+    done: payload.done as number,
+    ...(forMember === undefined ? {} : { forMember }),
+  }
+}
+
+async function receiveAdherence(store: LocalStore, message: Message, payload: Record<string, unknown>): Promise<void> {
+  const report = parseAdherence(payload)
+  if (!report) return
+  const existing = await store.get(ADHERENCE_COLLECTION, message.sender) as unknown as StudentAdherence | undefined
+  // 旧周小结迟到时不要覆盖新周。
+  if (existing && existing.weekStart > report.weekStart) return
+  const stored: StudentAdherence = { student: message.sender, ...report, receivedAt: new Date().toISOString() }
+  await store.put(ADHERENCE_COLLECTION, message.sender, stored as unknown as StoreValue)
+}
+
+export async function listStudentAdherence(store: LocalStore): Promise<StudentAdherence[]> {
+  const rows = await store.list(ADHERENCE_COLLECTION)
+  const result: StudentAdherence[] = []
+  for (const row of rows) {
+    const value = row.value as unknown as StudentAdherence | undefined
+    if (!value || typeof value !== 'object') continue
+    if (typeof value.student !== 'string' || !HEX64.test(value.student)) continue
+    const parsed = parseAdherence(value as unknown as Record<string, unknown>)
+    if (!parsed || typeof value.receivedAt !== 'string') continue
+    result.push({ student: value.student, ...parsed, receivedAt: value.receivedAt })
+  }
+  return result
 }
 
 // 学生发送：先发问诊包（只带 AttachmentRef），再每张照片单独一条，避免超过单条 2 MB。
@@ -508,6 +592,10 @@ export function createInbox(options: InboxOptions) {
       }
       if (type === CARE_PLAN_TYPE) {
         await receiveCarePlan(identity, store, message, payload)
+        return
+      }
+      if (type === ADHERENCE_TYPE) {
+        if (object(payload)) await receiveAdherence(store, message, payload)
         return
       }
       if (type.startsWith('ledger.') && options.ledger) await options.ledger.receive(message)

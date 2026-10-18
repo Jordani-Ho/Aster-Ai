@@ -3,31 +3,37 @@ import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
 import { DailyMirrorCard } from './DailyMirrorCard'
 import { listSelfRatings, recordSelfRating, listStressRatings, recordStressRating, last14DayTrend, type SelfRating, type StressRating } from './core/mirror/trend'
-import { listCheckins, checkIn, dueReminders, type Checkin } from './core/homework'
-import { localDay } from './core/homework/schedule'
+import { listCheckins, checkIn, dueReminders, habitHomework, type Assignment, type Checkin, type HabitItem } from './core/homework'
+import { checkinDay, localDay } from './core/homework/schedule'
+import { adherenceReport, type AdherenceReport } from './core/adherence'
 import { listTongueDays, saveTonguePhoto, tongueBytes } from './core/tongue'
 import { MemberSwitcher } from './MemberSwitcher'
 import type { FamilyMember } from './core/family'
 
 const DAY_NAMES: Record<number, string> = { 1: '差', 2: '一般', 3: '还行', 4: '不错', 5: '很好' }
 
-export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, member }: {
+export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, member, onCheckedIn }: {
   store: LocalStore
   llm: LlmClient | null
   family?: readonly Pick<FamilyMember, 'account' | 'alias'>[]
   active?: number
   onSwitch?: (account: number) => void
   member?: Pick<FamilyMember, 'account' | 'alias'> | null
+  /** M1-23a：打卡后把本周坚持率小结发给老师（失败不影响打卡）。 */
+  onCheckedIn?: () => void
 }) {
   const [checkins, setCheckins] = useState<Checkin[]>([])
   const [ratings, setRatings] = useState<SelfRating[]>([])
   const [stressRatings, setStressRatings] = useState<StressRating[]>([])
   const [due, setDue] = useState<{ homeworkId: string; title: string }[]>([])
+  const [habits, setHabits] = useState<HabitItem[]>([])
+  const [adherence, setAdherence] = useState<AdherenceReport | null>(null)
   const [tongueDays, setTongueDays] = useState<string[]>([])
   const [todayTongue, setTodayTongue] = useState<Uint8Array | null>(null)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const fileInput = useRef<HTMLInputElement | null>(null)
+  const assignmentsRef = useRef<Assignment[]>([])
   const [now] = useState(() => new Date())
   const today = localDay(now)
 
@@ -39,12 +45,15 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
         if (cancelled) return
         setCheckins(checkinList); setRatings(ratingList); setStressRatings(stressList)
         const rows = await store.list('homework')
-        const assignments = rows.map(row => row.value as unknown as { homework: { id: string; title: string }; startsOn: string })
-        const reminders = dueReminders(assignments as never, checkinList, now)
+        const assignments = rows.map(row => row.value as unknown as Assignment)
+        assignmentsRef.current = assignments
+        const reminders = dueReminders(assignments, checkinList, now)
         setDue(reminders.map(item => {
           const assignment = assignments.find(a => a.homework.id === item.homeworkId)
           return { homeworkId: item.homeworkId, title: assignment?.homework.title ?? '作业' }
         }))
+        setHabits(habitHomework(assignments, checkinList, now))
+        setAdherence(adherenceReport(assignments, checkinList, today))
         setTongueDays(await listTongueDays(store))
         setTodayTongue(await tongueBytes(store, today))
       } catch (cause) {
@@ -56,9 +65,13 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
 
   const complete = async (homeworkId: string) => {
     try {
-      const record = await checkIn(store, homeworkId)
-      setCheckins(previous => [...previous, record])
+      await checkIn(store, homeworkId)
+      const fresh = await listCheckins(store)
+      setCheckins(fresh)
+      setHabits(habitHomework(assignmentsRef.current, fresh, now))
+      setAdherence(adherenceReport(assignmentsRef.current, fresh, today))
       setStatus('已保存在本机')
+      onCheckedIn?.()
     } catch { setError('打卡未能保存，请重试') }
   }
 
@@ -102,14 +115,24 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
 
     <section className="mirror-card">
       <h2>今天的作业</h2>
+      {adherence && adherence.streak > 0 && <p className="mirror-meta">已连续练习 {adherence.streak} 天</p>}
       {due.length === 0 && <p>今天没有到点的作业。</p>}
       {due.map(item => {
-        const done = checkins.some(record => record.homeworkId === item.homeworkId && localDay(new Date(record.at)) === today)
+        const done = checkins.some(record => record.homeworkId === item.homeworkId && checkinDay(new Date(record.at)) === today)
         return <div className="mirror-homework" key={item.homeworkId}>
           <span>{item.title}</span>
           <button disabled={done} onClick={() => void complete(item.homeworkId)}>{done ? '今日已完成 ✓' : '打卡'}</button>
         </div>
       })}
+    </section>
+
+    <section className="mirror-card">
+      <h2>今天做这些事的时候，记得……</h2>
+      {habits.length === 0 && <p>今天没有随习惯的作业。</p>}
+      {habits.map(item => <div className="mirror-homework" key={item.homeworkId}>
+        <span>{item.anchor}：{item.title}</span>
+        <button disabled={item.done} onClick={() => void complete(item.homeworkId)}>{item.done ? '今天已完成 ✓' : '打卡'}</button>
+      </div>)}
     </section>
 
     <section className="mirror-card">

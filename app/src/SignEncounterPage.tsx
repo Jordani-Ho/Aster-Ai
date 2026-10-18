@@ -11,6 +11,16 @@ function display(value:unknown):string {
   if(p&&Array.isArray(p.items))return p.items.map(i=>i.herb+' '+i.dose+(i.note?'（'+i.note+'）':'')).join('、')+(p.method?'；'+p.method:'')+(p.days?'；'+p.days+'天':'')+(p.changeReason?'；加减理由：'+p.changeReason:'')
   return JSON.stringify(value)
 }
+function scheduleLabel(spec: Encounter['plan']['homework'][number]['schedule']): string {
+  switch (spec.kind) {
+    case 'daily': return '每天 '+spec.time
+    case 'shichen': return spec.shichen+'时'
+    case 'jieqi': return spec.jieqi
+    case 'once': return spec.date+(spec.time?' '+spec.time:'')
+    // M1-23a 随习惯作业：不按钟点，只提示嵌进哪个日常习惯。
+    case 'habit': return '随习惯：'+spec.anchor
+  }
+}
 export interface SignEncounterPageProps {
   initial:Encounter
   onConfirm:(encounter:Encounter)=>Promise<void>|void
@@ -27,7 +37,7 @@ export function SignEncounterPage({initial,onConfirm,onCancel,onRevise}:SignEnco
       {[encounter.fourExams,encounter.judgment,encounter.plan,encounter.outcome].filter(Boolean).map((section,i)=><section key={i}>
         {Object.entries(section!).filter((entry): entry is [string, import('./core/record/types').Field<string> | import('./core/record/types').Field<import('./core/record/types').Prescription>] => entry[0]!=='homework' && !Array.isArray(entry[1])).map(([key,field])=><div className="sign-field" key={key}><div className="sign-field-head"><h2>{fields[key]}</h2><span className={'source source-'+field.source}>{labels[field.source as Source]}</span></div><p className="sign-value">{display(field.value)}</p></div>)}
       </section>)}
-      <section><h2>作业</h2>{encounter.plan.homework.length===0?<p>暂无</p>:encounter.plan.homework.map(h=><div className="sign-field" key={h.id}><h3>{h.title}</h3><p>{h.detail}</p><p>{h.schedule.kind==='daily'?'每天 '+h.schedule.time:h.schedule.kind==='shichen'?h.schedule.shichen+'时':h.schedule.kind==='jieqi'?h.schedule.jieqi:h.schedule.date+(h.schedule.time?' '+h.schedule.time:'')}{h.durationDays?' · '+h.durationDays+'天':''}</p><span className={'source source-'+h.source}>{labels[h.source]}</span></div>)}</section>
+      <section><h2>作业</h2>{encounter.plan.homework.length===0?<p>暂无</p>:encounter.plan.homework.map(h=><div className="sign-field" key={h.id}><h3>{h.title}</h3><p>{h.detail}</p><p>{scheduleLabel(h.schedule)}{h.durationDays?' · '+h.durationDays+'天':''}</p><span className={'source source-'+h.source}>{labels[h.source]}</span></div>)}</section>
     </article>
     {onRevise&&<form className="sign-editor" onSubmit={event=>{event.preventDefault();if(busy||retry||!instruction.trim())return;setBusy(true);setError('');void onRevise(encounter,instruction).then(next=>{setEncounter(next);setInstruction('')}).catch(cause=>setError(cause instanceof Error?cause.message:'改稿未完成，请重试。')).finally(()=>setBusy(false))}}>
       <label>说说怎么改<textarea rows={2} value={instruction} disabled={busy||retry} onChange={e=>setInstruction(e.target.value)} placeholder="用键盘话筒说话，或打字：去掉某味药、作业改成每晚泡脚"/></label><button disabled={busy||retry||!instruction.trim()}>按意见改稿</button>

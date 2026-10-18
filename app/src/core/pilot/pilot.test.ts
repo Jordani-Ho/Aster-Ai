@@ -20,7 +20,7 @@ it('metrics include model time, count actual edits not adoption metadata, and us
   final.judgment.symptomSummary = { value: 'SYNTHETIC_EDIT', source: 'teacher' }
   final.judgment.pattern.source = 'teacher'
   final.plan.homework[0] = { ...final.plan.homework[0], source: 'teacher', note: 'ai_accepted' }
-  expect(calculateMetric(before, final, 1000, 2500)).toEqual({ idPrefix: '12345678', durationMs: 1500, modificationRate: 0.25, missingRate: 0.75, resemblance: null })
+  expect(calculateMetric(before, final, 1000, 2500)).toEqual({ idPrefix: '12345678', durationMs: 1500, modificationRate: 0.25, missingRate: 0.75, resemblance: null, homeworkAdherence: null })
 })
 it('no AI draft and backwards device clock do not produce NaN or negative duration', () => {
   const before = draft(); before.fourExams.ask.source = 'teacher'; before.judgment.symptomSummary.source = 'teacher'; before.judgment.pattern.source = 'teacher'; before.plan.homework[0].source = 'teacher'
@@ -32,14 +32,17 @@ it('encrypted metrics and CSV retain only a short id and numbers; rating can be 
   try {
     const key = crypto.randomUUID(), metric = calculateMetric(draft(), draft(), 1, 1001)
     await saveMetric(store, key, metric)
-    expect(await exportMetrics(store)).toBe('record_id_prefix,draft_to_sign_ms,modification_rate,missing_rate,resemblance\r\n12345678,1000,0,0.75,\r\n')
+    expect(await exportMetrics(store)).toBe('record_id_prefix,draft_to_sign_ms,modification_rate,missing_rate,resemblance,homework_adherence\r\n12345678,1000,0,0.75,,\r\n')
     await rateMetric(store, key, 5)
-    expect(await exportMetrics(store)).toContain('12345678,1000,0,0.75,5\r\n')
+    expect(await exportMetrics(store)).toContain('12345678,1000,0,0.75,5,\r\n')
+    // M1-23a 验收 5：第五列作业坚持率（0～1 或留空），仍不含身份/内容。
+    await saveMetric(store, crypto.randomUUID(), calculateMetric(draft(), draft(), 1, 1001, 0.5))
+    expect(await exportMetrics(store)).toContain('12345678,1000,0,0.75,,0.5\r\n')
     await expect(rateMetric(store, key, 6)).rejects.toThrow()
     await expect(saveMetric(store, crypto.randomUUID(), { ...metric, idPrefix: '=FORMULA' })).rejects.toThrow()
     const rows = JSON.stringify(await store.list('pilot-metrics'))
     for (const secret of ['SYNTHETIC_PRIVATE_QUOTE', 'SYNTHETIC_ALIAS', 'b'.repeat(64), 'c'.repeat(64), '12345678' + 'a'.repeat(24)]) expect(rows).not.toContain(secret)
-    expect(Object.keys((await store.list('pilot-metrics'))[0].value as object).sort()).toEqual(['durationMs','idPrefix','missingRate','modificationRate','resemblance'])
+    expect(Object.keys((await store.list('pilot-metrics'))[0].value as object).sort()).toEqual(['durationMs','homeworkAdherence','idPrefix','missingRate','modificationRate','resemblance'])
   } finally { store.close() }
 })
 

@@ -173,3 +173,9 @@ M1-21：settings/personal-model -> {provider,baseUrl,model,apiKey,testedAt}，�
 - 根实例的 `exportEncrypted()` / `importEncrypted()` 覆盖全部分片：一次备份、一次恢复全家。`clearScope(prefix)` 删除某位家人的全部记录（移除家人时调用）。
 - 集合登记：`family/members`（键固定 `members`，值为家人数组 `{account,alias,relation,gender,birthDate,city,publicKey,privateKey}`；privateKey 与全库一样由设备密钥保护的 AES-GCM 加密后落盘，供本机代管家人收发使用）。
 - 家人分片内沿用既有集合名（`profile`、`settings`、`homework`、`student-records`、`care-plans` 等），实体集合名前缀 `f1-`、`f2-`……；分片内 `settings/teachers` 在添加家人时复制本人的“我的老师”名单。
+
+## M1-23a 集合登记
+
+- `student-adherence`（**老师端**，M1-23a 第 5 条）：键为学生公钥（家人身份就是家人自己的公钥），值 `{student, weekStart, weeklyRate, streak, practiceDays, scheduled, done, forMember?, receivedAt}`；只保存学生端主动上报的**本周练习小结数值**，不含作业原文、打卡时间、称呼或任何身份资料（`forMember` 是可选的家人称呼，仅家人代管时由学生端决定是否带）。同一学生的新周小结覆盖旧周；旧周小结迟到不会覆盖新周。AES-GCM 本机加密，随老师端备份恢复。
+- 学生端的 `homework`（M1-13 作业）与 `checkins`（打卡）沿用原集合；M1-23a 没有新增本地业务集合。打卡仍只在本机，老师端只能看到上报的数值小结。
+- `pilot-metrics`（M1-15b/M1-23a）：值新增可选 `homeworkAdherence`（0～1 或 null）；CSV 追加 `homework_adherence` 列，仍不含身份/内容。
