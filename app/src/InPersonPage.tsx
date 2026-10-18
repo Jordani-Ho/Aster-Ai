@@ -1,3 +1,4 @@
+import {uiError} from './core/onboarding/ui'
 import { useEffect, useRef, useState } from 'react'
 import template from '../../domain/tcm/templates/default.json'
 import type { TeacherTemplate } from '../../domain/tcm/templates/types'
@@ -38,7 +39,7 @@ const INTAKE_LABELS: Record<InPersonIntakeKey, string> = {
 }
 
 function message(cause: unknown): string {
-  return cause instanceof Error && cause.message ? cause.message : '操作失败，请重试'
+  return uiError(cause,'操作失败，请重试')
 }
 
 type Phase = 'select' | 'intake' | 'review' | 'sent'
@@ -100,7 +101,7 @@ export function InPersonPage({ store, identity, onBack, llm = null }: InPersonPa
   const begin = () => {
     setError('')
     const student = studentInput.trim().toLowerCase()
-    if (!/^[0-9a-f]{64}$/.test(student)) { setError('请填写学生的 64 位十六进制公钥。'); return }
+    if (!/^[0-9a-f]{64}$/.test(student)) { setError('请填写学生的 身份编号。'); return }
     try {
       const next = startInPersonEncounter({ teacher: identity.publicKey, student })
       apply(next, '已新建面诊病历：签字之前，所有内容只在本机。')
@@ -207,13 +208,13 @@ export function InPersonPage({ store, identity, onBack, llm = null }: InPersonPa
       {status && <p role="status" className="in-person-status">{status}</p>}
       <section className="in-person-card">
         <h2>选定学生</h2>
-        <p className="in-person-note">需要学生的 64 位十六进制公钥；本机已有学生索引时可以直接点选。</p>
+        <p className="in-person-note">需要学生的 身份编号；本机已有学生索引时可以直接点选。</p>
         {known.length > 0 && <ul className="in-person-students">
           {known.map(publicKey => <li key={publicKey}><button type="button" onClick={() => setStudentInput(publicKey)}>{publicKey}</button></li>)}
         </ul>}
-        {known.length === 0 && <p className="in-person-note">本机还没有学生索引，请让第一次面诊的学生提供公钥。</p>}
-        <label>学生公钥
-          <input type="text" value={studentInput} onChange={event => setStudentInput(event.target.value)} autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="64 位十六进制" />
+        {known.length === 0 && <p className="in-person-note">本机还没有学生索引，请让第一次面诊的学生提供编号。</p>}
+        <label>学生编号
+          <input type="text" value={studentInput} onChange={event => setStudentInput(event.target.value)} autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="学生编号" />
         </label>
         <div className="in-person-actions">
           <button className="in-person-primary" disabled={busy} onClick={begin}>新建面诊病历</button>

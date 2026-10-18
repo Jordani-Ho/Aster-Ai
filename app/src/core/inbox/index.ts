@@ -74,6 +74,7 @@ export interface GroupedRecord {
 export type SendEnvelope = (recipient: string, envelope: Envelope) => Promise<unknown>
 
 export interface LedgerRecorder {
+  open?(teacher:string,student:string):Promise<unknown>
   record(teacher: string, student: string, draft: ChainEventDraft): Promise<unknown>
 }
 
@@ -442,6 +443,7 @@ async function recordCharge(
   if (charge === undefined) return null
   try {
     if (!ledger) throw new Error('还没有登记这份师生账本')
+    await ledger.open?.(teacher,student)
     await ledger.record(teacher, student, {
       type: 'charge',
       amount: charge,

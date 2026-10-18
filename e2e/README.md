@@ -34,3 +34,13 @@ Windows 使用已有 **Ubuntu/WSL** 编译并运行中继，Node/Chromium 使用
 模型固定返回合成字段，不回显请求，不访问外网模型；推送经 gateway 已有 config.push.send 注入，不调用云推送。中继 RUST_LOG=off 且不收集stdout/stderr。应用源码经Vite运行，生产build另做检查；真实手机、生产部署、真实模型质量不在本轮范围。
 
 Playwright 编排与安装参考[官方CI文档](https://playwright.dev/docs/ci)、[浏览器文档](https://playwright.dev/docs/browsers)。
+
+## M1-17 邀请入口
+
+fixtures现在先让老师自动生成身份、回答角色问题，用合成部署口令登记种子成员，再实际生成邀请链接；第二个上下文直接打开邀请，学生不输入任何资料。所有后台身份仅在测试里读取用于断言，不注入生产身份或绕过签名。初始10康币仅测试前提，通过暂停共享账本后用既有接口准备，恢复共享连接后同步；实际扣费仍老师按钮触发。
+
+完整九步分别验收高级恢复、真实虚拟认证器PRF恢复（同一凭据跨清存储保留），并保留原四条硬验收和本机CSV无上传断言。另测一问进入老师首页、可见文字无技术词、零输入学生登记、过期/非成员失效、开放模式与匿名边界、实际无PRF时只灰掉增强。关闭模式仍跑原非成员AUTH拒绝，原私信/业务备份跨成员隔离断言不减少。
+
+`npm run test:deployment` 在隔离目录使用假的Docker命令验证现有setup重跑保留成员/口令和配置默认关闭，不调用真实Docker或Tunnel。CI中 `npm run e2e:test-relay` 在固定上游和三个补丁下跑原Rust全套测试（含CLI、连接与集成）。手机真实同步、外网Tunnel和生产部署本轮不代替验收。
+
+WebAuthn测试源固定localhost，IP源会被实际浏览器拒绝为无效RP；这是测试前提，不以伪造PRF结果绕过。私有Rustup同时显式指定RUSTC与RUSTDOC，`e2e:test-relay`保留各测试目标摘要，避免漏掉文档测试。M1-17本机已跑原有与新增合计101项Rust测试，零失败、零忽略。

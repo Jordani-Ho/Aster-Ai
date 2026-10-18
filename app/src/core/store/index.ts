@@ -12,6 +12,7 @@ export interface EncryptedExport {
   format: 'aster-store-export'; version: 1; createdAt: string; owner: string
   kdf: Header['kdf']; cipher: 'AES-256-GCM'; includesBinary: boolean; records: EncryptedRecord[]
 }
+export class PasskeyUnlockRequired extends Error { constructor(){super('请刷脸解锁')} }
 const recoveryMessage = '设备密钥不可用或身份数据损坏，请用助记词恢复'
 const deviceAAD = (owner: string, language: Language, account: number) => new TextEncoder().encode(`aster/device-identity/v1\u0000${owner}\u0000${language}\u0000${account}`)
 function validateHeader(input: unknown): Header {
@@ -157,17 +158,28 @@ export async function resumeStore(options: StoreOptions = {}): Promise<{ identit
   let secret: Uint8Array<ArrayBuffer> | undefined
   try {
     const state = await transaction(db, ['meta'], 'readonly', async tx => {
-      const [header, deviceKey, wrapped] = await Promise.all([readMeta<Header>(tx, 'header'), readMeta<CryptoKey>(tx, 'deviceKey'), readMeta<WrappedIdentity>(tx, 'identity')])
+      const [header, deviceKey, wrapped] = await Promise.all([readMeta<Header>(tx, 'header'), readMeta<CryptoKey | 'prf'>(tx, 'deviceKey'), readMeta<WrappedIdentity>(tx, 'identity')])
       return { header, deviceKey, wrapped }
     })
     if (!state.header && !state.deviceKey && !state.wrapped) { db.close(); return null }
     const header = validateHeader(state.header)
-    if (!state.deviceKey || state.deviceKey.extractable !== false || state.deviceKey.algorithm.name !== 'AES-GCM' || !state.wrapped) throw new Error(recoveryMessage)
+    if(state.deviceKey==='prf'&&!options.unlockKey)throw new PasskeyUnlockRequired()
+    const deviceKey=state.deviceKey==='prf'?options.unlockKey:state.deviceKey
+    if (!deviceKey || deviceKey.extractable !== false || deviceKey.algorithm.name !== 'AES-GCM' || !state.wrapped) throw new Error(recoveryMessage)
     const wrapped = state.wrapped
     if (!languages.includes(wrapped.language) || !Number.isSafeInteger(wrapped.account) || wrapped.account < 0 || wrapped.account >= 2 ** 31) throw new Error(recoveryMessage)
-    secret = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unbase64(wrapped.iv, 12), additionalData: deviceAAD(header.owner, wrapped.language, wrapped.account), tagLength: 128 }, state.deviceKey, unbase64(wrapped.ct)))
+    secret = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unbase64(wrapped.iv, 12), additionalData: deviceAAD(header.owner, wrapped.language, wrapped.account), tagLength: 128 }, deviceKey, unbase64(wrapped.ct)))
     if (secret.length !== 32 || getPublicKey(secret) !== header.owner) throw new Error(recoveryMessage)
     const identity: Identity = { privateKey: secret, publicKey: header.owner, npub: npubEncode(header.owner), language: wrapped.language, account: wrapped.account }
     return { identity, store: new LocalStore(db, header, await deriveKey(secret, header.kdf.salt), bytes(secret)) }
-  } catch { secret?.fill(0); db.close(); throw new Error(recoveryMessage) }
+  } catch (cause) { secret?.fill(0); db.close(); if(cause instanceof PasskeyUnlockRequired)throw cause;throw new Error(recoveryMessage) }
 }
+
+export async function clearStore(options:StoreOptions={}){await new Promise<void>((resolve,reject)=>{const request=(options.factory??indexedDB).deleteDatabase(options.name??'aster-local-store');request.onsuccess=()=>resolve();request.onerror=()=>reject(request.error);request.onblocked=()=>reject(Error('请关闭其他已打开的页面后重试。'))})}
+
+export async function protectStore(identity:Identity,key:CryptoKey,options:StoreOptions={}){
+ const db=await openDatabase(options)
+ try{const iv=random(12),ct=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:deviceAAD(identity.publicKey,identity.language,identity.account),tagLength:128},key,bytes(identity.privateKey));const wrapped:WrappedIdentity={iv:base64(iv),ct:base64(new Uint8Array(ct)),language:identity.language,account:identity.account};await transaction(db,['meta'],'readwrite',async tx=>{const header=validateHeader(await readMeta(tx,'header'));if(header.owner!==identity.publicKey)throw Error('备份身份不匹配');writeMeta(tx,'identity',wrapped);writeMeta(tx,'deviceKey','prf')})}finally{db.close()}
+}
+
+export async function storeProtectionEnabled(options:StoreOptions={}){const db=await openDatabase(options);try{return await transaction(db,['meta'],'readonly',async tx=>(await readMeta(tx,'deviceKey'))==='prf')}finally{db.close()}}

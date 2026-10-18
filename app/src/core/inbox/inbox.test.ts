@@ -450,3 +450,16 @@ it('completed consultation replay cannot resurrect teacher raw package or photo'
   expect(await teacherStore.list('consult-package')).toHaveLength(0)
   expect(await teacherStore.list('attachments')).toHaveLength(0)
 })
+
+it('invited student opens only their book; teacher first signing opens empty counterpart before existing charge rules',async()=>{
+ const {teacher,student,teacherStore,studentStore}=await nodes()
+ await student.ledger.open(teacherPub,studentPub)
+ expect(await teacher.ledger.books()).toHaveLength(0)
+ await student.sendConsult(await syntheticPackage(0))
+ const consult=await waitFor(async()=>{const rows=await listConsults(teacherStore);return rows[0]??null})
+ const draft=await draftEncounter(draftPackage(consult),template as TeacherTemplate,[],fakeLlm(),{level:'prescription'}),final=acceptDraft(draft)
+ const result=await completeConsultSigning({identity:teacherId,store:teacherStore,consult,draft,final,send:teacher.send,ledger:teacher.ledger,charge:3})
+ expect(result.chargeError).toBe(null)
+ const paired=await waitFor(async()=>{const a=await teacher.ledger.view(teacherPub,studentPub),b=await student.ledger.view(teacherPub,studentPub);return a.balance===-3&&b.balance===-3&&a.code===b.code?true:null})
+ expect(paired).toBe(true);expect(await studentStore.list('student-records')).toHaveLength(1)
+})

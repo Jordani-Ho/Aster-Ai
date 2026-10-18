@@ -1,3 +1,4 @@
+import {uiError} from './core/onboarding/ui'
 import { calculateMetric, saveMetric, rateMetric } from './core/pilot'
 import { useEffect, useRef, useState } from 'react'
 import template from '../../domain/tcm/templates/default.json'
@@ -36,7 +37,7 @@ function textField(field: { value: string | null } | undefined): string {
 }
 
 function message(cause: unknown): string {
-  return cause instanceof Error && cause.message ? cause.message : '操作失败，请重试'
+  return uiError(cause,'操作失败，请重试')
 }
 
 export interface TeacherInboxPageProps {

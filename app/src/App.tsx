@@ -1,3 +1,9 @@
+import { PasskeySettings, configuredRelays } from './PasskeySettings'
+import { authenticatePasskey } from './core/onboarding/passkey'
+import { recoverPasskey } from './core/onboarding/identity-relay'
+import { PasskeyUnlockRequired, resumeStore, protectStore } from './core/store'
+import { createBackupManager } from './core/backup'
+import { communityBackupRelay } from './core/backup/relay'
 import { PilotSettings } from './PilotSettings'
 import { createLlmClient } from './core/llm'
 import { LedgerSettings } from './LedgerSettings'
@@ -5,11 +11,13 @@ import { BackupSettings } from './BackupSettings'
 import './homework.css'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { PushSettings } from './PushSettings'
-import { createIdentity, generatePhrase, languages, languageLabels, restoreIdentity } from './core/identity'
-import type { Identity, Language } from './core/identity'
-import { beginBackup, checkBackup } from './core/identity/backup'
-import type { BackupChallenge } from './core/identity/backup'
-import { openStore, resumeStore, type LocalStore } from './core/store'
+
+import type { Identity } from './core/identity'
+import { AdvancedRecovery } from './AdvancedRecovery'
+import { InviteSettings } from './InviteSettings'
+import { bootstrapIdentity, readInviteLink, acceptInvite, gatewayBase, INVITE_ERROR } from './core/onboarding'
+import { clearStore } from './core/store'
+import { openStore, type LocalStore } from './core/store'
 import { persistenceLabels, requestPersistence, type PersistenceStatus } from './core/store/persistence'
 import { createWiring, type Wiring } from './core/wiring'
 import { createPushClient } from './core/push'
@@ -28,11 +36,10 @@ const defaultRelays = (env.VITE_COMMUNITY_RELAYS ?? '').split(',').map(value => 
 const pushGatewayUrl = env.VITE_PUSH_GATEWAY_URL ?? ''
 const pushVapidPublicKey = env.VITE_PUSH_VAPID_PUBLIC_KEY ?? ''
 
-function errorMessage(cause: unknown, fallback: string): string {
-  return cause instanceof Error && cause.message ? cause.message : fallback
-}
+const gateway = gatewayBase(env.VITE_MODEL_GATEWAY_URL ?? pushGatewayUrl)
 
 export function App() {
+  const [locked,setLocked]=useState(false),[recovering,setRecovering]=useState(false),[allowReplace,setAllowReplace]=useState(false)
   const [homeworkPage, setHomeworkPage] = useState(false)
   const [intakePage, setIntakePage] = useState(false)
   const [recordsPage, setRecordsPage] = useState(false)
@@ -40,15 +47,9 @@ export function App() {
   const [stackRevision, setStackRevision] = useState(0)
   const [role, setRole] = useState<Role | null>(null)
   const [stackStatus, setStackStatus] = useState<LinkStatus>('offline')
-  const [language, setLanguage] = useState<Language>('simplified')
-  const [step, setStep] = useState<'start' | 'write' | 'check' | 'restore' | 'done'>('start')
-  const [phrase, setPhrase] = useState('')
-  const [challenge, setChallenge] = useState<BackupChallenge | null>(null)
-  const [answers, setAnswers] = useState(['', '', ''])
   const [identity, setIdentity] = useState<Identity | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState(false)
   const [persistence, setPersistence] = useState<PersistenceStatus>('requesting')
   const storeRef = useRef<LocalStore | null>(null)
   const identityRef = useRef<Identity | null>(null)
@@ -57,13 +58,18 @@ export function App() {
   useEffect(() => {
     let cancelled = false
     void requestPersistence(navigator.storage).then(status => { if (!cancelled) setPersistence(status) })
-    void resumeStore().then(session => {
-      if (cancelled) { session?.store.close(); session?.identity.privateKey.fill(0); return }
-      if (session) {
-        storeRef.current = session.store; identityRef.current = session.identity
-        setIdentity(session.identity); setStep('done')
-      }
-    }).catch(cause => { if (!cancelled) setError(errorMessage(cause, '本地存储不可用，请用助记词恢复')) })
+    void bootstrapIdentity().then(async session => {
+      if (cancelled) { session.store.close(); session.identity.privateKey.fill(0); return }
+      const {store,identity: person}=session
+      storeRef.current=store;identityRef.current=person
+      try {
+        const invitation=readInviteLink(location.href)
+        if(invitation){await acceptInvite(person,store,invitation,gateway+'/invite/redeem');history.replaceState(null,'',location.pathname+location.search)}
+      } catch (cause) {setError(cause instanceof Error&&cause.message===INVITE_ERROR?INVITE_ERROR:'暂时未能加入社区，请稍后重新打开邀请。')}
+      if(cancelled){store.close();person.privateKey.fill(0);return}
+      const saved=await store.get('settings','role') as {role?:Role}|undefined
+      setRole(saved?.role??null);setIdentity(person)
+    }).catch(cause => { if(!cancelled){if(cause instanceof PasskeyUnlockRequired)setLocked(true);else setError('本机资料暂时无法打开，请使用恢复资料。')} })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true; stackRef.current?.close(); stackRef.current = null; storeRef.current?.close(); storeRef.current = null; identityRef.current?.privateKey.fill(0); identityRef.current = null }
   }, [])
@@ -128,28 +134,20 @@ export function App() {
     return () => { window.removeEventListener('aster:store-restoring', pause); window.removeEventListener('aster:store-restored', restart); window.removeEventListener('aster:relays-changed', restart) }
   }, [])
 
-  const reset = () => {
-    stackRef.current?.close(); stackRef.current = null
-    storeRef.current?.close(); storeRef.current = null; identityRef.current = null
-    identity?.privateKey.fill(0)
-    setIdentity(null); setPhrase(''); setChallenge(null); setAnswers(['', '', ''])
-    setError(''); setStep('start'); setRole(null); setHomeworkPage(false); setIntakePage(false); setRecordsPage(false); setInboxPage(false)
-    setStackStatus('offline')
-  }
-  const complete = async (result: Identity) => {
-    setBusy(true)
-    try {
-      const store = await openStore(result)
-      storeRef.current?.close(); storeRef.current = store; identityRef.current = result
-      setIdentity(result); setPhrase(''); setChallenge(null); setAnswers(['', '', '']); setError(''); setStep('done')
-    } catch (cause) { result.privateKey.fill(0); setError(errorMessage(cause, '无法保存身份，请重试')) }
-    finally { setBusy(false) }
+  const replaceIdentity = async (result:Identity,after?:(fresh:LocalStore)=>Promise<void>) => {
+    await stackRef.current?.close();stackRef.current=null
+    storeRef.current?.close();storeRef.current=null
+    identityRef.current?.privateKey.fill(0);identityRef.current=null
+    setIdentity(null);setRole(null)
+    await clearStore()
+    const fresh=await openStore(result);storeRef.current=fresh;identityRef.current=result;await after?.(fresh);const saved=await fresh.get('settings','role') as {role?:Role}|undefined;setRole(saved?.role??null);setIdentity(result);setLocked(false)
+    setIntakePage(false);setRecordsPage(false);setHomeworkPage(false);setInboxPage(false);setError('')
   }
   const chooseRole = async (next: Role) => {
     setError('')
     setRole(next)
     try { if (storeRef.current) await storeRef.current.put('settings', 'role', { role: next }) }
-    catch (cause) { setError(errorMessage(cause, '角色没有保存成功')) }
+    catch { setError('角色没有保存成功，请重试。') }
   }
 
   const store = storeRef.current
@@ -169,69 +167,27 @@ export function App() {
         </main>}
     </Suspense>
   }
-  return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: '24px 16px', maxWidth: 480, margin: '0 auto' }}>
-      <h1>知衡 · 身份</h1>
-      <p>请用生成时的同一种文字恢复</p>
-      <p>身份由设备密钥加密保存在本机，重新打开可自动解锁。浏览器数据被清空后，请用助记词恢复；业务数据还需从备份恢复。请妥善抄写，不要交给他人。</p>
-      {loading && <p>正在解锁本地身份…</p>}
-      {error && <p role="alert">{error}</p>}
-      {!loading && step === 'start' && <>
-        <label>助记词文字 <select value={language} onChange={event => setLanguage(event.target.value as Language)}>{languages.map(item => <option key={item} value={item}>{languageLabels[item]}</option>)}</select></label>
-        <p><button onClick={() => { try { setPhrase(generatePhrase(language)); setStep('write') } catch { setError('无法生成身份，请使用支持安全随机数的浏览器') } }}>生成新身份</button></p>
-        <button onClick={() => setStep('restore')}>使用助记词恢复</button>
-      </>}
-      {step === 'write' && <>
-        <h2>按顺序抄写 12 个词</h2>
-        <ol>{phrase.split(' ').map((word, index) => <li key={index}>{word}</li>)}</ol>
-        <button onClick={() => { setChallenge(beginBackup(phrase)); setStep('check') }}>我已抄写，开始核对</button>
-      </>}
-      {step === 'check' && challenge && <form onSubmit={async event => {
-        event.preventDefault()
-        if (!checkBackup(challenge, answers)) { setError('核对不通过，请检查抄写的词及顺序'); return }
-        if (busy) return
-        try { await complete(createIdentity(phrase, language)) } catch { setError('身份生成失败，请重新开始') }
-      }}>
-        <h2>核对抄写</h2>
-        {challenge.positions.map((position, index) => <p key={position}><label>第 {position + 1} 个词 <input autoComplete="off" autoCapitalize="none" spellCheck={false} value={answers[index]} onChange={event => setAnswers(previous => previous.map((answer, i) => i === index ? event.target.value : answer))} /></label></p>)}
-        <button type="submit" disabled={busy}>核对并完成</button>
-      </form>}
-      {step === 'restore' && <form onSubmit={async event => {
-        event.preventDefault()
-        if (busy) return
-        try { await complete(restoreIdentity(phrase)) } catch (cause) { setError(errorMessage(cause, '恢复失败')) }
-      }}>
-        <label>输入 12 个词（中文可连写，英文用空格或标点分隔，自动识别文字）<textarea rows={5} style={{ width: '100%', boxSizing: 'border-box' }} autoComplete="off" autoCapitalize="none" spellCheck={false} value={phrase} onChange={event => setPhrase(event.target.value)} /></label>
-        <button type="submit" disabled={busy}>校验并恢复</button>
-      </form>}
-      {step === 'done' && identity && <>
-        <h2>身份已就绪</h2>
-        <p>当前角色：{role === 'teacher' ? '老师' : role === 'student' ? '学生' : '未选择'}（M1 手动选择，可在设置里切换）</p>
-        <p role="status">中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : stackStatus === 'rejected' ? '中继拒绝连接，请核对成员资格' : '尚未连接（可在设置里配置社区中继）'}</p>
-        {role === 'student' && <section>
-          <h3>学生入口</h3>
-          <p><button type="button" onClick={() => setIntakePage(true)}>开始采集</button></p>
-          <p><button type="button" onClick={() => setRecordsPage(true)}>我的病历</button></p>
-          <p><button type="button" onClick={() => setHomeworkPage(true)}>今日作业</button></p>
-        </section>}
-        {role === 'teacher' && <section>
-          <h3>老师入口</h3>
-          <p><button type="button" onClick={() => setInboxPage(true)}>问诊箱</button></p>
-        </section>}
-        <details><summary>设置</summary>
-          <h3>身份角色</h3>
-          <p><button type="button" disabled={role === 'student'} onClick={() => void chooseRole('student')}>我是学生</button>{' '}<button type="button" disabled={role === 'teacher'} onClick={() => void chooseRole('teacher')}>我是老师</button></p>
-          {store && <TeacherListSettings store={store} />}
-          {role === 'teacher' && store && <PilotSettings store={store} />}
-          <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p><p>持久化存储不能替代备份。</p>
-          {store && <><BackupSettings identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></>}
-        </details>
-        <PushSettings identity={identity} />
-        <p>词表：{languageLabels[identity.language]} · 账户：{identity.account}（本人）</p>
-        <p style={{ overflowWrap: 'anywhere' }}>公钥 npub：{identity.npub}</p>
-        <p style={{ overflowWrap: 'anywhere' }}>公钥十六进制：{identity.publicKey}</p>
-      </>}
-      {step !== 'start' && <p><button disabled={busy} onClick={reset}>{step === 'done' ? '返回首页' : '取消并返回'}</button></p>}
-    </main>
-  )
+  return <main style={{fontFamily:'system-ui, sans-serif',padding:'24px 16px',maxWidth:480,margin:'0 auto'}}>
+    <h1>知衡</h1>
+    {loading&&<p>正在准备…</p>}{error&&<p role="alert">{error}</p>}
+    {!loading&&locked&&<button onClick={()=>void(async()=>{try{const {key}=await authenticatePasskey(),session=await resumeStore({unlockKey:key});if(!session)throw Error();storeRef.current=session.store;identityRef.current=session.identity;const saved=await session.store.get('settings','role') as {role?:Role}|undefined;setRole(saved?.role??null);setIdentity(session.identity);setLocked(false);setError('')}catch{setError('解锁未完成，请重试或使用恢复资料。')}})()}>刷脸解锁</button>}
+    {!loading&&identity&&!role&&<section><h2>您是老师还是学生？</h2><button onClick={()=>void chooseRole('teacher')}>我是老师</button>{' '}<button onClick={()=>void chooseRole('student')}>我是学生</button></section>}
+    {identity&&role&&<>
+      <h2>{role==='teacher'?'老师首页':'问诊首页'}</h2>
+      <p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':stackStatus==='rejected'?'连接未成功，请联系老师':'尚未连接'}</p>
+      {role==='teacher'?<><InviteSettings identity={identity} gateway={gateway}/><p><button onClick={()=>setInboxPage(true)}>问诊箱</button></p></>:<><p><button onClick={()=>setIntakePage(true)}>开始采集</button></p><p><button onClick={()=>setRecordsPage(true)}>我的病历</button></p><p><button onClick={()=>setHomeworkPage(true)}>今日作业</button></p></>}
+    </>}
+    {store&&identity&&<details><summary>设置</summary>
+      <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button disabled={role==='student'} onClick={()=>void chooseRole('student')}>我是学生</button></details>
+      <TeacherListSettings store={store}/>{role==='teacher'&&<PilotSettings store={store}/>}
+      <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p>
+      <BackupSettings identity={identity} store={store}/><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus}/>
+      <PasskeySettings identity={identity} store={store} defaults={defaultRelays}/>
+      <PushSettings identity={identity}/>
+      <AdvancedRecovery store={store} onRestore={replaceIdentity}/>
+    </details>}
+    {!identity&&!loading&&<AdvancedRecovery onRestore={replaceIdentity}/>}
+    <details><summary>换手机后找回备份</summary><p>恢复会替换这台设备上的资料，请先保存需要保留的文件。照片不在中继备份中。</p><label><input type="checkbox" checked={allowReplace} onChange={e=>setAllowReplace(e.target.checked)}/>允许用备份替换本机资料</label><button disabled={!allowReplace||recovering||!globalThis.PublicKeyCredential} onClick={()=>{setRecovering(true);void(async()=>{try{const relays=store?await configuredRelays(store,defaultRelays):defaultRelays,{identity:found,key}=await recoverPasskey(relays);await replaceIdentity(found,async fresh=>{const relay=communityBackupRelay(found,relays),manager=createBackupManager({identity:found,store:fresh,relay});try{await manager.restoreLatest(true);await protectStore(found,key)}finally{manager.close();relay.close()}});setError('')}catch{setError('恢复未完成，请检查手机账户和社区备份后重试。')}finally{setRecovering(false)}})()}}>用刷脸找回备份</button></details>
+    <p style={{fontSize:12}}>换手机前请到设置里备份</p>
+  </main>
 }

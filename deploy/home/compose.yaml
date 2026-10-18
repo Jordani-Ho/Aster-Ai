@@ -31,7 +31,6 @@ services:
     volumes:
       - ./data/gateway:/app/data
       - ./data/gateway-config.json:/app/config.json:ro
-      - ./data/gateway-members.json:/app/members.json:ro
     logging:
       driver: none
     networks: [internal]
@@ -46,6 +45,7 @@ services:
       # 无域名（trycloudflare）时由 quick-start.sh 把临时域名写进 .env，再重建本容器。
       PORT: "8080"
       VITE_COMMUNITY_RELAYS: wss://${RELAY_DOMAIN:-placeholder.invalid}
+      VITE_MODEL_GATEWAY_URL: https://${APP_DOMAIN:-placeholder.invalid}/v1
       VITE_PUSH_GATEWAY_URL: https://${APP_DOMAIN:-placeholder.invalid}
       VITE_PUSH_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
     depends_on: [gateway]

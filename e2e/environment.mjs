@@ -41,6 +41,7 @@ export async function startEnvironment(build) {
     await mkdir(database)
     const config = path.join(directory, 'relay.toml')
     await writeFile(config, `[info]\nrelay_url = "${relayUrl}"\nname = "Synthetic E2E relay"\n[network]\naddress = "127.0.0.1"\nport = ${relayPort}\n[limits]\nmax_event_bytes = 2097152\nmax_ws_message_bytes = 2098176\nmax_ws_frame_bytes = 2098176\nevent_kind_allowlist = [1059, 30078]\n[authorization]\nnip42_auth = true\nnip42_dms = true\npubkey_whitelist = ${JSON.stringify([actors.teacher.pubkey, actors.student.pubkey])}\n`)
+    const originalConfig=await (await import('node:fs/promises')).readFile(config,'utf8')
     const host = path.join(root, 'e2e/relay-host.mjs')
     let relay, currentDatabase = database
     const stopRelay = async () => {
@@ -63,6 +64,12 @@ export async function startEnvironment(build) {
       if (resetting) { res.writeHead(409).end(); return }
       resetting = true
       try {
+        let body='';for await(const chunk of req){body+=chunk;if(body.length>16384)throw Error('control body too large')}
+        const options=body?JSON.parse(body):{}
+        let configText=originalConfig.replace('[authorization]','[authorization]\ncommunity_open = '+(options.communityOpen!==false))
+        if(Array.isArray(options.members))configText=configText.replace(/pubkey_whitelist = .*/, 'pubkey_whitelist = '+JSON.stringify(options.members))
+        await writeFile(config,configText)
+        if(!options.relayOnly)await gateway.resetMembers()
         await stopRelay(); await rm(currentDatabase, { recursive: true, force: true })
         currentDatabase = await mkdtemp(path.join(directory, 'database-'))
         await bootRelay(); res.writeHead(200).end('{}')
@@ -70,7 +77,7 @@ export async function startEnvironment(build) {
     })
     const controlURL = await listen(control)
     closers.push(() => closeServer(control))
-    const gateway = await startGatewayFixture({ directory, members: [actors.teacher.pubkey, actors.student.pubkey] })
+    const gateway = await startGatewayFixture({ directory, members: [] })
     closers.push(() => gateway.close())
     const app = await startWebApp({ gatewayUrl: gateway.url, relayUrl })
     closers.push(() => app.close())
@@ -87,10 +94,10 @@ export async function startWebApp({ gatewayUrl, relayUrl }) {
   const { default: react } = await import(pathToFileURL(requireApp.resolve('@vitejs/plugin-react')).href)
   const webPort = await port()
   const app = await createVite({ configFile: false, root: path.join(root, 'app'), plugins: [react()],
-    define: { 'import.meta.env.VITE_COMMUNITY_RELAYS': JSON.stringify(relayUrl), 'import.meta.env.VITE_MODEL_GATEWAY_URL': JSON.stringify('http://127.0.0.1:' + webPort + '/v1') },
+    define: { 'import.meta.env.VITE_COMMUNITY_RELAYS': JSON.stringify(relayUrl), 'import.meta.env.VITE_MODEL_GATEWAY_URL': JSON.stringify('http://localhost:' + webPort + '/v1') },
     resolve: { dedupe: ['lunar-typescript', 'timezonecomplete', 'tzdata'] },
-    server: { host: '127.0.0.1', port: webPort, strictPort: true, fs: { allow: [root] }, proxy: { '/v1': { target: gatewayUrl, changeOrigin: false }, '/push': { target: gatewayUrl, changeOrigin: false } } },
+    server: { host: '127.0.0.1', port: webPort, strictPort: true, fs: { allow: [root] }, proxy: { '/v1': { target: gatewayUrl, changeOrigin: false }, '/push': { target: gatewayUrl, changeOrigin: false }, '/invite': { target: gatewayUrl, changeOrigin: false } } },
   })
   try { await app.listen() } catch (error) { await app.close(); throw error }
-  return { url: `http://127.0.0.1:${app.httpServer.address().port}`, close: () => app.close() }
+  return { url: `http://localhost:${app.httpServer.address().port}`, close: () => app.close() }
 }

@@ -35,6 +35,7 @@ docker compose --profile "$PROFILE" run --rm --no-deps -T \
   -v "$(pwd)/verify.mjs:/app/verify.mjs:ro" \
   -e "APP_URL=$APP_URL" \
   -e "RELAY_WS=$RELAY_WS" \
+  -e "RELAY_COMMUNITY_OPEN=${RELAY_COMMUNITY_OPEN:-true}" \
   -e "MEMBER_SECRET=${VERIFY_MEMBER_SECRET:-}" \
   -e "MEMBER_PUBKEY=${VERIFY_MEMBER_PUBKEY:-}" \
   gateway node /app/verify.mjs || FAIL=1
@@ -45,8 +46,8 @@ if [ -d data/relay ] && [ -n "$(find data/relay -type f -print -quit)" ]; then
 else
   log "WARN relay 数据目录还是空的（刚启动、还没有事件时正常）"
 fi
-if [ -f data/gateway-members.json ] && [ -f data/relay-config.toml ]; then
-  log "PASS 配置文件在位：data/gateway-members.json、data/relay-config.toml"
+if [ -f data/gateway/members.json ] && [ -f data/relay-config.toml ]; then
+  log "PASS 配置文件在位：data/gateway/members.json、data/relay-config.toml"
 else
   log "FAIL 配置文件缺失"; FAIL=1
 fi

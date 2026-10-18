@@ -1,3 +1,4 @@
+import {uiError} from './core/onboarding/ui'
 import { useEffect, useRef, useState } from 'react'
 import template from '../../domain/tcm/templates/default.json'
 import type { TeacherTemplate } from '../../domain/tcm/templates/types'
@@ -28,7 +29,7 @@ import {
   type IntakeKey,
   type IntakeSession,
 } from './core/intake'
-import { restartIntakeAfterEmergency } from './core/inbox'
+import { loadTeachers, restartIntakeAfterEmergency } from './core/inbox'
 import type { LlmClient } from './core/llm'
 import type { AttachmentRef, ConsultPackage, Encounter } from './core/record/types'
 import type { LocalStore } from './core/store'
@@ -48,7 +49,7 @@ function randomId(): string {
 }
 
 function message(cause: unknown): string {
-  return cause instanceof Error && cause.message ? cause.message : '操作失败，请重试'
+  return uiError(cause,'操作失败，请重试')
 }
 
 export interface IntakePageProps {
@@ -65,6 +66,7 @@ export interface IntakePageProps {
 export function IntakePage({ store, identity, onBack, llm = null, sendConsult }: IntakePageProps) {
   const [session, setSession] = useState<IntakeSession | null>(null)
   const [teacherInput, setTeacherInput] = useState('')
+  const [teachers,setTeachers]=useState<string[]>([])
   const [draftText, setDraftText] = useState('')
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [profile, setProfile] = useState<Encounter['profile']>(emptyProfile())
@@ -79,6 +81,7 @@ export function IntakePage({ store, identity, onBack, llm = null, sendConsult }:
   const region = detectRegion(navigator.language)
 
   useEffect(() => {
+    void loadTeachers(store).then(values=>{setTeachers(values);setTeacherInput(values[0]??'')}).catch(()=>{})
     void loadDraft(store).then(draft => {
       if (draft) { setSession(draft); setStatus('已恢复上次未发送的采集草稿。') }
     }).catch(() => setError('本机草稿读取失败，可以重新开始。'))
@@ -106,7 +109,7 @@ export function IntakePage({ store, identity, onBack, llm = null, sendConsult }:
   const begin = () => {
     setError('')
     const teacher = teacherInput.trim()
-    if (!/^[0-9a-f]{64}$/.test(teacher)) { setError('请填写老师的 64 位十六进制公钥（由老师提供）。'); return }
+    if (!/^[0-9a-f]{64}$/.test(teacher)) { setError('请先打开老师的邀请链接。'); return }
     try {
       const next = startSession({ student: identity.publicKey, teacher, template: template as TeacherTemplate })
       apply(next, '采集只在本机进行；点“确认发送”之前，没有任何数据离开手机。')
@@ -236,13 +239,10 @@ export function IntakePage({ store, identity, onBack, llm = null, sendConsult }:
       {status && <p role="status" className="intake-status">{status}</p>}
       {error && <p role="alert" className="intake-error">{error}</p>}
       <section className="intake-card">
-        <label>老师的公钥（64 位十六进制）
-          <input value={teacherInput} onChange={event => setTeacherInput(event.target.value)} autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="由老师提供" />
-        </label>
+        <label>选择老师<select value={teacherInput} onChange={event=>setTeacherInput(event.target.value)}><option value="">请选择</option>{teachers.map((teacher,i)=><option key={teacher} value={teacher}>老师{i+1}</option>)}</select></label>{!teachers.length&&<p>请先打开老师的邀请链接。</p>}
         <p className="privacy-note">点“确认发送”之前，所有内容只在本机。急症筛查也在本机完成。</p>
         <div className="intake-actions">
           <button className="intake-primary" onClick={begin} disabled={busy}>开始采集</button>
-          <button onClick={() => setTeacherInput('c'.repeat(64))}>填入合成示例</button>
           <button onClick={onBack}>返回</button>
         </div>
       </section>

@@ -1,16 +1,10 @@
 import { test, expect, runtime } from './fixtures'
 import { actors } from './actors.mjs'
 
-test('two real Chromium contexts restore synthetic identities, persist on reload and remain isolated', async ({ people }) => {
-  for (const person of [people.teacher, people.student]) {
-    await expect(person.page.getByText('公钥十六进制：' + person.actor.pubkey, { exact: true })).toBeVisible()
-    const other = person === people.teacher ? people.student : people.teacher
-    await expect(person.page.getByText('公钥十六进制：' + other.actor.pubkey, { exact: true })).toHaveCount(0)
-    await person.page.reload()
-    await expect(person.page.getByRole('heading', { name: '身份已就绪' })).toBeVisible()
-    await expect(person.page.getByText('公钥十六进制：' + person.actor.pubkey, { exact: true })).toBeVisible()
-  }
+test('two automatically generated contexts persist isolated identities without visible technical terms',async({people})=>{
+ for(const person of [people.teacher,people.student]){expect(await person.page.locator('body').innerText()).not.toMatch(/密钥|助记词|公钥|npub|十六进制/);await person.page.reload();await expect(person.page.getByRole('heading',{name:person===people.teacher?'老师首页':'问诊首页',exact:true})).toBeVisible();const key=await person.page.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return s.identity.publicKey}finally{s.store.close();s.identity.privateKey.fill(0)}});expect(key).toBe(person.actor.pubkey)}
 })
+
 test('real patched relay authenticates two members and carries actual encrypted transport messages', async ({ people }) => {
   for (const person of [people.teacher, people.student]) {
     await person.page.evaluate(async ({ key, relay }) => {
@@ -33,6 +27,8 @@ test('real patched relay authenticates two members and carries actual encrypted 
   await expect.poll(() => people.teacher.page.evaluate(() => (window as any).e2eMessages.map((m: any) => m.envelope.payload))).toContain('SYNTHETIC_ENCRYPTED_PONG')
   for (const person of [people.teacher, people.student]) await person.page.evaluate(() => (window as any).e2eTransport.close())
 })
+test.describe('closed-mode compatibility',()=>{
+ test.use({communityOpen:false})
 test('real relay rejects non-member AUTH instead of silently running as an open relay', async ({ people }) => {
   const accepted = await people.teacher.page.evaluate(async ({ key, relay }) => {
     const module = '/src/core/transport/index.ts'
@@ -46,6 +42,8 @@ test('real relay rejects non-member AUTH instead of silently running as an open 
   }, { key: actors.outsider.key, relay: runtime.relayUrl })
   expect(accepted).toBe(false)
 })
+})
+
 test('backup policy permits own 30078 events and does not deliver them to the other member', async ({ people }) => {
   const id = await people.teacher.page.evaluate(async ({ phrase, relay }) => {
     const identityModule = '/src/core/identity/index.ts', relayModule = '/src/core/backup/relay.ts'

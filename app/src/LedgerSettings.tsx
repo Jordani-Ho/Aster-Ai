@@ -1,3 +1,4 @@
+import {uiError} from './core/onboarding/ui'
 import { useEffect, useRef, useState } from 'react'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
@@ -19,7 +20,7 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
   status?: LinkStatus
 }) {
   const [books, setBooks] = useState<LedgerView[]>([]), [error, setError] = useState('')
-  const [role, setRole] = useState('student'), [peer, setPeer] = useState(''), [revision, setRevision] = useState(0)
+  const [revision, setRevision] = useState(0)
   const [status, setStatus] = useState<LinkStatus>(sharedStatus ?? 'offline')
   const runtimeRef = useRef<ReturnType<typeof createLedgerSync> | null>(null)
   useEffect(() => {
@@ -75,28 +76,15 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
     try {
       if (!runtimeRef.current) throw Error('账本同步尚未就绪，请检查社区中继设置。')
       await action(runtimeRef.current)
-    } catch (cause) { setError(cause instanceof Error ? cause.message : '账本同步失败，请重试') }
+    } catch (cause) { setError(uiError(cause,'账本同步失败，请重试')) }
   }
   return <details><summary>康币账本与对账</summary>
     <p role="status">{status === 'ready' ? '已连接社区中继' : status === 'connecting' ? '正在连接社区中继' : status === 'rejected' ? '中继拒绝连接，请核对成员资格' : '等待连接社区中继'}</p>
     {error && <p role="alert">{error}</p>}
-    <form onSubmit={event => {
-      event.preventDefault()
-      void run(async runtime => {
-        await runtime.open(role === 'teacher' ? identity.publicKey : peer.trim(), role === 'student' ? identity.publicKey : peer.trim())
-        setPeer('')
-        await runtime.requestSync()
-        setRevision(value => value + 1)
-      })
-    }}>
-      <label>我在这本账中是<select value={role} onChange={e => setRole(e.target.value)}><option value="student">学生</option><option value="teacher">老师</option></select></label>
-      <label>对方公钥（十六进制）<input value={peer} onChange={e => setPeer(e.target.value)} autoCapitalize="none" autoComplete="off" style={{ width: '100%', boxSizing: 'border-box' }} /></label>
-      <p>师生双方需各自登记同一本账的公钥。</p>
-      <button disabled={!peer.trim()}>登记账本</button>{' '}<button type="button" onClick={() => void run(runtime => runtime.requestSync())}>立即对账</button>
-    </form>
+    <p>打开老师邀请后会自动建立师生账本。</p><button type="button" onClick={()=>void run(runtime=>runtime.requestSync())}>立即对账</button>
     {!books.length && <p>尚未登记账本。</p>}
     {books.map(book => <section key={book.ledger.teacher + book.ledger.student}>
-      <p style={{ overflowWrap: 'anywhere' }}>对方：{identity.publicKey === book.ledger.teacher ? book.ledger.student : book.ledger.teacher}</p>
+      <p style={{ overflowWrap: 'anywhere' }}>对方：{identity.publicKey === book.ledger.teacher ? '学生' : '老师'}</p>
       {book.code !== null && <p>余额：{book.balance} 康币 · 对账码：{book.code}</p>}
       {book.code === null && <p role="alert">{book.conflict ? '账本有冲突，请与老师核对' : '本机账本校验失败，请与对方核对'}</p>}
       {book.notices.map(text => <p role="status" key={text}>{text}</p>)}

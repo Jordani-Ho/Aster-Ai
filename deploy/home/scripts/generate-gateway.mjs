@@ -1,8 +1,9 @@
 // 生成网关配置与成员名单（由 setup.sh 调用，也可以单独运行）。
 // 只读环境变量，不写日志、不打印密钥。
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
+import {MemberStore} from '../../../gateway/members.js'
 
-mkdirSync('data', { recursive: true })
+mkdirSync('data/gateway', { recursive: true })
 
 const members = String(process.env.MEMBERS_ALL ?? '')
   .split(/[\s,]+/)
@@ -13,7 +14,9 @@ for (const key of members) {
   if (seen.has(key)) throw new Error('成员公钥重复：' + key)
   seen.add(key)
 }
-if (seen.size === 0) throw new Error('没有成员公钥')
+const file='data/gateway/members.json'
+if(!existsSync(file)){const legacy=existsSync('data/gateway-members.json')?JSON.parse(readFileSync('data/gateway-members.json','utf8')):[];writeFileSync(file,JSON.stringify(legacy),{mode:0o600})}
+const store=new MemberStore(file);for(const member of seen)store.add(member)
 
 const appOrigin = process.env.APP_ORIGIN ?? ''
 if (!/^https?:\/\//.test(appOrigin)) throw new Error('APP_ORIGIN 非法：' + appOrigin)
@@ -26,7 +29,8 @@ const config = {
   upstreamBaseUrl: process.env.UPSTREAM_BASE_URL || 'https://api.deepseek.com',
   upstreamModel: process.env.UPSTREAM_MODEL || 'deepseek-chat',
   upstreamApiKeyEnv: 'UPSTREAM_API_KEY',
-  membersFile: '/app/members.json',
+  membersFile: '/app/data/members.json',
+  seedTokenFile: '/app/data/seed.json',
   maxBodyBytes: 1048576,
   upstreamTimeoutMs: 120000,
   rateLimit: { windowMs: 60000, maxPerWindow: 20 },
@@ -35,6 +39,6 @@ const config = {
   logFile: '/dev/null',
 }
 
-writeFileSync('data/gateway-members.json', JSON.stringify([...seen], null, 2) + '\n', { mode: 0o600 })
+
 writeFileSync('data/gateway-config.json', JSON.stringify(config, null, 2) + '\n', { mode: 0o600 })
 console.log('gateway config: publicUrl=' + appOrigin + ' members=' + seen.size)

@@ -32,3 +32,11 @@ app传输测试用内存模拟中继验证真实NIP-42签名与成员限制、NI
 M1-06的备份事件及“最近3份”保留策略不在本卡实现；本配置只允许1059，后续备份卡扩展。
 
 M1-15b 增加无 Docker 的真实编译/浏览器探针：根目录 `npm run e2e:build-relay` 取同一固定上游、按顺序应用本目录两个补丁并 `cargo build --release --locked`，缓存成功二进制；`npm run e2e` 在 loopback 启动进程，验证成员鉴权、1059 往返与 30078 备份隔离。详见 ../e2e/README.md。前文 M1-05/M1-06 的“未运行真实中继”是当时验收边界，本轮实际结果以 M1-15b PR 为准。
+
+## M1-17 内测开放模式与身份密文
+
+顺序应用 community-policy.patch、backup-policy.patch、onboarding-policy.patch。新增authorization.community_open，Rust与独立configure默认均false，旧白名单策略不变；true时任意通过原NIP-42校验的连接可写入允许的密文事件。未认证仍不得写入/订阅消息；1059只投递到其p收件人，三个业务备份仍只投递给本人。
+
+可选刷脸新增 `aster.identity` 槽（30078）：仅认证作者本人可写；这是唯一允许未认证读取的身份密文。未认证REQ必须每个过滤器都精确指定30078、一个完整作者、唯一d=aster.identity；混入业务槽、消息、作者前缀或通配都拒绝。不开放其他内容，不改变原消息/备份过期与接收人限制。
+
+部署setup默认 `RELAY_COMMUNITY_OPEN=true` 供内测，独立配置命令不设置变量仍默认关闭。`npm run e2e:test-relay` 编译并跑上游全部测试（含lib、CLI、连接、集成和文档）与新增边界测试；e2e分别验证关闭时非成员拒绝、打开时任意认证通过/匿名拒绝，以及原NIP17和30078跨成员隔离。

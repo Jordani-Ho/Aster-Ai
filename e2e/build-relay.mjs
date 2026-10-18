@@ -29,10 +29,10 @@ async function protoc() {
   }
   return binary
 }
-export async function buildRelay() {
+export async function buildRelay(runTests = process.argv.includes('--test')) {
   if (process.platform === 'win32') {
     const script = await linuxPath(fileURLToPath(import.meta.url))
-    const output = await command('wsl.exe', ['-d', 'Ubuntu', '--exec', 'node', script, '--json', '--native-cache'])
+    const output = await command('wsl.exe', ['-d', 'Ubuntu', '--exec', 'node', script, '--json', '--native-cache', ...(runTests ? ['--test'] : [])])
     const result = JSON.parse(output.replace(/^\uFEFF/, ''))
     return { ...result, command: 'wsl.exe', args: ['-d', 'Ubuntu', '--exec', result.binary] }
   }
@@ -45,15 +45,16 @@ export async function buildRelay() {
   try { rustVersion = await command(rustup, ['run', RUST, 'rustc', '-vV'], { env, quiet: true }); await command('cmake', ['--version'], { quiet: true }) }
   catch { throw Error('Install Rust 1.90.0 via rustup plus C/C++ and cmake first; see e2e/README.md. No fake relay fallback is permitted.') }
   env.RUSTC = await command(rustup, ['which', '--toolchain', RUST, 'rustc'], { env, quiet: true })
+  env.RUSTDOC = await command(rustup, ['which', '--toolchain', RUST, 'rustdoc'], { env, quiet: true })
   const compiler = await protoc(), protocVersion = await command(compiler, ['--version'])
-  const patches = ['community-policy.patch', 'backup-policy.patch'].map(name => path.join(root, 'relay', name))
+  const patches = ['community-policy.patch', 'backup-policy.patch', 'onboarding-policy.patch'].map(name => path.join(root, 'relay', name))
   const docker = await readFile(path.join(root, 'relay/Dockerfile'), 'utf8')
   if (!docker.includes(UPSTREAM) || !docker.includes('rust:' + RUST + '-') || patches.some(p => !docker.includes(path.basename(p)))) throw Error('Builder pins no longer match relay/Dockerfile')
   const fingerprint = sha(Buffer.concat([Buffer.from([UPSTREAM, rustVersion, protocVersion, process.platform, process.arch].join('\n')), await readFile(fileURLToPath(import.meta.url)), ...await Promise.all(patches.map(p => readFile(p)))]))
   const directory = path.join(cache, 'relay', fingerprint), binary = path.join(directory, 'nostr-rs-relay'), manifest = path.join(directory, 'manifest.json')
   try {
     const previous = JSON.parse(await readFile(manifest, 'utf8'))
-    if (previous.key === fingerprint && previous.sha256 === sha(await readFile(binary))) {
+    if (!runTests && previous.key === fingerprint && previous.sha256 === sha(await readFile(binary))) {
       console.error('relay cache hit: ' + fingerprint.slice(0, 12))
       return { binary, command: binary, args: [], cached: true, key: fingerprint, elapsedMs: Date.now() - started }
     }
@@ -63,7 +64,7 @@ export async function buildRelay() {
   try { await mkdir(lock) } catch { throw Error('Relay build is already running (or an interrupted build left ' + lock + '); inspect before removing the lock') }
   const source = await mkdtemp(path.join(directory, 'source-'))
   try {
-    console.error('Building real relay from ' + UPSTREAM + ' with both policy patches; first release build may take several minutes.')
+    console.error('Building real relay from ' + UPSTREAM + ' with all policy patches; first release build may take several minutes.')
     await command('git', ['init', '-q', source])
     await command('git', ['-C', source, 'remote', 'add', 'origin', 'https://github.com/scsibug/nostr-rs-relay.git'])
     await command('git', ['-C', source, 'fetch', '--depth', '1', 'origin', UPSTREAM])
@@ -74,10 +75,12 @@ export async function buildRelay() {
     }
     const target = path.join(cache, 'target', 'rust-' + RUST)
     await command(rustup, ['run', RUST, 'cargo', 'build', '--release', '--locked'], { cwd: source, env: { ...env, PROTOC: compiler, CARGO_TARGET_DIR: target, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2' } })
+    let testResults=[]
+    if(runTests){const output=await command(rustup,['run',RUST,'cargo','test','--release','--locked','--','--test-threads=1'],{cwd:source,env:{...env,RUST_LOG:'off',PROTOC:compiler,CARGO_TARGET_DIR:target,CARGO_BUILD_JOBS:process.env.CARGO_BUILD_JOBS??'2'}});testResults=output.match(/^test result:.*$/gm)??[];console.error(testResults.join('\n'))}
     await copyFile(path.join(target, 'release/nostr-rs-relay'), binary + '.tmp')
     await chmod(binary + '.tmp', 0o755)
     await rename(binary + '.tmp', binary)
-    await writeFile(manifest + '.tmp', JSON.stringify({ key: fingerprint, upstream: UPSTREAM, rust: RUST, protoc: protocVersion, sha256: sha(await readFile(binary)) }))
+    await writeFile(manifest + '.tmp', JSON.stringify({ key: fingerprint, upstream: UPSTREAM, rust: RUST, protoc: protocVersion, testResults, sha256: sha(await readFile(binary)) }))
     await rename(manifest + '.tmp', manifest)
     return { binary, command: binary, args: [], cached: false, key: fingerprint, elapsedMs: Date.now() - started }
   } finally {
