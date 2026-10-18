@@ -2,6 +2,7 @@
 // 由技术合伙人建立；M1-09、M1-10、M1-11、M1-13、M1-14 直接引用，不要重复定义。
 
 import type { FamilyProof } from '../family/proof'
+import type { TongueAbstract } from '../../../../domain/tcm/tongue'
 
 /** 每个字段的来源。界面用颜色区分；AI 推测永远不能显示成事实。 */
 export type Source = 'student' | 'teacher' | 'ai_draft' | 'external' | 'unknown'
@@ -32,6 +33,7 @@ export interface Encounter {
     history: Field<string>
     medsAllergies: Field<string>
     attachments: AttachmentRef[]
+    tongues?: TongueAbstract[]
   }
   fourExams: { look: Field<string>; listenSmell: Field<string>; ask: Field<string>; pulse: Field<string> }
   judgment: {

@@ -1,4 +1,5 @@
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
+import { parseTongueAbstract, type TongueAbstract } from '../../../../domain/tcm/tongue'
 import type { LlmClient } from '../llm'
 import { check, type RedFlagResult } from '../redflags'
 import type { AttachmentRef, ConsultPackage, Encounter, Field } from '../record/types'
@@ -29,6 +30,7 @@ export interface IntakeSession {
   reviewed: boolean
   usedFallback: boolean
   attachments: AttachmentRef[]
+  tongues?: TongueAbstract[]
 }
 
 export interface IntakeStore {
@@ -207,6 +209,12 @@ export function removePhoto(state: IntakeSession, refId: string): IntakeSession 
   return { ...state, attachments: state.attachments.filter(ref => ref.id !== refId) }
 }
 
+export function addTongue(state:IntakeSession,record:TongueAbstract):IntakeSession {
+ if(state.phase==='sent')throw Error('这次采集已经发送')
+ if((state.tongues?.length??0)>=4)throw Error('最多附四份舌象示意')
+ return {...state,tongues:[...(state.tongues??[]),parseTongueAbstract(record)]}
+}
+
 export interface ConfirmCheck { ok: boolean; reason?: string }
 
 export function canConfirm(state: IntakeSession): ConfirmCheck {
@@ -292,6 +300,7 @@ export function buildConsultPackage(
       history: structuredClone(state.fields.history),
       medsAllergies: structuredClone(state.fields.medsAllergies),
       attachments: state.attachments.map(ref => ({ ...ref })),
+      ...(state.tongues ? {tongues:state.tongues.map(parseTongueAbstract)} : {}),
     },
     fourExams: { look: unknown(), listenSmell: unknown(), ask: unknown(), pulse: unknown() },
     judgment: { symptomSummary: unknown(), pattern: unknown(), mechanism: unknown(), rationale: unknown() },
@@ -347,12 +356,17 @@ export async function confirmAndSend(
 
 export async function saveDraft(store: IntakeStore, state: IntakeSession): Promise<void> {
   if (state.phase === 'sent') throw new Error('已发送的采集不再保存草稿')
+  if(state.tongues)state.tongues.forEach(parseTongueAbstract)
   await store.put(INTAKE_COLLECTIONS.draft, state.encounterId, state)
 }
 
 function isSession(value: unknown): value is IntakeSession {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const session = value as IntakeSession
+  if(session.tongues!==undefined) {
+    if(!Array.isArray(session.tongues)||session.tongues.length>4)return false
+    try {session.tongues.forEach(parseTongueAbstract)} catch {return false}
+  }
   return HEX32.test(session.encounterId) && typeof session.student === 'string' && typeof session.teacher === 'string'
     && Array.isArray(session.focusOrder) && Array.isArray(session.texts) && Array.isArray(session.attachments)
     && (session.phase === 'collecting' || session.phase === 'confirm')

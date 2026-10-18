@@ -7,6 +7,8 @@
 
 ## 1. 类型定义
 
+V2-03（B 类，随 #34 交 Claude 审核）：`Encounter.intake` 新增可选 `tongues: TongueAbstract[]`（最多四份）。每份为 `{kind:'tongue',features,svg,shichen,jieqi,city}`；类型与严格校验在 `domain/tcm/tongue.ts`。照片不进草稿、附件存储或待发包。特征来自模型外观读取，界面明确标为模型读取、非诊断；未知不补正常。SVG 必须与本地模板重建结果一致，签字覆盖整个抽象结果。没有旧用户迁移。
+
 下面的定义已经放在 `app/src/core/record/types.ts`（由技术合伙人建立，与本文逐字一致）。各任务卡直接引用，不要重复定义；发现问题在合并请求里提出。
 
 ```ts

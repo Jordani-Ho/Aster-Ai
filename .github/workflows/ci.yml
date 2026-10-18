@@ -81,6 +81,8 @@ jobs:
       - name: Install matching Chromium and system libraries
         run: npx playwright install --with-deps chromium
       - run: npm run typecheck:e2e
+      - name: V2-03 abstractor browser integration
+        run: node e2e/abstractor.browser.mjs
       - run: npm run test:e2e-env
       - run: npm run test:deployment
       - name: Build patched relay

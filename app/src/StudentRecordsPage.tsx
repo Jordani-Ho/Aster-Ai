@@ -1,3 +1,4 @@
+import { TongueFigure } from './TongueFigure'
 import { RecordPhotos } from './RecordPhotos'
 import { useEffect, useState } from 'react'
 import type { Identity } from './core/identity'
@@ -32,6 +33,7 @@ function RecordBody({ record, store }: { record: ReceivedRecord; store: LocalSto
       {encounter.intake.presentIllness.value !== null && <p className="record-detail">现病史：{textField(encounter.intake.presentIllness)}</p>}
       {encounter.intake.history.value !== null && <p className="record-detail">既往史：{textField(encounter.intake.history)}</p>}
       {encounter.intake.medsAllergies.value !== null && <p className="record-detail">在吃的药、过敏：{textField(encounter.intake.medsAllergies)}</p>}
+      {encounter.intake.tongues?.map((record,index)=><TongueFigure key={index} record={record}/>)}
       {encounter.intake.attachments.length > 0 && <RecordPhotos record={record} store={store}/>}
     </section>
     <section className="record-section">

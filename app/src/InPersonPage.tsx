@@ -2,23 +2,22 @@ import { loadTeacherTemplate } from './core/drafting/template'
 import { reviseEncounter } from './core/drafting/revise'
 import { organizeIntake, fixedQuestions } from './core/intake/followup'
 import {uiError} from './core/onboarding/ui'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import defaultTemplate from '../../domain/tcm/templates/default.json'
 import type { TeacherTemplate } from '../../domain/tcm/templates/types'
 import { draftEncounter as draftWithModel } from './core/drafting'
 import type { Identity } from './core/identity'
-import { MAX_PHOTOS, processPhoto } from './core/intake/photo'
 import type { LlmClient } from './core/llm'
 import { contactsForAlert, detectRegion, type RedFlagResult } from './core/redflags'
 import {
-  IN_PERSON_COLLECTIONS,
+
   IN_PERSON_INTAKE_KEYS,
-  addInPersonPhoto,
+
   inPersonConsultPackage,
   knownStudents,
   loadInPersonDraft,
   recordIntakeField,
-  removeInPersonPhoto,
+
   saveInPersonDraft,
   signAndHandoverInPerson,
   startInPersonEncounter,
@@ -68,7 +67,7 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
   const [utterance,setUtterance]=useState('')
   const [questionIndex,setQuestionIndex]=useState(0)
   const [template,setTemplate]=useState<TeacherTemplate>(defaultTemplate)
-  const fileInput = useRef<HTMLInputElement | null>(null)
+
 
   useEffect(() => {
     let cancelled = false
@@ -111,35 +110,6 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
       apply(next, '已新建面诊病历：签字之前，所有内容只在本机。')
       setPhase('intake')
     } catch (cause) { setError(message(cause)) }
-  }
-
-  const addFiles = async (files: FileList | null) => {
-    if (!encounter || !files || busy) return
-    setBusy(true); setError('')
-    try {
-      let next = encounter
-      for (const file of Array.from(files)) {
-        if (next.intake.attachments.length >= MAX_PHOTOS) break
-        const bytes = new Uint8Array(await file.arrayBuffer())
-        const result = await processPhoto({ bytes, type: file.type || 'image/jpeg' }, { existingCount: next.intake.attachments.length })
-        // 处理后的字节单独存；删除按保留期限统一处理。
-        await store.put(IN_PERSON_COLLECTIONS.attachments, result.ref.id, result.data)
-        next = addInPersonPhoto(next, result.ref)
-      }
-      apply(next, '照片已在本机缩小。')
-    } catch (cause) { setError(message(cause)) } finally {
-      setBusy(false)
-      if (fileInput.current) fileInput.current.value = ''
-    }
-  }
-
-  const removePhoto = async (refId: string) => {
-    if (!encounter || busy) return
-    setBusy(true); setError('')
-    try {
-      await store.delete(IN_PERSON_COLLECTIONS.attachments, refId)
-      apply(removeInPersonPhoto(encounter, refId))
-    } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
 
   const proceed = async () => {
@@ -249,7 +219,7 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
   }
 
   if (!encounter) return null
-  const photos = encounter.intake.attachments
+
   return <main className="in-person-page">
     <header className="in-person-head">
       <button className="in-person-back" onClick={onBack}>返回</button>
@@ -269,14 +239,6 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
       {IN_PERSON_INTAKE_KEYS.map(key=>encounter.intake[key].value&&<p key={key}>{INTAKE_LABELS[key]}：{encounter.intake[key].value}</p>)}
       {questionIndex>0&&questionIndex<=template.focus.length&&<p>再问一句：{fixedQuestions([template.focus[questionIndex-1]])[0]?.text ?? template.focus[questionIndex-1]}</p>}
       <form onSubmit={e=>{e.preventDefault();void addSentence()}}><label>用输入法的语音输入，或直接打字<textarea rows={3} maxLength={2000} value={utterance} disabled={busy} onChange={e=>setUtterance(e.target.value)}/></label><button disabled={busy||!utterance.trim()}>加入这一句</button>{questionIndex>0&&questionIndex<=template.focus.length&&<button type="button" disabled={busy} onClick={()=>setQuestionIndex(i=>i+1)}>跳过</button>}</form>
-    </section>
-    <section className="in-person-card">
-      <h2>当面拍照（舌象等，最多 {MAX_PHOTOS} 张）</h2>
-      <p className="in-person-note">在本机缩小到长边 ≤1600 像素、重新编码为 JPEG 后放进病历；记录按保留期限统一清理。</p>
-      {photos.length > 0 && <ul className="in-person-photos">
-        {photos.map(item => <li key={item.id}><span>照片 · {Math.ceil(item.bytes / 1024)} KB</span><button type="button" onClick={() => void removePhoto(item.id)}>移除</button></li>)}
-      </ul>}
-      <input ref={fileInput} type="file" accept="image/*" capture="environment" multiple onChange={event => void addFiles(event.target.files)} />
     </section>
     <footer className="in-person-actions">
       <button className="in-person-primary" disabled={busy || !encounter.intake.chiefComplaint.value || !!utterance.trim()} onClick={() => void proceed()}>生成病历</button>

@@ -6,15 +6,19 @@ import { listSelfRatings, recordSelfRating, listStressRatings, recordStressRatin
 import { listCheckins, checkIn, dueReminders, habitHomework, type Assignment, type Checkin, type HabitItem } from './core/homework'
 import { checkinDay, localDay } from './core/homework/schedule'
 import { adherenceReport, type AdherenceReport } from './core/adherence'
-import { listTongueDays, saveTonguePhoto, tongueBytes } from './core/tongue'
+import { listTongueDays, saveTongue, loadTongue } from './core/tongue'
+import type { TongueAbstract } from '../../domain/tcm/tongue'
+import { TongueCapture } from './TongueCapture'
+import { TongueFigure } from './TongueFigure'
 import { CITY_UNKNOWN_HINT, DEFAULT_MIRROR_SHICHEN, DEFAULT_TIME_DISPLAY, formatHeavenTime, heavenNow, heavenStampOf, loadMirrorShichen, loadTimeDisplay, type HeavenTime, type TimeDisplay } from './core/heaven'
 import { MemberSwitcher } from './MemberSwitcher'
 import type { FamilyMember } from './core/family'
 
 const DAY_NAMES: Record<number, string> = { 1: '差', 2: '一般', 3: '还行', 4: '不错', 5: '很好' }
 
-export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, member, onCheckedIn }: {
+export function MirrorPage({ store, modelStore, llm, family = [], active = 0, onSwitch, member, onCheckedIn }: {
   store: LocalStore
+  modelStore?: LocalStore
   llm: LlmClient | null
   family?: readonly Pick<FamilyMember, 'account' | 'alias'>[]
   active?: number
@@ -30,13 +34,12 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
   const [habits, setHabits] = useState<HabitItem[]>([])
   const [adherence, setAdherence] = useState<AdherenceReport | null>(null)
   const [tongueDays, setTongueDays] = useState<string[]>([])
-  const [todayTongue, setTodayTongue] = useState<Uint8Array | null>(null)
+  const [todayTongue, setTodayTongue] = useState<TongueAbstract | null>(null)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [heaven, setHeaven] = useState<HeavenTime | null>(null)
   const [display, setDisplay] = useState<TimeDisplay>(DEFAULT_TIME_DISPLAY)
   const [mirrorShichen, setMirrorShichen] = useState(DEFAULT_MIRROR_SHICHEN)
-  const fileInput = useRef<HTMLInputElement | null>(null)
   const assignmentsRef = useRef<Assignment[]>([])
   const [now] = useState(() => new Date())
   const today = localDay(now)
@@ -75,7 +78,7 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
         setHabits(habitHomework(assignments, checkinList, now))
         setAdherence(adherenceReport(assignments, checkinList, today))
         setTongueDays(await listTongueDays(store))
-        setTodayTongue(await tongueBytes(store, today))
+        setTodayTongue(await loadTongue(store, today))
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : '镜子页读取失败')
       }
@@ -111,19 +114,6 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
       setStressRatings(await listStressRatings(store))
       setStatus('已记录今天的压力')
     } catch { setError('压力未能保存，请重试') }
-  }
-
-  const addTongue = async (files: FileList | null) => {
-    if (!files || files.length === 0) return
-    try {
-      const file = files[0]
-      const bytes = new Uint8Array(await file.arrayBuffer())
-      const saved = await saveTonguePhoto(store, { bytes, type: file.type || 'image/jpeg' }, { now: () => now, ...(stamp ? { heaven: stamp } : {}) })
-      setTodayTongue(await tongueBytes(store, saved.date))
-      setTongueDays(await listTongueDays(store))
-      setStatus('舌象已保存在本机')
-    } catch { setError('舌象保存失败，请重试') }
-    finally { if (fileInput.current) fileInput.current.value = '' }
   }
 
   // 只拿照镜子时辰的镜子记录做对照；其他时辰的记录不参与并给出提示。
@@ -166,12 +156,9 @@ export function MirrorPage({ store, llm, family = [], active = 0, onSwitch, memb
 
     <section className="mirror-card">
       <h2>拍今天的舌象</h2>
-      {todayTongue
-        ? <p role="img" aria-label="今天的舌象已保存">已保存今天的舌象。</p>
-        : <p>每天一张，只存在你的手机上。</p>}
-      <input ref={fileInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={event => void addTongue(event.target.files)} />
-      <button onClick={() => fileInput.current?.click()}>{todayTongue ? '重拍' : '拍照 / 选择照片'}</button>
-      {tongueDays.length > 0 && <p className="mirror-meta">已记录 {tongueDays.length} 天，最近 30 天可回看。</p>}
+      {todayTongue ? <TongueFigure record={todayTongue}/> : <p>照片交给你接入的视觉模型读取，只留下舌象示意与特征，应用不保留原图。</p>}
+      <TongueCapture store={store} modelStore={modelStore} onCaptured={async(record,at)=>{await saveTongue(store,record,at);setTodayTongue(record);setTongueDays(await listTongueDays(store));setStatus('已保存舌象示意，原图已从应用内清除')}}/>
+      {tongueDays.length > 0 && <p className="mirror-meta">已记录 {tongueDays.length} 天。</p>}
     </section>
 
     <section className="mirror-card">

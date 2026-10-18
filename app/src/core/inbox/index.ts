@@ -1,4 +1,5 @@
 import type { Identity } from '../identity'
+import { parseTongueAbstract } from '../../../../domain/tcm/tongue'
 import type { LocalStore, StoreValue } from '../store'
 import type { Envelope, Message } from '../transport'
 import type { ChainEventDraft } from '../ledger/types'
@@ -120,6 +121,10 @@ function isRef(value: unknown): value is AttachmentRef {
 
 function isEncounter(value: unknown): value is Encounter {
   if (!object(value) || !object(value.intake) || !object(value.plan) || !object(value.judgment) || !object(value.fourExams)) return false
+  if(value.intake.tongues!==undefined) {
+    if(!Array.isArray(value.intake.tongues)||value.intake.tongues.length>4)return false
+    try {value.intake.tongues.forEach(parseTongueAbstract)} catch {return false}
+  }
   return typeof value.id === 'string' && HEX32.test(value.id)
     && Number.isSafeInteger(value.version) && (value.version as number) >= 1
     && (value.kind === 'remote_async' || value.kind === 'in_person')

@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "labels": {"pale":"淡白","pink":"淡红","red":"红","darkRed":"绛","purple":"紫","white":"白","yellow":"黄","gray":"灰","black":"黑","none":"无","thin":"薄","thick":"厚","narrow":"瘦","standard":"正常","wide":"胖","unknown":"未知"},
+  "note": "仅描述看见的外观，不作诊断。unknown 表示未看清；标记 null 表示位置未知，[] 表示未见标记。",
+  "color": {
+    "pale": "#e7b8bd",
+    "pink": "#d98f9a",
+    "red": "#c95666",
+    "darkRed": "#963b56",
+    "purple": "#8c6a95",
+    "unknown": "#c6c6c6"
+  },
+  "coatingColor": {
+    "white": "#f3ece2",
+    "yellow": "#e5ca76",
+    "gray": "#a8a6a1",
+    "black": "#58565a",
+    "none": "none",
+    "unknown": "#c6c6c6"
+  },
+  "coatingThickness": {
+    "none": 0,
+    "thin": 0.35,
+    "thick": 0.85,
+    "unknown": 0.15
+  },
+  "shape": {
+    "narrow": 0.82,
+    "standard": 1,
+    "wide": 1.12,
+    "unknown": 1
+  },
+  "teeth": [
+    "left-back",
+    "left-middle",
+    "left-tip",
+    "right-back",
+    "right-middle",
+    "right-tip"
+  ],
+  "cracks": [
+    "back",
+    "center",
+    "tip",
+    "left",
+    "right"
+  ],
+  "confidence": {
+    "min": 0,
+    "max": 1
+  }
+}

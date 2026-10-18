@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import template from '../../domain/tcm/templates/default.json'
 import type { TeacherTemplate } from '../../domain/tcm/templates/types'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
-import type { AttachmentRef, ConsultPackage, Encounter } from './core/record/types'
+import type { ConsultPackage, Encounter } from './core/record/types'
 import {
-  addPhoto, addUtterance, answerFocus, canConfirm, confirmAndSend,
+  addTongue, addUtterance, answerFocus, canConfirm, confirmAndSend,
   defaultHistorySelection, loadDraft, loadHistory, loadProfile, markReviewed,
-  organizeSession, processPhoto, saveDraft, skipFocus, startSession, updateField,
+  organizeSession, saveDraft, skipFocus, startSession, updateField,
   type IntakeKey, type IntakeSession,
 } from './core/intake'
 import { loadTeachers } from './core/inbox'
@@ -20,6 +20,8 @@ import { listSelfRatings, listStressRatings, last14DayTrend } from './core/mirro
 import { detectRegion } from './core/redflags'
 import { RedFlagAlert } from './RedFlagAlert'
 import { uiError } from './core/onboarding/ui'
+import { TongueCapture } from './TongueCapture'
+import { TongueFigure } from './TongueFigure'
 
 const FIELD_LABELS: Record<IntakeKey, string> = {
   chiefComplaint: '最不舒服的地方（主诉）',
@@ -34,6 +36,7 @@ function message(cause: unknown): string {
 
 export interface ConsultPageProps {
   store: LocalStore
+  modelStore?: LocalStore
   identity: Identity
   llm: LlmClient | null
   sendConsult?: (pkg: ConsultPackage) => Promise<void>
@@ -47,17 +50,15 @@ export interface ConsultPageProps {
 
 // 学生问诊页（对话式）：一个输入框 + 相机；AI 追问以气泡出现，最多 3 轮；
 // 整理好的卡片可点开改，一个大按钮“发给老师”。急症只内联提示、不拦截、不给号码。
-export function ConsultPage({ store, identity, llm, sendConsult, member, family = [], active = 0, onSwitch, managerIdentity }: ConsultPageProps) {
+export function ConsultPage({ store, modelStore, identity, llm, sendConsult, member, family = [], active = 0, onSwitch, managerIdentity }: ConsultPageProps) {
   const [session, setSession] = useState<IntakeSession | null>(null)
   const [teachers, setTeachers] = useState<string[]>([])
   const [draftText, setDraftText] = useState('')
-  const [photos, setPhotos] = useState<{ ref: AttachmentRef; data: Uint8Array }[]>([])
   const [profile, setProfile] = useState<Encounter['profile'] | null>(null)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
-  const fileInput = useRef<HTMLInputElement | null>(null)
   const region = detectRegion(navigator.language)
 
   useEffect(() => {
@@ -119,27 +120,6 @@ export function ConsultPage({ store, identity, llm, sendConsult, member, family 
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
 
-  const addFiles = async (files: FileList | null) => {
-    if (!session || !files || busy) return
-    setBusy(true); setError('')
-    try {
-      let next = session
-      const added: { ref: AttachmentRef; data: Uint8Array }[] = []
-      for (const file of Array.from(files)) {
-        if (photos.length + added.length >= 4) break
-        const bytes = new Uint8Array(await file.arrayBuffer())
-        const result = await processPhoto({ bytes, type: file.type || 'image/jpeg' }, { existingCount: photos.length + added.length })
-        added.push({ ref: result.ref, data: result.data })
-        next = addPhoto(next, result)
-      }
-      setPhotos(previous => [...previous, ...added])
-      apply(next, '照片已在本机缩小。')
-    } catch (cause) { setError(message(cause)) } finally {
-      setBusy(false)
-      if (fileInput.current) fileInput.current.value = ''
-    }
-  }
-
   const sendPackage = async () => {
     if (!session || busy) return
     const allowed = canConfirm(session)
@@ -151,12 +131,12 @@ export function ConsultPage({ store, identity, llm, sendConsult, member, family 
       const sendFn = sendConsult ?? (async () => {})
       const [checkins, ratings, stress] = await Promise.all([listCheckins(store), listSelfRatings(store), listStressRatings(store)])
       const trend = last14DayTrend(checkins, ratings, stress)
-      const currentProfile = profile ?? await loadProfile(store)
+      const currentProfile = await loadProfile(store)
       // 替家人问诊：代管人（根身份）签一份代管证明，老师端验过才认代管、才记到代管人账上。
       const managerOptions = managerIdentity
         ? { manager: managerIdentity.publicKey, managerProof: createFamilyProof(managerIdentity, identity.publicKey) }
         : {}
-      await confirmAndSend(store, session, currentProfile, history, photos, sendFn, trend, managerOptions)
+      await confirmAndSend(store, session, currentProfile, history, [], sendFn, trend, managerOptions)
       setSent(true)
       setSession({ ...session, phase: 'sent' })
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -165,7 +145,7 @@ export function ConsultPage({ store, identity, llm, sendConsult, member, family 
   if (sent) {
     return <main className="consult-page">
       <header><p className="eyebrow">知衡 · 学生</p><h1>已发给老师</h1></header>
-      <section className="consult-card"><p>问诊包已加密发出。老师签字交还后，病历会出现在“其他 → 我的病历”。</p></section>
+      <section className="consult-card"><p>问诊卡片已发出。老师签字交还后，病历会出现在“其他 → 我的病历”。</p></section>
     </main>
   }
 
@@ -195,15 +175,14 @@ export function ConsultPage({ store, identity, llm, sendConsult, member, family 
       {member && <p role="status">替 {member.alias} 问诊</p>}
       <p className="consult-note">每一项都可以改；只有你确认过的内容才会发给老师。</p>
       {(Object.keys(FIELD_LABELS) as IntakeKey[]).map(key => <label key={key}>{FIELD_LABELS[key]}
-        <textarea rows={2} value={session.fields[key].value ?? ''} onChange={event => setSession(updateField(session, key, event.target.value))} onBlur={() => void saveDraft(store, session).catch(() => {})} />
+        <textarea disabled={busy} rows={2} value={session.fields[key].value ?? ''} onChange={event => setSession(updateField(session, key, event.target.value))} onBlur={() => void saveDraft(store, session).catch(() => {})} />
       </label>)}
-      {photos.length > 0 && <p>照片 {photos.length} 张（含舌象等）。</p>}
-      <button className="consult-send" onClick={() => void sendPackage()}>发给老师</button>
+      {session.tongues?.map((record,index)=><TongueFigure key={index} record={record}/>)}
+      <button className="consult-send" disabled={busy} onClick={() => void sendPackage()}>发给老师</button>
     </section>}
 
     {!sent && <div className="consult-input-row">
-      <input ref={fileInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={event => void addFiles(event.target.files)} />
-      <button aria-label="拍照或选择照片" className="consult-camera" onClick={() => fileInput.current?.click()}>📷</button>
+      <TongueCapture store={store} modelStore={modelStore} onBusyChange={setBusy} disabled={!session||busy||(session.tongues?.length??0)>=4} onCaptured={async record=>{if(session){const next=addTongue(session,record);await saveDraft(store,next);setSession(next);setStatus('已附舌象示意，原图已从应用内清除')}}}/>
       <textarea aria-label="按键盘上的🎤说话就行" rows={1} placeholder="按键盘上的🎤说话就行" value={draftText} onChange={event => setDraftText(event.target.value)} />
       <button className="consult-send-btn" disabled={busy || draftText.trim() === ''} onClick={() => void send()}>发送</button>
     </div>}
