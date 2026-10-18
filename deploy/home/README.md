@@ -410,3 +410,9 @@ Docker 装好后，在本机跑完了除“域名模式 + 真实模型 Key”以
 - 真实上游模型调用（`UPSTREAM_API_KEY` 为空；网关功能用推送路由 202 验证，不消耗额度）。
 - 真实手机（用 Playwright 移动端模拟代替）。
 - 施工环境里没有 sudo，按约定没有改任何系统配置；Docker 由用户自己安装。
+
+## M1-21 自带模型
+
+每个使用者在手机上接入自己的模型账户。家里网关只代理浏览器无法直连的请求，或在已接入用户的模型失败时提供内测后备。网关不保存用户凭证和内容，日志仍关闭。
+
+.env 的 MODEL_FALLBACK_ENABLED 默认为 true；推广时设 false，重跑原 setup.sh 并更新 gateway 容器使配置生效。额外地区或其他服务需代理时，在 MODEL_PROXY_ALLOWED_URLS 以逗号填写核实过的完整 HTTPS /chat/completions 地址，重跑 setup.sh；不要填内网或元数据地址。此项不影响手机直连。服务商清单与日期、美国/国内探测边界见 app/src/core/llm/README.md。真实账户与手机仍需内测验收。

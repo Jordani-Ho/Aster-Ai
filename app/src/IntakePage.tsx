@@ -112,7 +112,7 @@ export function IntakePage({ store, identity, onBack, llm = null, sendConsult }:
     if (!/^[0-9a-f]{64}$/.test(teacher)) { setError('请先打开老师的邀请链接。'); return }
     try {
       const next = startSession({ student: identity.publicKey, teacher, template: template as TeacherTemplate })
-      apply(next, '采集只在本机进行；点“确认发送”之前，没有任何数据离开手机。')
+      apply(next, '先在本机筛查急症，再由您接入的模型整理；点“确认发送”后才交给老师。')
     } catch (cause) { setError(message(cause)) }
   }
 
@@ -240,7 +240,7 @@ export function IntakePage({ store, identity, onBack, llm = null, sendConsult }:
       {error && <p role="alert" className="intake-error">{error}</p>}
       <section className="intake-card">
         <label>选择老师<select value={teacherInput} onChange={event=>setTeacherInput(event.target.value)}><option value="">请选择</option>{teachers.map((teacher,i)=><option key={teacher} value={teacher}>老师{i+1}</option>)}</select></label>{!teachers.length&&<p>请先打开老师的邀请链接。</p>}
-        <p className="privacy-note">点“确认发送”之前，所有内容只在本机。急症筛查也在本机完成。</p>
+        <p className="privacy-note">急症筛查在本机完成；所需原话交给您接入的模型整理，确认发送后交给老师。</p>
         <div className="intake-actions">
           <button className="intake-primary" onClick={begin} disabled={busy}>开始采集</button>
           <button onClick={onBack}>返回</button>

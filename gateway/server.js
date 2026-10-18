@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { verifyEvent } from 'nostr-tools/pure'
 
 const ROUTE = '/v1/chat/completions'
+const PROXY_ROUTE = '/v1/proxy'
+const providers = JSON.parse(readFileSync(new URL('../app/src/core/llm/providers.json', import.meta.url), 'utf8'))
 const AUTH_WINDOW_SECONDS = 60
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 120000
@@ -16,11 +18,12 @@ function loadConfig(path) {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
-export function createGateway(config) {
+export function createGateway(config, { fetchUpstream = fetch } = {}) {
   const members = new MemberStore(config.membersFile)
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
   const upstreamTimeoutMs = config.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS
   const push = config.push ? createPushService({ file: config.push.subscriptionsFile ?? './push-subscriptions.json', endpointHosts: config.push.endpointHosts, send: config.push.send }) : null
+  const proxyUrls = new Set([...providers.filter(p => p.baseUrl).map(p => p.baseUrl + '/chat/completions'), ...(config.proxyAllowedUrls ?? [])])
   const hits = new Map()
   const seen = new Map()
   const log = record => {
@@ -103,7 +106,26 @@ export function createGateway(config) {
       reply(res, 400, 'invalid json')
       return 400
     }
-    payload.model = config.upstreamModel
+    let target, authorization, requestBody
+    if (req.url === PROXY_ROUTE) {
+      try {
+        const url = new URL(payload.url)
+        if (!proxyUrls.has(url.href) || url.username || url.password || url.search || url.hash ||
+            typeof payload.apiKey !== 'string' || !payload.apiKey.trim() || payload.apiKey.length > 4096 || /[\r\n]/.test(payload.apiKey) ||
+            typeof payload.body !== 'string' || !JSON.parse(payload.body) || typeof JSON.parse(payload.body) !== 'object' || Array.isArray(JSON.parse(payload.body))) throw Error()
+        target = url.href
+        authorization = 'Bearer ' + payload.apiKey
+        requestBody = payload.body
+      } catch { reply(res,400,'invalid proxy request');return 400 }
+    } else {
+      if (config.fallbackEnabled === false) { reply(res,503,'fallback disabled');return 503 }
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) { reply(res,400,'invalid json');return 400 }
+      const defaultProvider = providers.find(provider => provider.id === 'deepseek')
+      payload.model = config.upstreamModel || defaultProvider.model
+      target = (config.upstreamBaseUrl || defaultProvider.baseUrl).replace(/\/$/, '') + ROUTE
+      authorization = 'Bearer ' + (process.env[config.upstreamApiKeyEnv] ?? '')
+      requestBody = JSON.stringify(payload)
+    }
     const controller = new AbortController()
     const timeout = AbortSignal.timeout(upstreamTimeoutMs)
     const abortOnClose = () => {
@@ -111,13 +133,14 @@ export function createGateway(config) {
     }
     res.on('close', abortOnClose)
     try {
-      const upstream = await fetch(config.upstreamBaseUrl.replace(/\/$/, '') + req.url, {
+      const upstream = await fetchUpstream(target, {
+        redirect: 'error',
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          authorization: 'Bearer ' + (process.env[config.upstreamApiKeyEnv] ?? ''),
+          authorization,
         },
-        body: JSON.stringify(payload),
+        body: requestBody,
         signal: AbortSignal.any([timeout, controller.signal]),
       })
       res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') ?? 'application/json' })
@@ -145,8 +168,8 @@ export function createGateway(config) {
       reply(res, code, message, true)
     }
     try {
-      // 只放行一个路径：成员不能借用上游账户的微调、文件等接口。
-      if (req.url !== ROUTE && !PUSH_ROUTES.includes(req.url) && !INVITE_ROUTES.includes(req.url)) {
+      // 明确列出的路径：成员不能借用上游账户的微调、文件等接口。
+      if (req.url !== ROUTE && req.url !== PROXY_ROUTE && !PUSH_ROUTES.includes(req.url) && !INVITE_ROUTES.includes(req.url)) {
         status = 404
         reject(404, 'not found')
       } else if (req.method !== 'POST') {
@@ -181,7 +204,7 @@ export function createGateway(config) {
             const valid=req.url==='/invite/redeem' ? validInvite(body?.invite,url,members) : seedAllowed(config,members,body?.token,pubkey)
             if(!valid){status=403;reply(res,403,'invitation unavailable')}
             else {members.add(pubkey);status=200;res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}')}
-          } else if (req.url === ROUTE) status = await forward(req, res, read.body)
+          } else if (req.url === ROUTE || req.url === PROXY_ROUTE) status = await forward(req, res, read.body)
           else if (!push) { status = 503; reply(res, 503, 'push unavailable') }
           else {
             let body

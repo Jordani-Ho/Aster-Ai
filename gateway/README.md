@@ -1,6 +1,6 @@
 # gateway · 模型网关
 
-一个很薄的无状态转发服务：把智能体请求转给大模型，让学生不需要自己申请 API Key（技术白皮书 §3、§6.3）。
+无状态模型代理与内测失败后备。M1-21 发起人新决定：每个人先接通自己的模型，家里网关不再作为首选模型。
 
 - 模型转发只接受 `POST /v1/chat/completions`（另有明确列出的邀请和推送入口），其他路径一律 404；上游账户的微调、文件等接口不对成员开放。
 - 转发 OpenAI 兼容请求，流式返回原样透传；上游模型由配置统一决定，客户端不能自选。
@@ -25,8 +25,8 @@ UPSTREAM_API_KEY=你的上游密钥 node server.js 我的配置.json
 | :-- | :-- |
 | `port` | 监听端口，默认 8787 |
 | `publicUrl` | 对外地址，用于校验 NIP-98 的 `u` 标签；`null` 时用请求的 Host |
-| `upstreamBaseUrl` | 上游 OpenAI 兼容接口根地址（不含 /v1） |
-| `upstreamModel` | 网关统一使用的模型；**改这一行就切换上游模型** |
+| `upstreamBaseUrl` | 后备 OpenAI 兼容接口根地址（不含 /v1）；空值使用共享清单的 DeepSeek 项 |
+| `upstreamModel` | 后备模型；空值使用共享清单的 DeepSeek 项，显式值可切换 |
 | `upstreamApiKeyEnv` | 保存上游密钥的环境变量名（密钥不写进文件） |
 | `membersFile` | 成员名单文件，JSON 数组，元素是 64 位十六进制公钥（M1-01 身份公钥） |
 | `maxBodyBytes` | 请求体上限，默认 1048576（1 MB），超过返回 413 |
@@ -59,3 +59,11 @@ M1-08：网页提醒见 push/README.md；gateway/push 为唯一有状态组件�
 可选 `seedTokenFile` 只存部署口令SHA256及usedFor。首次有效请求先原子认领到请求签名人，再写成员；崩溃后只允许同一人重试，别人不能重复认领。口令不进日志/回复；未配置则无此入口能力。第一位老师仍由部署口令的持有者确定，页面选择角色不构成服务器授权。
 
 邀请不保存学生资料，没有用户业务数据库。后台日志规则保持原有四字段，不记录邀请、口令或请求内容。旧聊天/推送测试及新增邀请/原子失败测试由 `npm test` 执行。
+
+## M1-21 用户模型代理与后备
+
+POST /v1/proxy 使用与原聊天路由相同的成员 NIP-98、摘要、防重放、体积上限、限流、超时和断开中止。请求 {url,apiKey,body}，body 为原始 Chat Completions JSON 文本；只转发 Content-Type 与用户 Bearer，不覆盖模型。日志仍只有原四字段，不含 URL、凭证或内容。请求内存只活到转发结束；没有持久化或供应商账户库。
+
+默认精确目标从 app/src/core/llm/providers.json 读取（Docker 镜像复制同一文件），额外地区/自定义服务的完整地址由可信部署者加入 proxyAllowedUrls。禁止用户任意目标、userinfo、query、fragment 与重定向；显式白名单项需部署者核实，不能配置元数据/内网目标。测试的 fetchUpstream 注入仅接本机模拟上游，生产不配置。
+
+fallbackEnabled 默认 true（兼容既有部署），false 时原 POST /v1/chat/completions 返回 503，不调用社区账户；不关闭自带模型代理。部署在 .env 设置 MODEL_FALLBACK_ENABLED=false 后重跑既有 setup.sh 生成配置，无需新脚本。MODEL_PROXY_ALLOWED_URLS 为逗号分隔的额外完整目标。客户端不会在首次测试时调用后备。

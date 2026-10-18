@@ -5,7 +5,7 @@ import type { EncryptedExport, LocalStore } from '../store'
 export const BACKUP_KIND=30078
 export const BACKUP_SLOTS=['aster.backup.0','aster.backup.1','aster.backup.2']
 export interface BackupRelay { list(owner:string):Promise<Event[]>;publish(event:Event):Promise<void> }
-export interface BackupStatus { result:'never'|'success'|'failed'|'restored';lastAttempt?:string;lastSuccess?:string;lastFile?:string;lastRestore?:string;error?:string }
+export interface BackupStatus { result:'never'|'success'|'failed'|'restored';lastAttempt?:string;lastSuccess?:string;lastFile?:string;lastRestore?:string;error?:string;modelTestedAt?:string }
 export interface BackupFile { format:'aster-backup';version:1;owner:string;ciphertext:string }
 const MAX_EVENT_BYTES=2*1024*1024
 const day=(at:Date)=>[at.getFullYear(),at.getMonth(),at.getDate()].join('-')
@@ -40,6 +40,8 @@ export function createBackupManager({identity,store,relay}:{identity:Identity;st
  async function backup(now:Date,known?:Event[]){
   const prior=await status(),attempt=now.toISOString()
   try{
+   const model=await store.get('settings','personal-model') as {testedAt?:string}|undefined
+   const modelTestedAt=model?.testedAt
    const events=known??await snapshots(),archive=await store.exportEncrypted()
    archive.records=archive.records.filter(record=>record.c!=='pilot-metrics'&&record.c!=='recovery-words')
    active()
@@ -48,7 +50,7 @@ export function createBackupManager({identity,store,relay}:{identity:Identity;st
    const event=finalizeEvent({kind:BACKUP_KIND,created_at:Math.max(Math.floor(now.getTime()/1000),...events.map(value=>value.created_at+1)),tags:[['d',slot]],content:v2.encrypt(JSON.stringify(archive),v2.utils.getConversationKey(who.privateKey,who.publicKey))},who.privateKey)
    if(new TextEncoder().encode(JSON.stringify(event)).length>MAX_EVENT_BYTES)throw Error('结构化备份超过中继2MB上限，请导出备份文件')
    active();await relay.publish(event);active()
-   await save({...prior,result:'success',lastAttempt:attempt,lastSuccess:attempt,error:undefined})
+   await save({...prior,result:'success',lastAttempt:attempt,lastSuccess:attempt,error:undefined,modelTestedAt})
   }catch(error){if(!closed)await save({...prior,result:'failed',lastAttempt:attempt,error:error instanceof Error&&error.message.includes('2MB')?error.message:'中继备份失败，下次打开应用会重试'});throw error}
  }
  async function restore(events:Event[],replace:boolean){
@@ -75,7 +77,8 @@ export function createBackupManager({identity,store,relay}:{identity:Identity;st
   backupNow:(now=new Date())=>exclusive(()=>backup(now)),
   ensureDaily:(now=new Date())=>exclusive(async()=>{
    const prior=await status()
-   if(prior.result!=='failed'&&prior.lastSuccess&&day(new Date(prior.lastSuccess))===day(now))return
+   const model=await store.get('settings','personal-model') as {testedAt?:string}|undefined
+   if(prior.result!=='failed'&&prior.lastSuccess&&day(new Date(prior.lastSuccess))===day(now)&&prior.modelTestedAt===model?.testedAt)return
    try{
     const events=await snapshots(),archive=await store.exportEncrypted({includeBinary:true})
     const business=archive.records.filter(record=>!['backup-status','backup-config','recovery-words'].includes(record.c))

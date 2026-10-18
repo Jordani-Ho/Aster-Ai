@@ -1,0 +1,52 @@
+[
+  {
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "baseUrl": "https://api.deepseek.com",
+    "model": "deepseek-flash",
+    "endpointId": false,
+    "registerUrl": "https://platform.deepseek.com/",
+    "docs": "https://api-docs.deepseek.com/",
+    "verifiedOn": "2026-10-17"
+  },
+  {
+    "id": "qwen",
+    "name": "通义千问（阿里云百炼）",
+    "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "model": "qwen-plus",
+    "endpointId": false,
+    "registerUrl": "https://bailian.console.aliyun.com/",
+    "docs": "https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope",
+    "verifiedOn": "2026-10-17"
+  },
+  {
+    "id": "kimi",
+    "name": "Kimi（月之暗面）",
+    "baseUrl": "https://api.moonshot.cn/v1",
+    "model": "kimi-k3",
+    "endpointId": false,
+    "registerUrl": "https://platform.kimi.com/",
+    "docs": "https://platform.kimi.com/docs/get-api-key",
+    "verifiedOn": "2026-10-17"
+  },
+  {
+    "id": "doubao",
+    "name": "豆包（火山方舟）",
+    "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+    "model": "doubao-seed-2-1-pro-260915",
+    "endpointId": true,
+    "registerUrl": "https://console.volcengine.com/ark/",
+    "docs": "https://docs.volcengine.com/docs/ark/base-url-and-authentication?lang=en",
+    "verifiedOn": "2026-10-17"
+  },
+  {
+    "id": "other",
+    "name": "其他 OpenAI 兼容接口",
+    "baseUrl": "",
+    "model": "",
+    "endpointId": false,
+    "registerUrl": "",
+    "docs": "",
+    "verifiedOn": "2026-10-17"
+  }
+]

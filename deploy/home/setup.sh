@@ -31,7 +31,7 @@ MEMBERS="$(normalize_members)"
 for key in $MEMBERS; do
   [[ "$key" =~ ^[0-9a-f]{64}$ ]] || die "MEMBER_PUBKEYS 里有非法公钥：$key（必须是 64 位小写十六进制）"
 done
-[ -n "${UPSTREAM_API_KEY:-}" ] || warn "UPSTREAM_API_KEY 为空：起草与整理调用网关时会失败（若只是先跑通部署，可稍后再填）。"
+[ -n "${UPSTREAM_API_KEY:-}" ] || warn "UPSTREAM_API_KEY 为空：内测备用模型不可用，不影响使用者自己的模型直连或凭证代理。"
 case "${VAPID_SUBJECT:-}" in
   mailto:*) ;;
   *) die "VAPID_SUBJECT 必须是 mailto: 开头，例如 mailto:you@example.com" ;;
@@ -135,8 +135,8 @@ log "社区老师首次登记：在本机查看 data/teacher-setup-code.txt，�
 # ---- 8. 网关配置与成员名单 ----
 log "生成网关配置 data/gateway-config.json 并保留成员名单 data/gateway/members.json…"
 APP_ORIGIN="https://${APP_DOMAIN}" MEMBERS_ALL="$MEMBERS_ALL" \
-UPSTREAM_BASE_URL="${UPSTREAM_BASE_URL:-https://api.deepseek.com}" \
-UPSTREAM_MODEL="${UPSTREAM_MODEL:-deepseek-chat}" \
+UPSTREAM_BASE_URL="${UPSTREAM_BASE_URL:-}" \
+UPSTREAM_MODEL="${UPSTREAM_MODEL:-}" \
 node scripts/generate-gateway.mjs
 
 # ---- 9. 校验 compose 配置能展开 ----
