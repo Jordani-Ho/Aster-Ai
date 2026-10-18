@@ -25,4 +25,4 @@
 ## 完成记录
 
 - 合并请求：https://github.com/Jordani-Ho/Aster-Ai/pull/34 （待 Claude 审核，施工者不合并）
-- 结果：已 rebase V2-01 后的 main，接入普通 IndexedDB、镜子、问诊草稿/发送、老师收件与签字病历展示，移除面诊原图拍摄入口。默认 app 全量 290 项、类型检查、构建，以及 Chromium 页面集成验收通过；真实中继全流程本机因 WSL 缺 Rust 1.90.0 未运行，交 CI 验证。可选面部标记未做，真机/真实模型未验。
+- 结果：已 rebase V2-01/V2-02 后的 main（08002a5），接入普通 IndexedDB、镜子、问诊草稿/发送、老师收件与签字病历展示，复用 core/heaven，移除面诊原图拍摄入口。本机 app 全量 304 项通过（maxWorkers=2；默认曾有既有传输测试超过 5 秒），CI 默认 app 检查通过；类型检查、构建、Chromium 页面集成验收通过。真实中继全流程本机因 WSL 缺 Rust 1.90.0 未运行，交 CI 验证。可选面部标记未做，真机/真实模型未验。

@@ -47,7 +47,7 @@ await store.clearScope('f1-') // 删除某位家人的全部记录
 | `care-plan-pending` / `care-plan-issued` | 老师签发未送达的待发方案 / 版本索引 | |
 | `mirror` | 当日镜子建议缓存 `{greeting,today,trend}` | 同一天只生成一次 |
 | `self-ratings` / `self-stress` | 每日状态/压力自评 `{date,score,shichen?,jieqi?,city?}` | 同日覆盖；后三项为 V2-02 天时 |
-| `tongue-photos` | 每日舌象 `{bytes, heaven}`（键 YYYY-MM-DD） | 每天一张；`heaven` 为拍时的天时 |
+| `tongue-records` | 每日抽象舌象 `{kind,features,svg,shichen,jieqi,city}`（键 YYYY-MM-DD） | V2-03：不存原图字节，重拍覆盖当天抽象记录 |
 | `ledger-index` / `ledger-*` | 康币账本索引与每本师生账 `{ledger,notices,conflicts,receipts,pendingDisputes,outbox}` | 单一写入者记账链 |
 | `pilot-metrics` | 试点指标 `{idPrefix,durationMs,modificationRate,missingRate,resemblance,homeworkAdherence?}` | 只有数值，无身份/原文 |
 | `student-adherence` | 老师端学生本周坚持率小结（键为学生公钥） | 学生主动上报的数值，无原文 |
