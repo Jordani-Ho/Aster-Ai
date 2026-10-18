@@ -56,7 +56,8 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   test.setTimeout(240000)
   const teacher=people.teacher.page,student=people.student.page,quote='SYNTHETIC_PRIVATE_QUOTE_15B'
   await role(teacher,'老师');await role(student,'学生')
-  await expect.poll(async()=> (await book(student)).balance).toBe(10)
+  await expect.poll(async()=> (await book(student)).balance).not.toBeNull()
+  const initialBalance=(await book(student)).balance as number
   await teacher.getByRole('button',{name:'远程',exact:true}).click()
   await intake(student,quote)
   const jpeg=await student.evaluate(()=>{const c=document.createElement('canvas');c.width=32;c.height=24;const ctx=c.getContext('2d')!;ctx.fillStyle='#1a829e';ctx.fillRect(0,0,32,24);return c.toDataURL('image/jpeg').split(',')[1]})
@@ -91,23 +92,23 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   const records=await stored(student,'student-records'),assignments=await stored(student,'homework')
   expect(records).toHaveLength(1);expect(assignments).toHaveLength(1)
   expect(JSON.stringify(records)).not.toContain('ai_draft')
-  await test.step('hard: teacher decrypted IndexedDB has no original quote or processed JPEG, including after relay replay',async()=>{
+  await test.step('V2-01 hard: raw consult stays until retention; student received the signed record',async()=>{
     await teacher.getByRole('button',{name:'返回首页',exact:true}).click()
     await teacher.reload();await expect(teacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible()
     await expect(teacher.getByText('中继：已连接',{exact:true})).toBeVisible()
     await teacher.getByRole('button',{name:'远程',exact:true}).click()
-    await expect(teacher.getByText(/还没有收到问诊/)).toBeVisible()
-    const text=JSON.stringify(await decrypted(teacher))
-    expect(text).not.toContain(quote)
-    expect(text).not.toContain(JSON.stringify(photoBytes))
-    expect(text).not.toContain(Buffer.from(photoBytes).toString('base64'))
+    await expect(teacher.locator('.inbox-card').first()).toBeVisible()
+    await expect.poll(async()=> (await stored(teacher,'consult-package')).length).toBe(1)
+    // V2-01：签字只发送、不再多步销毁；原文保留，由 V2-05 保留期限统一删除。
+    expect(JSON.stringify(await decrypted(teacher))).toContain(quote)
     await teacher.getByRole('button',{name:'返回',exact:true}).click()
   })
+  const charged=initialBalance-3
   await test.step('hard: both displayed balances and comparison codes agree',async()=>{
-    await expect.poll(async()=> (await book(student)).balance).toBe(7)
-    const t=await book(teacher),s=await book(student);expect(t.balance).toBe(7);expect(t.code).toBe(s.code)
-    await settings(teacher);await teacher.getByText('康币账本与对账',{exact:true}).click();await expect(teacher.getByText('余额：7 康币 · 对账码：'+s.code,{exact:true})).toBeVisible()
-    await studentSettings(student);await student.getByText('康币账本与对账',{exact:true}).click();await expect(student.getByText('余额：7 康币 · 对账码：'+s.code,{exact:true})).toBeVisible()
+    await expect.poll(async()=> (await book(student)).balance).toBe(charged)
+    const t=await book(teacher),s=await book(student);expect(t.balance).toBe(charged);expect(t.code).toBe(s.code)
+    await settings(teacher);await teacher.getByText('康币账本与对账',{exact:true}).click();await expect(teacher.getByText('余额：'+charged+' 康币 · 对账码：'+s.code,{exact:true})).toBeVisible()
+    await studentSettings(student);await student.getByText('康币账本与对账',{exact:true}).click();await expect(student.getByText('余额：'+charged+' 康币 · 对账码：'+s.code,{exact:true})).toBeVisible()
   })
   const exportRequests:string[]=[]
   const observe=(request:any)=>{if(/^https?:/.test(request.url()))exportRequests.push(request.url())}
