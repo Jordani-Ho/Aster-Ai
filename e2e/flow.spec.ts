@@ -64,6 +64,7 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
     await route.fulfill({contentType:'application/json',body:JSON.stringify({choices:[{message:{content:JSON.stringify({color:'pale',coatingColor:'white',coatingThickness:'thin',shape:'wide',teeth:[],cracks:[],confidence:0.7})}}]})})
   })
   await student.getByLabel('舌象记录的居住城市').selectOption('北京市')
+  await expect(student.getByRole('button',{name:'拍舌象 / 重拍',exact:true})).toBeEnabled()
   await student.locator('input[type=file]').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:png})
   await expect(student.locator('figure svg')).toHaveCount(1)
   await expect(student.locator('input[type=file]')).toHaveValue('')
