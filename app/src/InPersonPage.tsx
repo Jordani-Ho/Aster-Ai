@@ -26,7 +26,7 @@ import {
   startInPersonEncounter,
   type InPersonIntakeKey,
 } from './core/record/in-person'
-import type { SendEnvelope } from './core/inbox'
+import { sendInPersonRecord, type SendEnvelope } from './core/inbox'
 import type { Encounter } from './core/record/types'
 import type { LocalStore } from './core/store'
 import { SignEncounterPage } from './SignEncounterPage'
@@ -162,9 +162,9 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
 
-  const send: import('./core/record/handover').SendSignedRecord = async (type, payload) => {
+  const send: import('./core/record/handover').SendSignedRecord = async (_type, payload) => {
     if (!sendEnvelope || !encounter) throw Error('暂未连接社区，请稍后重试，资料仍在本机。')
-    await sendEnvelope(encounter.student, {type, version:1, payload})
+    await sendInPersonRecord(store, sendEnvelope, encounter.student, payload)
   }
 
   const addSentence = async () => {

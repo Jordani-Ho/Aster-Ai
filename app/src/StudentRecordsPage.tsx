@@ -1,3 +1,4 @@
+import { RecordPhotos } from './RecordPhotos'
 import { useEffect, useState } from 'react'
 import type { Identity } from './core/identity'
 import { groupReceivedRecords, listReceivedRecords, type GroupedRecord, type ReceivedRecord } from './core/inbox'
@@ -21,7 +22,7 @@ function revisionLabel(encounter: Encounter): string {
   return '第 ' + encounter.version + ' 版'
 }
 
-function RecordBody({ record }: { record: ReceivedRecord }) {
+function RecordBody({ record, store }: { record: ReceivedRecord; store: LocalStore }) {
   const encounter = record.encounter
   return <>
     <p className="record-meta">{new Date(encounter.createdAt).toLocaleString()} · 老师 {encounter.teacher.slice(0, 8)}… · {revisionLabel(encounter)}</p>
@@ -31,7 +32,7 @@ function RecordBody({ record }: { record: ReceivedRecord }) {
       {encounter.intake.presentIllness.value !== null && <p className="record-detail">现病史：{textField(encounter.intake.presentIllness)}</p>}
       {encounter.intake.history.value !== null && <p className="record-detail">既往史：{textField(encounter.intake.history)}</p>}
       {encounter.intake.medsAllergies.value !== null && <p className="record-detail">在吃的药、过敏：{textField(encounter.intake.medsAllergies)}</p>}
-      {encounter.intake.attachments.length > 0 && <p className="record-detail">附照片 {encounter.intake.attachments.length} 张（签名病历内只含引用）</p>}
+      {encounter.intake.attachments.length > 0 && <RecordPhotos record={record} store={store}/>}
     </section>
     <section className="record-section">
       <h3>判断</h3>
@@ -52,14 +53,14 @@ function RecordBody({ record }: { record: ReceivedRecord }) {
   </>
 }
 
-function RecordCard({ group }: { group: GroupedRecord }) {
+function RecordCard({ group, store }: { group: GroupedRecord; store: LocalStore }) {
   const latest = group.versions[0]
   return <article className="record-card">
-    <RecordBody record={latest} />
+    <RecordBody record={latest} store={store} />
     {group.versions.length > 1 && <details className="record-revisions">
       <summary>旧版本 {group.versions.length - 1} 份（保留不删）</summary>
       {group.versions.slice(1).map(record => <div key={record.event.id} className="record-revision">
-        <RecordBody record={record} />
+        <RecordBody record={record} store={store} />
       </div>)}
     </details>}
   </article>
@@ -95,6 +96,6 @@ export function StudentRecordsPage({ identity, store, onBack }: StudentRecordsPa
     {error && <p role="alert" className="records-error">{error}</p>}
     {loading && <p className="records-note">正在读取本机病历…</p>}
     {!loading && groups.length === 0 && <p className="records-note">还没有收到的病历。老师签字交还后会出现在这里。</p>}
-    {groups.map(group => <RecordCard key={group.encounterId} group={group} />)}
+    {groups.map(group => <RecordCard key={group.encounterId} group={group} store={store} />)}
   </main>
 }

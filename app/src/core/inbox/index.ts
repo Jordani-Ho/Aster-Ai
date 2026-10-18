@@ -359,6 +359,69 @@ async function receiveCarePlan(identity: Identity, store: LocalStore, message: M
   } catch { /* 验签失败或内容无效就丢弃。 */ }
 }
 
+// 面诊照片由老师手机产生；每张携带同一签名病历，乱序/离线重放也能独立核对归属与哈希。
+export const RECORD_PHOTO_TYPE = 'record.attachment'
+interface RecordPhotoIndex { eventId: string; refId: string; sha256: string; dataKey: string }
+export async function sendInPersonRecord(store: LocalStore, send: SendEnvelope, student: string, signed: SignedEncounterEvent): Promise<void> {
+  const event = parseSignedEvent(signed)
+  if (!event) throw Error('签名病历无效')
+  const encounter = verifySignedEncounter(event, { teacher: event.pubkey, student })
+  if (encounter.kind !== 'in_person') throw Error('不是面诊病历')
+  const photos = []
+  for (const ref of encounter.intake.attachments) {
+    const data = await store.get(RECORD_COLLECTIONS.attachments, ref.id)
+    if (ref.type !== 'photo' || !(data instanceof Uint8Array) || data.length !== ref.bytes || await sha256Hex(data) !== ref.sha256) {
+      throw Error('照片缺失或校验失败，资料仍在本机，请检查后重发。')
+    }
+    photos.push({ refId: ref.id, data: toBase64(data) })
+  }
+  const clean = JSON.parse(JSON.stringify(event)) as SignedEncounterEvent
+  await send(student, { type: 'record.signed', version: 1, payload: clean })
+  for (const photo of photos) await send(student, { type: RECORD_PHOTO_TYPE, version: 1, payload: { event: clean, ...photo } })
+}
+
+// 调用方使用已验签 ReceivedRecord；读出时再次核对签名引用的长度与内容哈希。
+export async function recordPhotos(store: LocalStore, record: ReceivedRecord): Promise<{ ref: AttachmentRef; data: Uint8Array }[]> {
+  const rows = await store.list('record-photo-index')
+  const photos: { ref: AttachmentRef; data: Uint8Array }[] = []
+  for (const ref of record.encounter.intake.attachments.filter(item => item.type === 'photo')) {
+    const found = rows.map(row => row.value as unknown as RecordPhotoIndex).find(row => row.eventId === record.event.id && row.refId === ref.id && row.sha256 === ref.sha256)
+    const data = found ? await store.get('record-photos', found.dataKey) : await store.get(INTAKE_COLLECTIONS.attachmentData, ref.id)
+    if (data instanceof Uint8Array && data.length === ref.bytes && await sha256Hex(data) === ref.sha256) photos.push({ ref, data })
+  }
+  return photos
+}
+
+async function receiveRecordPhoto(identity: Identity, store: LocalStore, message: Message, payload: unknown, now: () => Date): Promise<void> {
+  if (!(await loadTeachers(store)).includes(message.sender) || !object(payload)) return
+  const event = parseSignedEvent(payload.event)
+  if (!event || typeof payload.refId !== 'string' || typeof payload.data !== 'string') return
+  let encounter: Encounter
+  try { encounter = verifySignedEncounter(event, { teacher: message.sender, student: identity.publicKey }) } catch { return }
+  if (encounter.kind !== 'in_person') return
+  const ref = encounter.intake.attachments.find(item => item.id === payload.refId)
+  if (!ref || ref.type !== 'photo') return
+  let bytes: Uint8Array
+  try { bytes = fromBase64(payload.data) } catch { return }
+  if (bytes.length !== ref.bytes || await sha256Hex(bytes) !== ref.sha256) return
+  // 先有有效、绑定本人的签名；照片可以先于独立 record.signed 信封到达。
+  if (await store.get(INBOX_COLLECTIONS.records, event.id) === undefined) await receiveSignedRecord(identity, store, message, event, now)
+  const rows = await store.list('record-photo-index')
+  const found = rows.find(row => {
+    const value = row.value as unknown as RecordPhotoIndex
+    return value.eventId === event.id && value.refId === ref.id
+  })
+  const previous = found?.value as unknown as RecordPhotoIndex | undefined
+  const dataKey = previous?.dataKey ?? crypto.randomUUID()
+  await store.put('record-photos', dataKey, bytes)
+  try {
+    await store.put('record-photo-index', found?.key ?? crypto.randomUUID(), { eventId: event.id, refId: ref.id, sha256: ref.sha256, dataKey })
+  } catch (cause) {
+    if (!previous) await store.delete('record-photos', dataKey).catch(() => {})
+    throw cause
+  }
+}
+
 export function createInbox(options: InboxOptions) {
   const { identity, store } = options
   const now = options.now ?? (() => new Date())
@@ -373,6 +436,10 @@ export function createInbox(options: InboxOptions) {
       }
       if (type === CONSULT_TYPES.attachment) {
         if (object(payload)) await receiveAttachment(store, message, payload, identity)
+        return
+      }
+      if (type === RECORD_PHOTO_TYPE) {
+        await receiveRecordPhoto(identity, store, message, payload, now)
         return
       }
       if (type === 'record.signed') {

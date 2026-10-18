@@ -39,3 +39,5 @@ M1-15b：收到问诊包时先检查同一病历id/版本的已交还索引；�
 M1-17：签字交还后的首次扣费会先对老师侧调用原有open，建立与该学生的空账本；然后仍按原record路径扣费，不产生充值或赠送、不改变允许欠费等规则。覆盖学生只登记本人一侧、老师首次签字后双方-3并同码的回归。
 
 M1-20：priority.ts 的 prioritizeConsults/urgentConsult 在今天与远程共用，拼接学生原话后调用原有本地红线检查，急症优先，再按收到时间排序；不改变红线配置或筛查规则。远程列表点“打开问诊”直接起草，照片未到齐的入口保持禁用。
+
+M1-20 面诊照片：record.attachment version=1，payload={event:原签名病历,refId,data:base64}。照片引用已在原签名 content 内，收件先查老师白名单、验签和收件人，再匹配 refId、SHA-256 与长度；仅接收 in_person。每张自带签名病历，照片先到也可安全入库。sendInPersonRecord 发送前核对本机全部照片，发送签名病历与每张照片全部成功后，原 completeSigning 才删老师资料。学生 record-photo-index 与 record-photos 以随机 UUID 作键、内容加密，原始 eventId/refId/hash 仅在加密值内。recordPhotos 读取时再核对哈希供本机 Blob 图像展示；远程自持照片复用 intake-attachments，不经第三方图像 URL。

@@ -162,3 +162,5 @@ M1-18 集合：`care-plans`（键为老师公钥，值 `{constitution, points, a
 M1-20：settings 新增 teacher-template 键，值为本机 TeacherTemplate（name/focus/notes，保持默认 id 与病历顺序）；仅老师模板，沿用既有 settings 的加密、备份与恢复路径，无原始问诊或个人资料。
 
 M1-20 调养方案集合：care-plan-pending 使用随机 UUID 键，值 {student,event}，仅签字后未成功发出时保留；发出并完成本机收尾后删除。care-plan-issued 使用随机 UUID 键，值 {student,version,eventId}，仅用于下次签发递增版本，不保留学生方案内容。老师自己的方案是本人的资料，复用 care-plans，以本人为收件人签名验签后存储。集合均 AES-GCM 加密并沿用备份恢复。
+
+M1-20 面诊照片：record-photo-index 随机 UUID 键 -> {eventId,refId,sha256,dataKey}，record-photos 随机 UUID 键 -> 压缩去 EXIF 的 JPEG 字节。所有关联值加密，不用身份或内容哈希作明文键；学生收到有效老师签名并核对引用后才保存。照片只在学生本机和含二进制的完整加密文件备份中，中继业务备份不含字节。

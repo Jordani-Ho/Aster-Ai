@@ -33,3 +33,5 @@ M1-20：TeacherWorkspace 提供今天/面诊/远程/管理四页。今天与远�
 TeacherWorkspace 保留 mirror 和 renderCarePlan 组件扩展点，默认已接入 M1-18。375px 截图：docs/screenshots/teacher-{today,in-person,remote,manage}-375.png。
 
 M1-18 已合并后的接入：DailyMirrorCard 直接复用 currentCarePlan/getDailyMirror/currentJieqi/getWeather 与现有打卡、自评集合，展示当日建议、天气及打卡摘要；未知城市不取天气、请求失败不阻断。老师今天页可给自己定制，远程当前问诊卡片和已知学生入口可用 TeacherCarePlan 的单输入框起草、人工确认签发。学生已有首页暂复用同一只读镜子展示，以完成端到端次日验收；M1-19 的三页导航仍由其原任务施工。默认选现有老师名单第一位，与当前问诊默认一致。同日缓存不主动失效，新签方案次日起引用。
+
+M1-20 面诊照片补齐：RecordPhotos 在学生病历中显示本机图片，不使用外部 URL。老师先发出签名病历及逐张加密照片，学生验签、核对哈希后保存；全部发送成功后才清理老师原件。发送失败保留原件与同一签名，可重发。信封和存储格式见 core/inbox/README.md，照片仍需完整加密文件备份。
