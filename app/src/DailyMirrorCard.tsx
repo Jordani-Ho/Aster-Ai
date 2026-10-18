@@ -5,7 +5,7 @@ import { currentCarePlan } from './core/careplan'
 import { loadTeachers } from './core/inbox'
 import { loadProfile } from './core/intake/session'
 import { listCheckins } from './core/homework'
-import { getDailyMirror, listSelfRatings, type MirrorInput, type MirrorResult } from './core/mirror'
+import { getDailyMirror, listSelfRatings, listStressRatings, type MirrorInput, type MirrorResult } from './core/mirror'
 import { getWeather, type Weather } from './core/weather'
 import { localDay } from './core/homework/schedule'
 import { currentJieqi } from '../../domain/tcm/seasonal'
@@ -40,15 +40,15 @@ export function DailyMirrorCard({ store, llm, teacher }: { store: LocalStore; ll
     let active = true
     const run = async () => {
       const at = new Date(), source = teacher ?? (await loadTeachers(store))[0]
-      const [plan, profile, checkins, ratings] = await Promise.all([
-        source ? currentCarePlan(store, source) : Promise.resolve(null), loadProfile(store), listCheckins(store), listSelfRatings(store),
+      const [plan, profile, checkins, ratings, stress] = await Promise.all([
+        source ? currentCarePlan(store, source) : Promise.resolve(null), loadProfile(store), listCheckins(store), listSelfRatings(store), listStressRatings(store),
       ])
       const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 3000)
       let forecast: Weather | null = null
       try {
         if (profile.city.value) forecast = await getWeather(profile.city.value, { fetch: (url, init) => fetch(url, { ...init, signal: controller.signal }) })
       } finally { clearTimeout(timeout) }
-      const next = await mirrorForDay(store, { carePlan: plan, jieqi: currentJieqi(at), weather: forecast, recentCheckins: checkins, recentSymptoms: ratings, ...(llm ? { llm } : {}), now: () => at })
+      const next = await mirrorForDay(store, { carePlan: plan, jieqi: currentJieqi(at), weather: forecast, recentCheckins: checkins, recentSymptoms: ratings, recentStress: stress, ...(llm ? { llm } : {}), now: () => at })
       if (active) { setWeather(forecast); setResult(next); setError('') }
     }
     void run().catch(() => { if (active) setError('每日建议暂未能读取，请稍后重试。') })

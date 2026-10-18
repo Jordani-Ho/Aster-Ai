@@ -1,25 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
-import type { CarePlan } from './core/careplan'
-import { listCarePlans } from './core/careplan'
-import { getDailyMirror, type MirrorResult } from './core/mirror'
-import { listSelfRatings, recordSelfRating, listStressRatings, recordStressRating, last14DayTrend, type StressRating } from './core/mirror/trend'
-import { getWeather, type Weather } from './core/weather'
-import { currentJieqi, seasonalTexts } from '../../domain/tcm/seasonal'
+import { DailyMirrorCard } from './DailyMirrorCard'
+import { listSelfRatings, recordSelfRating, listStressRatings, recordStressRating, last14DayTrend, type SelfRating, type StressRating } from './core/mirror/trend'
 import { listCheckins, checkIn, dueReminders, type Checkin } from './core/homework'
 import { localDay } from './core/homework/schedule'
 import { listTongueDays, saveTonguePhoto, tongueBytes } from './core/tongue'
-import { loadProfile } from './core/intake'
 
 const DAY_NAMES: Record<number, string> = { 1: '差', 2: '一般', 3: '还行', 4: '不错', 5: '很好' }
 
 export function MirrorPage({ store, llm }: { store: LocalStore; llm: LlmClient | null }) {
-  const [mirror, setMirror] = useState<MirrorResult | null>(null)
-  const [weather, setWeather] = useState<Weather | null>(null)
-  const [jieqi, setJieqi] = useState('')
-  const [seasonal, setSeasonal] = useState('')
   const [checkins, setCheckins] = useState<Checkin[]>([])
+  const [ratings, setRatings] = useState<SelfRating[]>([])
   const [stressRatings, setStressRatings] = useState<StressRating[]>([])
   const [due, setDue] = useState<{ homeworkId: string; title: string }[]>([])
   const [tongueDays, setTongueDays] = useState<string[]>([])
@@ -34,45 +26,24 @@ export function MirrorPage({ store, llm }: { store: LocalStore; llm: LlmClient |
     let cancelled = false
     void (async () => {
       try {
-        const plans = await listCarePlans(store)
-        const carePlan: CarePlan | null = plans.length === 0 ? null
-          : plans.map(item => item.plan).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0]
-        const jieqiName = currentJieqi(now)
-        setJieqi(jieqiName)
-        const texts = seasonalTexts(jieqiName)
-        setSeasonal(texts ? `${texts.living}；${texts.diet}；${texts.emotion}` : '')
-        const profile = await loadProfile(store)
-        const city = profile.city.value
-        const weatherData = city ? await getWeather(city) : null
-        setWeather(weatherData)
-        const ratings = await listSelfRatings(store)
-        const stress = await listStressRatings(store)
-        const checkinList = await listCheckins(store)
-        setCheckins(checkinList)
-        setStressRatings(stress)
-        const result = await getDailyMirror(store, {
-          carePlan, jieqi: jieqiName, weather: weatherData,
-          recentCheckins: checkinList, recentSymptoms: ratings, recentStress: stress, llm: llm ?? undefined,
-          now: () => now,
-        })
-        if (!cancelled) setMirror(result)
+        const [checkinList, ratingList, stressList] = await Promise.all([listCheckins(store), listSelfRatings(store), listStressRatings(store)])
+        if (cancelled) return
+        setCheckins(checkinList); setRatings(ratingList); setStressRatings(stressList)
         const rows = await store.list('homework')
         const assignments = rows.map(row => row.value as unknown as { homework: { id: string; title: string }; startsOn: string })
         const reminders = dueReminders(assignments as never, checkinList, now)
-        if (!cancelled) setDue(reminders.map(item => {
+        setDue(reminders.map(item => {
           const assignment = assignments.find(a => a.homework.id === item.homeworkId)
           return { homeworkId: item.homeworkId, title: assignment?.homework.title ?? '作业' }
         }))
-        const days = await listTongueDays(store)
-        setTongueDays(days)
-        const photo = await tongueBytes(store, today)
-        setTodayTongue(photo)
+        setTongueDays(await listTongueDays(store))
+        setTodayTongue(await tongueBytes(store, today))
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : '镜子页读取失败')
       }
     })()
     return () => { cancelled = true }
-  }, [store, llm, now])
+  }, [store, now])
 
   const complete = async (homeworkId: string) => {
     try {
@@ -85,9 +56,7 @@ export function MirrorPage({ store, llm }: { store: LocalStore; llm: LlmClient |
   const rate = async (score: number) => {
     try {
       await recordSelfRating(store, score, now)
-      const ratings = await listSelfRatings(store)
-      const trend = last14DayTrend(checkins, ratings, stressRatings, now)
-      setMirror(previous => previous ? { ...previous, trend } : previous)
+      setRatings(await listSelfRatings(store))
       setStatus('已记录今天的状态')
     } catch { setError('评分未能保存，请重试') }
   }
@@ -95,11 +64,7 @@ export function MirrorPage({ store, llm }: { store: LocalStore; llm: LlmClient |
   const rateStress = async (score: number) => {
     try {
       await recordStressRating(store, score, now)
-      const stress = await listStressRatings(store)
-      setStressRatings(stress)
-      const ratings = await listSelfRatings(store)
-      const trend = last14DayTrend(checkins, ratings, stress, now)
-      setMirror(previous => previous ? { ...previous, trend } : previous)
+      setStressRatings(await listStressRatings(store))
       setStatus('已记录今天的压力')
     } catch { setError('压力未能保存，请重试') }
   }
@@ -117,21 +82,13 @@ export function MirrorPage({ store, llm }: { store: LocalStore; llm: LlmClient |
     finally { if (fileInput.current) fileInput.current.value = '' }
   }
 
-  const trend = mirror?.trend ?? last14DayTrend(checkins, [], [], now)
-  const weatherLine = weather
-    ? `${weather.today.tempMin}~${weather.today.tempMax}℃ 降水 ${weather.today.precipitation}mm；明天 ${weather.tomorrow.tempMin}~${weather.tomorrow.tempMax}℃`
-    : ''
+  const trend = last14DayTrend(checkins, ratings, stressRatings, now)
 
   return <main className="mirror-page">
-    <header><p className="eyebrow">知衡 · 学生</p><h1>镜子</h1><p>{jieqi}{seasonal ? ' · ' + localDay(now) : ''}</p></header>
+    <header><p className="eyebrow">知衡 · 学生</p><h1>镜子</h1></header>
     {error && <p role="alert">{error}</p>}
     {status && <p role="status">{status}</p>}
-    <section className="mirror-card">
-      <h2>{mirror?.greeting ?? '你好'}</h2>
-      {weatherLine && <p className="mirror-weather">今天 {weatherLine}</p>}
-      {mirror && <ul className="mirror-today">{mirror.today.map((item, index) => <li key={index}>{item}</li>)}</ul>}
-      {!mirror && <p>正在准备今天的建议…</p>}
-    </section>
+    <section className="mirror-card"><DailyMirrorCard store={store} llm={llm} /></section>
 
     <section className="mirror-card">
       <h2>今天的作业</h2>

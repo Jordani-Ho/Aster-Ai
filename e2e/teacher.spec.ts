@@ -78,6 +78,7 @@ test('M1-20 in person uses conversational intake, same drafting/revision/signatu
  expect(result.drafts).toEqual([]);expect(JSON.stringify(result.indices)).not.toContain('SYNTHETIC_FACE_RAW');expect(result.indices).toHaveLength(1);expect(result.photos).toEqual([])
  const student=people.student.page
  await expect.poll(()=>student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return (await s.store.list('record-photos')).length}finally{s.store.close();s.identity.privateKey.fill(0)}})).toBe(1)
+ await student.getByRole('button',{name:'其他',exact:true}).click()
  await student.getByRole('button',{name:'我的病历',exact:true}).click()
  const image=student.getByAltText('病历照片 1',{exact:true});await expect(image).toBeVisible()
  await expect.poll(()=>image.evaluate((node:HTMLImageElement)=>node.complete&&node.naturalWidth>0)).toBe(true)
