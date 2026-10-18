@@ -18,7 +18,8 @@
   - 老师端：删超过期限的 `teacher-records`、`consult-package`、`in-person-draft`，再删不再被这些记录引用的 `attachments`。
   - 学生端：删超过期限的 `self-ratings`、`self-stress`、`tongue-records`（V2-03 起只存抽象舌象，不再有原图字节）、`checkins`、`intake-sent`、`intake-draft`、不再被引用的 `intake-attachments`，以及收到的签名病历 `student-records` 与随它的面诊照片索引/字节（`record-photo-index`/`record-photos`）。
 - `runRetentionOnce`：打开应用时每天只跑一次（`settings/last-retention-day` 去重），不做后台任务。
-- 长期保留的沉淀：`care-plans`（最新一版）、`homework`（作业规则）、`teacher-fingerprint`（改稿习惯摘要）不在删除范围。
+- 长期保留的沉淀：`care-plans`（最新一版）、`homework`（作业规则）、`teacher-fingerprint`（改稿习惯摘要）、`kangbi-observations`（康币观察记录，只有计数与评分、没有内容，是将来给康币定值的依据）与 `kangbi-events`，都登记在 `LONG_TERM_COLLECTIONS`，不在删除范围。
+- 钱账与康币账的长期数据一律不碰：保留期只清医案、问诊包、照片与本机记录类集合。
 
 ## fingerprint.ts：老师的思想指纹
 

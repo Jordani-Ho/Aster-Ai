@@ -15,6 +15,7 @@ import { storeCarePlan } from '../careplan'
 import { recordSelfRating, last14DayTrend, listSelfRatings } from '../mirror/trend'
 import { checkIn } from '../homework'
 import { saveTongue } from '../tongue'
+import { recordObservation } from '../kangbi'
 import { parseTongueAbstract, tongueSvg, type TongueFeatures } from '../../../../domain/tcm/tongue'
 import { localDay } from '../homework/schedule'
 import {
@@ -115,19 +116,21 @@ describe('V2-05 验收 0：老师端完整医案 teacher-records', () => {
     // 远程：签字发送成功后存完整签名病历。
     const encounter = remoteEncounter(teacher.publicKey, student.publicKey)
     const final = acceptAll(encounter)
-    const charges: { recordHash?: string }[] = []
+    const charges: { recordHash?: string; confirmationId?: string; currency?: string }[] = []
     const result = await completeConsultSigning({
       identity: teacher, store, consult: storedConsult(encounter), final,
       send: async (_recipient, envelope) => { sent.push(envelope) },
       ledger: { record: async (_t, _s, draft) => { charges.push(draft) } },
-      charge: 2,
+      charge: 2, currency: 'CNY',
     })
     const rows = await listTeacherRecords(store)
     expect(rows).toHaveLength(1)
     expect(rows[0].eventId).toBe(result.signed.id)
     expect(rows[0].encounter).toEqual(final)
-    // 康币扣费的 recordHash 就是这份签名事件 id。
+    // 钱账扣费的 recordHash（同时作为 confirmationId）就是这份签名事件 id。
     expect(charges[0].recordHash).toBe(rows[0].eventId)
+    expect(charges[0].confirmationId).toBe(rows[0].eventId)
+    expect(charges[0].currency).toBe('CNY')
 
     // 面诊：代录后签字发送成功，也存一份完整病历。
     let inPerson = recordIntakeField(startInPersonEncounter({ teacher: teacher.publicKey, student: student.publicKey, now: NOW, id: 'b'.repeat(32) }), 'chiefComplaint', '胸口闷，睡不好').encounter
@@ -229,8 +232,12 @@ describe('V2-05 验收 1：老师设定保留期限', () => {
     await checkIn(studentStore, 'hw-synthetic', undefined, old)
     await checkIn(studentStore, 'hw-synthetic', undefined, fresh)
     await saveTongue(studentStore, TONGUE, old)
-    // 长期保留的沉淀：调养方案。
+    // 长期保留的沉淀：调养方案；以及康币观察记录（只有计数与评分，是将来给康币定值的依据）。
     await storeCarePlan(studentStore, teacher.publicKey, { constitution: '平和质', points: ['早睡'], avoid: ['生冷'], updatedAt: NOW.toISOString(), version: 1 })
+    await recordObservation(studentStore, {
+      id: 'kangbi-observation-1', student: student.publicKey, teacher: teacher.publicKey, at: old.toISOString(),
+      practiceDays: 3, teacherMinutes: 0, consultations: 0, effects: { teacher: null, self: 4, measurement: null },
+    })
 
     // 保留期限随调养方案发给学生（这里直接投递设置信封）。
     const inbox = createInbox({ identity: student, store: studentStore })
@@ -251,8 +258,10 @@ describe('V2-05 验收 1：老师设定保留期限', () => {
     expect(ratings.map(rating => rating.score)).toEqual([5])
     expect(await studentStore.list('checkins')).toHaveLength(1)
     expect(await studentStore.list('tongue-records')).toHaveLength(0)
-    // 长时间保留的调养方案还在。
+    // 长时间保留的调养方案和康币观察记录还在（观察记录只有计数与评分，不进保留期清理）。
     expect(await studentStore.get('care-plans', teacher.publicKey)).toBeDefined()
+    expect(await studentStore.list('kangbi-observations')).toHaveLength(1)
+    expect((await studentStore.list('kangbi-observations'))[0].key).toBe('kangbi-observation-1')
 
     // 列表/走势等读数据的地方不会因为删除而报错。
     expect(() => last14DayTrend([], ratings, [], NOW)).not.toThrow()

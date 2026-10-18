@@ -5,7 +5,8 @@ import { listTeacherRecords, TEACHER_RECORDS, teacherContactStudents } from './t
 
 // V2-05 第 1 步：保留期限由老师定。默认 90 天，可选 30 天到 3 年。
 // 老师端按自己的设置删医案，学生端按老师的设置（可能多位老师，取最短）删本机记录。
-// 第 2 步：调养方案（最新一版）、作业规则、老师的思想指纹（改稿习惯摘要）不在删除范围内。
+// 第 2 步：调养方案（最新一版）、作业规则、老师的思想指纹（改稿习惯摘要）、
+// 康币观察记录（只有计数与评分、没有内容，是将来给康币定值的依据）不在删除范围内。
 export const RETENTION_DEFAULT_DAYS = 90
 export const RETENTION_MIN_DAYS = 30
 export const RETENTION_MAX_DAYS = 1095
@@ -15,7 +16,7 @@ export const TEACHER_RETENTION_COLLECTION = 'teacher-retention'
 export const RETENTION_DAYS_SETTING = 'retention-days'
 export const LAST_RETENTION_DAY_SETTING = 'last-retention-day'
 /** 长期保留的沉淀：保留期只删记录，不碰这些集合。 */
-export const LONG_TERM_COLLECTIONS = ['care-plans', 'homework', 'teacher-fingerprint'] as const
+export const LONG_TERM_COLLECTIONS = ['care-plans', 'homework', 'teacher-fingerprint', 'kangbi-observations', 'kangbi-events'] as const
 
 const DAY = 86400000
 const HEX64 = /^[0-9a-f]{64}$/
