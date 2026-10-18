@@ -8,9 +8,8 @@ import {issueCarePlan,retryCarePlan,PlanUndeliveredError} from './issue'
 import {draftCarePlan} from '../drafting/careplan'
 import {getDailyMirror} from '../mirror'
 import {addTeacher,createInbox} from '../inbox'
-const phrase='leader monkey parrot ring guide accident before fence cannon height naive bean'
-it('M1-20 方案起草不签字；真人签发经 M1-18 收件，固定次日建议引用方案；只保留签发索引',async()=>{
- const identity=createIdentity(phrase,'english'),student=createIdentity(phrase,'english',1)
+ it('M1-20 方案起草不签字；真人签发经 M1-18 收件，固定次日建议引用方案；只保留签发索引',async()=>{
+ const identity=createIdentity(),student=createIdentity()
  const store=await openStore(identity,{factory:new IDBFactory()}), target=await openStore(student,{factory:new IDBFactory()})
  try{
   await addTeacher(target,identity.publicKey)
@@ -37,7 +36,7 @@ it('M1-20 方案起草不签字；真人签发经 M1-18 收件，固定次日建
  }finally{store.close();target.close();identity.privateKey.fill(0);student.privateKey.fill(0)}
 })
 it('方案发不出保留同一签名供重发，重发不调用模型、不增加版本',async()=>{
- const identity=createIdentity(phrase,'english'),store=await openStore(identity,{factory:new IDBFactory()}),student='b'.repeat(64)
+ const identity=createIdentity(),store=await openStore(identity,{factory:new IDBFactory()}),student='b'.repeat(64)
  try{
   const draft={constitution:'合成',points:['合成要点'],avoid:[],source:'ai_draft' as const}
   let pending=''

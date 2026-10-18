@@ -27,7 +27,7 @@ it('no AI draft and backwards device clock do not produce NaN or negative durati
   expect(calculateMetric(before, before, 2500, 1000)).toMatchObject({ durationMs: 0, modificationRate: 0 })
 })
 it('encrypted metrics and CSV retain only a short id and numbers; rating can be skipped and invalid ratings rejected', async () => {
-  const identity = createIdentity('leader monkey parrot ring guide accident before fence cannon height naive bean', 'english')
+  const identity = createIdentity()
   const store = await openStore(identity, { factory: new IDBFactory(), name: crypto.randomUUID() })
   try {
     const key = crypto.randomUUID(), metric = calculateMetric(draft(), draft(), 1, 1001)
@@ -44,20 +44,4 @@ it('encrypted metrics and CSV retain only a short id and numbers; rating can be 
     for (const secret of ['SYNTHETIC_PRIVATE_QUOTE', 'SYNTHETIC_ALIAS', 'b'.repeat(64), 'c'.repeat(64), '12345678' + 'a'.repeat(24)]) expect(rows).not.toContain(secret)
     expect(Object.keys((await store.list('pilot-metrics'))[0].value as object).sort()).toEqual(['durationMs','homeworkAdherence','idPrefix','missingRate','modificationRate','resemblance'])
   } finally { store.close() }
-})
-
-it('pilot metrics never enter relay backups, including encrypted payloads', async () => {
-  const identity = createIdentity('leader monkey parrot ring guide accident before fence cannon height naive bean', 'english')
-  const store = await openStore(identity, { factory: new IDBFactory(), name: crypto.randomUUID() })
-  const { createBackupManager } = await import('../backup')
-  const { v2 } = await import('nostr-tools/nip44')
-  let content = ''
-  const manager = createBackupManager({ identity, store, relay: { list: async()=>[], publish: async event=>{content=event.content} } })
-  try {
-    await saveMetric(store,crypto.randomUUID(),calculateMetric(draft(),draft(),0,1000))
-    await manager.backupNow()
-    const archive=JSON.parse(v2.decrypt(content,v2.utils.getConversationKey(identity.privateKey,identity.publicKey)))
-    expect(archive.records.some((r:{c:string})=>r.c==='pilot-metrics')).toBe(false)
-    expect(await store.list('pilot-metrics')).toHaveLength(1)
-  } finally {manager.close();store.close()}
 })

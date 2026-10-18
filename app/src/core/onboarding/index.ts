@@ -1,5 +1,5 @@
 import {finalizeEvent,getEventHash,verifyEvent,type Event} from 'nostr-tools/pure'
-import {createIdentity,generatePhrase,type Identity} from '../identity'
+import {createIdentity,type Identity} from '../identity'
 import {openStore,resumeStore} from '../store'
 import type {LocalStore} from '../store'
 import {nip98Authorization} from '../llm/nip98'
@@ -27,7 +27,8 @@ export async function acceptInvite(identity:Identity,store:LocalStore,event:Even
 }
 
 let startup:Promise<unknown>=Promise.resolve()
+// V2：身份本机自动生成并直接存放，没有助记词、恢复页或刷脸解锁。
 export function bootstrapIdentity(){
- const job=startup.then(async()=>{const existing=await resumeStore();if(existing)return existing;const words=generatePhrase(),identity=createIdentity(words,'simplified'),store=await openStore(identity);await store.put('recovery-words','self',{words});return {identity,store}})
+ const job=startup.then(async()=>{const existing=await resumeStore();if(existing)return existing;const identity=createIdentity(),store=await openStore(identity);return {identity,store}})
  startup=job.then(()=>{},()=>{});return job
 }

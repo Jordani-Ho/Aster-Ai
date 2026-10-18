@@ -3,19 +3,17 @@ import { existsSync, readFileSync } from 'node:fs'
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import type { Encounter } from './types'
 import { signEncounter, verifySignedEncounter, type SignedEncounterEvent } from './sign'
-import { RECORD_COLLECTIONS, type RecordStore } from './handover'
 import {
   IN_PERSON_COLLECTIONS,
-  InPersonUndeliveredError,
   addInPersonPhoto,
   intakeDisplayLabel,
   loadInPersonDraft,
   knownStudents,
   recordIntakeField,
-  retryInPersonHandover,
   saveInPersonDraft,
   signAndHandoverInPerson,
   startInPersonEncounter,
+  type RecordStore,
 } from './in-person'
 
 // 合成身份与合成病历，不使用任何真实资料。
@@ -113,70 +111,54 @@ describe('M1-12 面诊记录验收', () => {
     expect(cleared.encounter.intake.chiefComplaint).toEqual({ value: null, source: 'unknown' })
   })
 
-  it('4 签字交还后老师端查不到照片和代录原文；未送达时全部保留并可重发', async () => {
+  it('4 签字发送成功后照片与代录草稿仍在本机；未送达时同样保留，可直接再试', async () => {
     const store = new MemoryStore()
     const encounter = addInPersonPhoto(recordIntakeField(fresh(), 'chiefComplaint', 'SYNTHETIC_CHIEF').encounter, PHOTO)
-    await store.put(RECORD_COLLECTIONS.attachments, PHOTO.id, new Uint8Array([1, 2, 3]))
+    await store.put(IN_PERSON_COLLECTIONS.attachments, PHOTO.id, new Uint8Array([1, 2, 3]))
     await saveInPersonDraft(store, encounter)
     expect((await loadInPersonDraft(store))?.id).toBe(encounter.id)
 
     const sent: { type: string; id: string }[] = []
-    const index = await signAndHandoverInPerson({
-      store,
+    const signed = await signAndHandoverInPerson({
       encounter,
-      draft: encounter,
       privateKey: teacherKey,
       send: async (type, payload) => { sent.push({ type, id: payload.id }) },
     })
     expect(sent).toHaveLength(1)
     expect(sent[0].type).toBe('record.signed')
-    expect(index.encounterId).toBe(encounter.id)
-    // 照片字节与代录草稿都删了。
-    expect(await store.get(RECORD_COLLECTIONS.attachments, PHOTO.id)).toBeUndefined()
-    expect(await store.get(IN_PERSON_COLLECTIONS.draft, encounter.id)).toBeUndefined()
-    // 老师端只留索引，不含病历内容。
-    const stored = await store.get(RECORD_COLLECTIONS.signedEncounters, encounter.id + '-v1') as Record<string, unknown>
-    expect(Object.keys(stored).sort()).toEqual(['createdAt', 'encounterId', 'eventId', 'student', 'version'])
-    expect(JSON.stringify(stored)).not.toContain('SYNTHETIC_CHIEF')
-    // 日志只有时间和病历 id；去标识医案不含代录原文。
-    const logs = await store.list(RECORD_COLLECTIONS.recordLog)
-    expect(logs).toHaveLength(1)
-    expect(Object.keys(logs[0].value as object).sort()).toEqual(['at', 'encounterId'])
-    const caseBook = await store.get(RECORD_COLLECTIONS.caseBook, encounter.id + '-v1')
-    expect(JSON.stringify(caseBook)).not.toContain('SYNTHETIC_CHIEF')
+    expect(sent[0].id).toBe(signed.id)
+    // V2-05 再管保留：照片字节与代录草稿都还在。
+    expect(await store.get(IN_PERSON_COLLECTIONS.attachments, PHOTO.id)).toEqual(new Uint8Array([1, 2, 3]))
+    expect(await store.get(IN_PERSON_COLLECTIONS.draft, encounter.id)).toBeDefined()
+    // 不再写索引、日志、医案或暂存。
+    expect(await store.list('signed-encounters')).toHaveLength(0)
+    expect(await store.list('record-log')).toHaveLength(0)
+    expect(await store.list('case-book')).toHaveLength(0)
+    expect(await store.list('pending-handover')).toHaveLength(0)
 
-    // 未送达：抛带签名事件 id 的错误，资料和暂存都保留。
+    // 未送达：错误原样上抛，资料和草稿都保留，也没有暂存。
     const offline = new MemoryStore()
     const retryEncounter = addInPersonPhoto(recordIntakeField(fresh(), 'chiefComplaint', 'SYNTHETIC_RETRY').encounter, PHOTO)
-    await offline.put(RECORD_COLLECTIONS.attachments, PHOTO.id, new Uint8Array([1, 2, 3]))
+    await offline.put(IN_PERSON_COLLECTIONS.attachments, PHOTO.id, new Uint8Array([1, 2, 3]))
     await saveInPersonDraft(offline, retryEncounter)
-    let thrown: unknown
-    try {
-      await signAndHandoverInPerson({
-        store: offline,
-        encounter: retryEncounter,
-        draft: retryEncounter,
-        privateKey: teacherKey,
-        send: async () => { throw new Error('offline') },
-      })
-    } catch (error) {
-      thrown = error
-    }
-    expect(thrown).toBeInstanceOf(InPersonUndeliveredError)
-    const pending = await offline.list(RECORD_COLLECTIONS.pendingHandover)
-    expect(pending).toHaveLength(1)
-    expect((thrown as InPersonUndeliveredError).eventId).toBe(pending[0].key)
+    await expect(signAndHandoverInPerson({
+      encounter: retryEncounter,
+      privateKey: teacherKey,
+      send: async () => { throw new Error('offline') },
+    })).rejects.toThrow('offline')
     expect(await offline.get(IN_PERSON_COLLECTIONS.draft, retryEncounter.id)).toBeDefined()
-    expect(await offline.get(RECORD_COLLECTIONS.attachments, PHOTO.id)).toBeDefined()
+    expect(await offline.get(IN_PERSON_COLLECTIONS.attachments, PHOTO.id)).toEqual(new Uint8Array([1, 2, 3]))
+    expect(await offline.list('pending-handover')).toHaveLength(0)
 
-    // 重发成功后才销毁并落库。
+    // 老师再试一次即可：重新签字得到同一事件，发送成功后照片仍在。
     const resent: string[] = []
-    const retried = await retryInPersonHandover(offline, pending[0].key, async (_type, payload) => { resent.push(payload.id) })
-    expect(resent).toEqual([pending[0].key])
-    expect(retried.encounterId).toBe(retryEncounter.id)
-    expect(await offline.get(IN_PERSON_COLLECTIONS.draft, retryEncounter.id)).toBeUndefined()
-    expect(await offline.get(RECORD_COLLECTIONS.attachments, PHOTO.id)).toBeUndefined()
-    expect(await offline.list(RECORD_COLLECTIONS.pendingHandover)).toHaveLength(0)
+    const retried = await signAndHandoverInPerson({
+      encounter: retryEncounter,
+      privateKey: teacherKey,
+      send: async (_type, payload) => { resent.push(payload.id) },
+    })
+    expect(resent).toEqual([retried.id])
+    expect(await offline.get(IN_PERSON_COLLECTIONS.attachments, PHOTO.id)).toBeDefined()
   })
 
   it('5 界面 375px 可用，截图产物在 docs/screenshots', () => {
@@ -186,4 +168,11 @@ describe('M1-12 面诊记录验收', () => {
   })
 })
 
-it('M1-20 首次收到问诊即可选学生，不需已有签字记录或手填身份',async()=>{const store=new MemoryStore();await store.put('consult-package','first',{encounter:fresh()});expect(await knownStudents(store)).toEqual([student]);await store.put('signed-encounters','old',{student});expect(await knownStudents(store)).toEqual([student])})
+it('M1-20 首次收到问诊即可选学生；本机面诊草稿也计入可选学生',async()=>{
+  const store=new MemoryStore()
+  await store.put('consult-package','first',{encounter:fresh()})
+  expect(await knownStudents(store)).toEqual([student])
+  const otherStudent=getPublicKey(generateSecretKey())
+  await saveInPersonDraft(store,startInPersonEncounter({teacher,student:otherStudent,now,id:'b'.repeat(32)}))
+  expect(await knownStudents(store)).toEqual([student,otherStudent].sort())
+})

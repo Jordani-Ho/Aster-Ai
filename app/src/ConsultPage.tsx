@@ -63,7 +63,7 @@ export function ConsultPage({ store, identity, llm, sendConsult, member, family 
   useEffect(() => {
     void loadTeachers(store).then(setTeachers).catch(() => {})
     void loadProfile(store).then(setProfile).catch(() => {})
-    void loadDraft(store).then(draft => { if (draft) { setSession(draft); setStatus('已恢复上次未发送的草稿。') } }).catch(() => {})
+    void loadDraft(store).then(draft => { if (draft) { setSession(draft); setStatus('已读回上次未发送的草稿。') } }).catch(() => {})
   }, [store])
 
   // 替家人问诊时把年龄带进追问提示词；本人问诊不带。
@@ -133,7 +133,7 @@ export function ConsultPage({ store, identity, llm, sendConsult, member, family 
         next = addPhoto(next, result)
       }
       setPhotos(previous => [...previous, ...added])
-      apply(next, '照片已在本机缩小，并去掉了位置信息。')
+      apply(next, '照片已在本机缩小。')
     } catch (cause) { setError(message(cause)) } finally {
       setBusy(false)
       if (fileInput.current) fileInput.current.value = ''

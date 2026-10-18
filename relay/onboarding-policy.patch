@@ -36,7 +36,7 @@ diff --git a/src/server.rs b/src/server.rs
 index 24ca17e..b950ced 100644
 --- a/src/server.rs
 +++ b/src/server.rs
-@@ -1059,12 +1059,24 @@ fn make_notice_message(notice: &Notice) -> Message {
+@@ -1059,9 +1059,10 @@ fn make_notice_message(notice: &Notice) -> Message {
  // Community policy: whitelist applies to the authenticated connection, never an ephemeral wrap author.
  fn community_member(conn: &conn::ClientConn, settings: &Settings) -> bool {
      match (conn.auth_pubkey(), &settings.authorization.pubkey_whitelist) {
@@ -46,40 +46,8 @@ index 24ca17e..b950ced 100644
      }
  }
  
-+fn public_identity_subscription(sub: &crate::subscription::Subscription) -> bool {
-+    !sub.filters.is_empty() && sub.filters.iter().all(|filter| {
-+        filter.kinds.as_ref().map_or(false, |k| k == &[30078])
-+        && filter.authors.as_ref().map_or(false, |a| a.len() == 1 && a[0].len() == 64 && hex::decode(&a[0]).map_or(false, |v| v.len() == 32))
-+        && filter.tags.as_ref().map_or(false, |t| t.len() == 1 && t.get(&'d').map_or(false, |d| d.len() == 1 && d.contains("aster.identity")))
-+        && !filter.force_no_match
-+    })
-+}
  fn allowed_to_send(event_str: &str, conn: &conn::ClientConn, settings: &Settings) -> bool {
-+    if let Ok(event) = serde_json::from_str::<Event>(event_str) {
-+        if event.kind == 30078 && event.tag_values_by_name("d") == vec!["aster.identity".to_string()] && !event.is_expired() { return true; }
-+    }
-     if !community_member(conn, settings) { return false; }
-     // TODO: pass in kind so that we can avoid deserialization for most events
-     if settings.authorization.nip42_dms {
-@@ -1072,7 +1084,7 @@ fn allowed_to_send(event_str: &str, conn: &conn::ClientConn, settings: &Settings
-             Ok(event) => {
-                 if event.is_expired() { return false; }
-                 if event.kind == 30078 {
--                    let slots = ["aster.backup.0", "aster.backup.1", "aster.backup.2"];
-+                    let slots = ["aster.backup.0", "aster.backup.1", "aster.backup.2", "aster.identity"];
-                     return conn.auth_pubkey() == Some(&event.pubkey)
-                         && event.tag_values_by_name("d").len() == 1
-                         && event.tag_values_by_name("d").iter().any(|d| slots.contains(&d.as_str()));
-@@ -1343,7 +1355,7 @@ async fn nostr_server(
-                                     continue;
-                                 }
-                                 // Only expiring gift wraps in M1; backup policy extends this separately.
--                                let slots = ["aster.backup.0", "aster.backup.1", "aster.backup.2"];
-+                                let slots = ["aster.backup.0", "aster.backup.1", "aster.backup.2", "aster.identity"];
-                                 let own_backup = e.kind == 30078 && conn.auth_pubkey() == Some(&e.pubkey)
-                                     && e.tag_values_by_name("d").len() == 1
-                                     && e.tag_values_by_name("d").iter().any(|d| slots.contains(&d.as_str()));
-@@ -1390,7 +1402,7 @@ async fn nostr_server(
+@@ -1381,7 +1382,7 @@ async fn nostr_server(
                                  }
                              },
                              Ok(WrappedAuth(event)) => {
@@ -88,16 +56,7 @@ index 24ca17e..b950ced 100644
                                      ws_stream.send(make_notice_message(&Notice::restricted(event.id, "restricted: not a community member"))).await.ok();
                                      continue;
                                  }
-@@ -1450,7 +1462,7 @@ async fn nostr_server(
-                         }
-                     },
-                     Ok(NostrMessage::SubMsg(s)) => {
--                        if !community_member(&conn, &settings) {
-+                        if !community_member(&conn, &settings) && !public_identity_subscription(&s) {
-                             ws_stream.send(Message::Text(json!(["CLOSED", s.id, "auth-required: member authentication required"]).to_string())).await.ok();
-                             continue;
-                         }
-@@ -1580,3 +1592,19 @@ pub struct NostrMetrics {
+@@ -1571,3 +1572,13 @@ pub struct NostrMetrics {
      pub cmd_close: IntCounter,       // count of CLOSE commands received
      pub cmd_auth: IntCounter,        // count of AUTH commands received
  }
@@ -109,11 +68,5 @@ index 24ca17e..b950ced 100644
 +  let mut settings=Settings::default();let conn=conn::ClientConn::default();
 +  assert!(!settings.authorization.community_open);assert!(!community_member(&conn,&settings));
 +  settings.authorization.community_open=true;assert!(!community_member(&conn,&settings));
-+ }
-+ #[test] fn public_filter_is_only_one_full_author_and_identity_slot() {
-+  let sub=|value:serde_json::Value| serde_json::from_value::<crate::subscription::Subscription>(value).unwrap();
-+  let author="a".repeat(64);
-+  let good=sub(json!(["REQ","identity",{"kinds":[30078],"authors":[author],"#d":["aster.identity"]}]));assert!(public_identity_subscription(&good));
-+  for value in [json!(["REQ","bad",{"kinds":[30078],"authors":["a".repeat(64)],"#d":["aster.backup.0"]}]),json!(["REQ","bad",{"kinds":[30078],"#d":["aster.identity"]}]),json!(["REQ","bad",{"kinds":[1059,30078],"authors":["a".repeat(64)],"#d":["aster.identity"]}])]{assert!(!public_identity_subscription(&sub(value)))}
 + }
 +}

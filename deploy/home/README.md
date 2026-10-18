@@ -26,10 +26,7 @@
 2. 老师在手机打开应用，只点“我是老师”即到首页。展开“我是这个社区的老师”，输入部署口令，点“登记为社区老师”。看到“社区已建立，可以邀请学生”。口令只能认领到一个后台身份，重跑setup不重置；同一人失败重试可继续。
 3. 老师点“邀请学生”，把链接或二维码发给学生。7天内可重复使用；学生点开就到问诊首页，不输入后台编号。过期请老师重新生成。
 4. 学生登记写入 `data/gateway/members.json`，网关即时生效，无需重启。原 `data/gateway-members.json` 仅迁移旧名单时读取；重复setup不会丢失新成员。gateway挂载整个可写data/gateway目录，支持原子替换。
-5. 独立中继默认仍关闭开放模式；此内测部署通过 `RELAY_COMMUNITY_OPEN=true` 放行任意已认证连接，模型/推送网关仍只接受邀请成员。改成false恢复原白名单模式，需把成员明确写入配置；未认证连接仍不能读取消息或普通备份。
-6. 首页底部提醒换手机前备份。“设置 → 换手机时用（高级）”可保存恢复资料；可选“用刷脸保护并自动备份”需本机实际取到PRF。暂不支持的手机和微信内置浏览器仍能正常接受邀请和问诊。
-
-刷脸恢复需要同一个系统账户同步同一凭据、相同稳定应用域名；临时trycloudflare地址换域名会失效。照片仍需文件备份，不承诺换手机恢复未备份照片。只部署代码/配置不代表真实手机或家庭外网已完成本轮验证。
+5. 独立中继默认仍关闭开放模式；此内测部署通过 `RELAY_COMMUNITY_OPEN=true` 放行任意已认证连接，模型/推送网关仍只接受邀请成员。改成false退回原白名单模式，需把成员明确写入配置；未认证连接仍不能读取消息。
 
 ---
 
@@ -169,7 +166,7 @@ VAPID 已生成并写入 .env（不要提交 .env）
 生成网关配置 data/gateway-config.json 与成员名单 data/gateway-members.json…
 gateway config: publicUrl=https://app.example.com members=3
 完成：
-  - 数据目录：/mnt/d/projects/aster-ai-codex/deploy/home/data（已加入 .gitignore，备份就备份这个目录）
+  - 数据目录：/mnt/d/projects/aster-ai-codex/deploy/home/data（已加入 .gitignore）
   - 域名模式启动：./start.sh
   - 无域名自测：./quick-start.sh（会生成 trycloudflare 临时地址并写回 .env）
   - 验收探测：./verify.sh
@@ -184,7 +181,7 @@ gateway config: publicUrl=https://app.example.com members=3
 ```
 
 预期最后打印容器状态，四个服务都是 `running`：`relay`、`gateway`、`web`、`cloudflared`。
-用手机浏览器打开 `https://app.<你的域名>`，应该看到「知衡 · 身份」页面；生成/恢复身份后可以开始采集。
+用手机浏览器打开 `https://app.<你的域名>`，应该看到「知衡 · 身份」页面；生成身份后可以开始采集。
 
 ### 3.4 验收
 
@@ -360,7 +357,7 @@ WSL2 在最后一个会话退出约 1 分钟后会被 Windows 回收，容器和
    wsl -d Ubuntu -- bash -lc "cd /mnt/d/projects/aster-ai-codex/deploy/home && docker compose ps"
    ```
 
-   容器起来后：无域名模式重跑 `./quick-start.sh`（临时地址会变），域名模式跑 `./start.sh`，最后 `./verify.sh` 六项全 PASS 即恢复在线。
+   容器起来后：无域名模式重跑 `./quick-start.sh`（临时地址会变），域名模式跑 `./start.sh`，最后 `./verify.sh` 六项全 PASS 即重新在线。
 
 ### 6.7 升级 cloudflared
 
@@ -439,7 +436,7 @@ Docker 装好后，在本机跑完了除“域名模式 + 真实模型 Key”以
 | 起服务 | `./quick-start.sh` 生成两条 trycloudflare 临时地址；web 容器启动时用临时地址重新构建 app，`dist` 里能搜到 `wss://<relay 临时地址>` 与 `https://<app 临时地址>` |
 | 端口 | `docker ps` 无任何宿主机端口发布；relay/gateway/web 只在 compose 内部网络 |
 | `./verify.sh` | 应用 200、网关无凭据 401、非成员 403、成员推送 202、中继拒绝非成员 AUTH、中继接受成员 AUTH，全部 PASS；日志扫描（无请求正文标记/完整公钥/IP）PASS |
-| 手机模拟（Playwright，390×844 移动端） | 经临时隧道打开应用、恢复合成成员身份后页面显示“中继：已连接”；页面上下文同源请求 `/v1` 401、`/push` 成员鉴权 202；手机宽度无横向溢出 |
+| 手机模拟（Playwright，390×844 移动端） | 经临时隧道打开应用、以合成成员身份连接后页面显示“中继：已连接”；页面上下文同源请求 `/v1` 401、`/push` 成员鉴权 202；手机宽度无横向溢出 |
 | 日志 | relay/gateway/web 的日志驱动是 `none`，`docker compose logs` 连读取都返回“logging driver does not support reading”；cloudflared 临时隧道日志只含隧道地址、连接状态、自身边缘 IP 与失败 URL 路径 |
 | WSL 重启持久化 | `wsl --shutdown` 后重新启动：`data/relay/nostr.db` 的 sha256 完全一致（118784 字节、event 表仍有数据），重新 `./quick-start.sh` + `./verify.sh` 全部 PASS（整机重启未做，用 WSL 重启代替） |
 

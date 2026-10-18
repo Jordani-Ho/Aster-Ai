@@ -11,13 +11,11 @@ import { consultChargeBook, listStudentAdherence, type StudentAdherence } from '
 import { weekStart } from './core/adherence'
 import { localDay } from './core/homework/schedule'
 import {
-  ConsultUndeliveredError,
   assertConsultReady,
   completeConsultSigning,
   consultReadiness,
   draftPackage,
   listConsults,
-  retryConsultHandover,
   type ConsultReadiness,
   type LedgerRecorder,
   type SendEnvelope,
@@ -69,7 +67,6 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
   const [selected, setSelected] = useState<StoredConsult | null>(null)
   const [draft, setDraft] = useState<Encounter | null>(null)
   const [charge, setCharge] = useState('')
-  const [pendingEventId, setPendingEventId] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -122,7 +119,6 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
       setSelected(ready)
       setDraft(next)
       setCharge('')
-      setPendingEventId(null)
       setDone(false)
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
@@ -138,19 +134,15 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
       const metric = calculateMetric(draft ?? final, final, startedAt.current, signedAt.current, currentReport(selected.sender)?.weeklyRate ?? null)
       // M1-22 一家一本账：只有代管证明验过的问诊才把扣费记到代管人那本账；否则按发件人自己处理。
       const chargeBook = consultChargeBook(selected)
-      const result = pendingEventId
-        ? await retryConsultHandover({ store, eventId: pendingEventId, send, ledger, charge: amount, teacher: identity.publicKey, student: selected.sender, ...(chargeBook ? { chargeBook } : {}) })
-        : await completeConsultSigning({ identity, store, consult: selected, draft: draft ?? final, final, send, ledger, charge: amount, ...(chargeBook ? { chargeBook } : {}) })
-      setPendingEventId(null)
-      if (result.chargeError) setStatus('病历已交还；扣费没有记上：' + result.chargeError)
-      else setStatus('已签字交还，原始资料已从老师端删除。')
+      const result = await completeConsultSigning({ identity, consult: selected, final, send, ledger, charge: amount, ...(chargeBook ? { chargeBook } : {}) })
+      if (result.chargeError) setStatus('已签字交还；扣费没有记上：' + result.chargeError)
+      else setStatus('已签字交还。')
       try { await saveMetric(store, metricKey.current, metric); setRatingKey(metricKey.current) }
       catch { setStatus(previous => previous + ' 试点指标未能保存，不影响已交还病历。') }
       setSelected(null); setDraft(null)
       setDone(true)
     } catch (cause) {
-      if (cause instanceof ConsultUndeliveredError) setPendingEventId(cause.eventId)
-      else if (!pendingEventId) signedAt.current = null
+      signedAt.current = null
       throw cause
     }
   }
@@ -168,7 +160,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
       </section>}
       <section className="inbox-card">
         <p>学生已收到这份签名病历；作业会自动进入学生的“今日作业”。</p>
-        <p className="inbox-note">按诊毕即还：问诊包与照片已从老师端删除，本地只留索引、去标识医案与修改记录。</p>
+        <p className="inbox-note">问诊包与照片仍在本机；记录删除按老师设定的保留期限统一处理。</p>
         {status && <p role="status" className="inbox-status">{status}</p>}
         <div className="inbox-actions"><button onClick={() => { setDone(false); setSelected(null); setDraft(null); void refresh() }}>返回问诊箱</button><button onClick={onBack}>返回首页</button></div>
       </section>
@@ -189,7 +181,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
         onConfirm={confirm}
         onRevise={llm ? (encounter, instruction) => reviseEncounter(encounter, instruction, llm) : undefined}
         onCancel={() => {
-          setSelected(null); setDraft(null); setPendingEventId(null)
+          setSelected(null); setDraft(null)
           void refresh().catch(() => setError('问诊箱刷新失败，请稍后重试。'))
         }}
       />
@@ -200,7 +192,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
     <header className="inbox-head">
       <button className="inbox-back" onClick={onBack}>返回</button>
       <h1>远程工作台</h1>
-      <p>学生确认发送后才会出现。照片到齐才能起草；签字交还后原始资料会从老师端删除。</p>
+      <p>学生确认发送后才会出现。照片到齐才能起草；签字交还后问诊资料仍在本机，按保留期限统一清理。</p>
     </header>
     {error && <p role="alert" className="inbox-error">{error}</p>}
     {status && <p role="status" className="inbox-status">{status}</p>}

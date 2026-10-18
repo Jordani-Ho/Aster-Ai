@@ -50,7 +50,7 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
       const config = (await store.list('backup-config'))[0]?.value as { relays?: unknown } | undefined
       const relays = Array.isArray(config?.relays) && config.relays.every(s => typeof s === 'string') ? config.relays as string[] : defaults
       if (disposed || pausing) return
-      if (!relays.length) { setError('请先在备份状态中配置社区中继，再打开账本同步。'); return }
+      if (!relays.length) { setError('社区中继尚未配置，请联系部署者，再打开账本同步。'); return }
       started = startLedgerSync({ identity, store, relays, onChange: () => { void refresh().catch(fail) }, onError: fail, onStatus: value => {
         if (!disposed) { setStatus(value); if (value === 'ready') setError('') }
       } })

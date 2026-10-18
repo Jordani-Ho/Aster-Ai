@@ -106,7 +106,7 @@ describe('dailyMirror 回退与药名（验收第 2、4 条）', () => {
 
 describe('dailyMirror 同一天只生成一次（验收第 3 条）', () => {
   it('同一天调用两次只请求一次模型', async () => {
-    const identity = createIdentity('leader monkey parrot ring guide accident before fence cannon height naive bean', 'english', 4)
+    const identity = createIdentity()
     const store = await openStore(identity, { factory: new IDBFactory() })
     const llm = llmReturning({ today: ['今天多喝水'] })
     const input = { carePlan, jieqi: '寒露', weather: null, recentCheckins: [], recentSymptoms: [], llm, now: () => now }
@@ -143,7 +143,7 @@ describe('走势（验收第 6 条）', () => {
     expect(validScore(0)).toBe(false)
     expect(validScore(6)).toBe(false)
     expect(validScore(3)).toBe(true)
-    const identity = createIdentity('leader monkey parrot ring guide accident before fence cannon height naive bean', 'english', 5)
+    const identity = createIdentity()
     const store = await openStore(identity, { factory: new IDBFactory() })
     await recordSelfRating(store, 4, now)
     await recordSelfRating(store, 5, now)

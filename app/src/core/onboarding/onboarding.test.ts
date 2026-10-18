@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest'
 import { createIdentity } from '../identity'
 import { makeInvite, readInviteLink, inviteLink, validateInvite } from './index'
-const teacher=createIdentity('leader monkey parrot ring guide accident before fence cannon height naive bean','english')
+const teacher=createIdentity()
 const url='https://gw.example/invite/redeem',now=1800000000
 it('signed reusable invitations bind endpoint, expire in seven days and use a URL fragment',()=>{
  const event=makeInvite(teacher,url,now),link=inviteLink('https://app.example/',event)

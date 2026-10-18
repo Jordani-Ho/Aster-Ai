@@ -29,7 +29,7 @@ export interface SignEncounterPageProps {
 }
 // 仅展示与真人确认；模型调用由起草父组件提供，签字处理从不调用 onRevise。
 export function SignEncounterPage({initial,onConfirm,onCancel,onRevise}:SignEncounterPageProps){
-  const [encounter,setEncounter]=useState(initial),[instruction,setInstruction]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[retry,setRetry]=useState(false)
+  const [encounter,setEncounter]=useState(initial),[instruction,setInstruction]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('')
   return <main className="sign-page">
     <header className="sign-head"><h1>病历草稿</h1><p>看过整张卡片后，按“签字发出”确认全部内容。</p></header>
     <article className="draft-card" aria-label="完整病历卡片">
@@ -39,9 +39,9 @@ export function SignEncounterPage({initial,onConfirm,onCancel,onRevise}:SignEnco
       </section>)}
       <section><h2>作业</h2>{encounter.plan.homework.length===0?<p>暂无</p>:encounter.plan.homework.map(h=><div className="sign-field" key={h.id}><h3>{h.title}</h3><p>{h.detail}</p><p>{scheduleLabel(h.schedule)}{h.durationDays?' · '+h.durationDays+'天':''}</p><span className={'source source-'+h.source}>{labels[h.source]}</span></div>)}</section>
     </article>
-    {onRevise&&<form className="sign-editor" onSubmit={event=>{event.preventDefault();if(busy||retry||!instruction.trim())return;setBusy(true);setError('');void onRevise(encounter,instruction).then(next=>{setEncounter(next);setInstruction('')}).catch(cause=>setError(cause instanceof Error?cause.message:'改稿未完成，请重试。')).finally(()=>setBusy(false))}}>
-      <label>说说怎么改<textarea rows={2} value={instruction} disabled={busy||retry} onChange={e=>setInstruction(e.target.value)} placeholder="用键盘话筒说话，或打字：去掉某味药、作业改成每晚泡脚"/></label><button disabled={busy||retry||!instruction.trim()}>按意见改稿</button>
+    {onRevise&&<form className="sign-editor" onSubmit={event=>{event.preventDefault();if(busy||!instruction.trim())return;setBusy(true);setError('');void onRevise(encounter,instruction).then(next=>{setEncounter(next);setInstruction('')}).catch(cause=>setError(cause instanceof Error?cause.message:'改稿未完成，请重试。')).finally(()=>setBusy(false))}}>
+      <label>说说怎么改<textarea rows={2} value={instruction} disabled={busy} onChange={e=>setInstruction(e.target.value)} placeholder="用键盘话筒说话，或打字：去掉某味药、作业改成每晚泡脚"/></label><button disabled={busy||!instruction.trim()}>按意见改稿</button>
     </form>}
-    <footer className="sign-foot">{error&&<p role="alert">{error}</p>}<div className="sign-actions"><button className="sign-primary" disabled={busy} onClick={async()=>{setBusy(true);setError('');try{await onConfirm(acceptDraftForSigning(encounter))}catch(cause){setRetry(true);setError(cause instanceof Error?cause.message:'发出未完成，请重试。')}finally{setBusy(false)}}}>{retry?'重发交还':'签字发出'}</button>{onCancel&&<button disabled={busy||retry} onClick={onCancel}>返回</button>}</div></footer>
+    <footer className="sign-foot">{error&&<p role="alert">{error}</p>}<div className="sign-actions"><button className="sign-primary" disabled={busy} onClick={async()=>{setBusy(true);setError('');try{await onConfirm(acceptDraftForSigning(encounter))}catch(cause){setError(cause instanceof Error?cause.message:'发出未完成，请重试。')}finally{setBusy(false)}}}>签字发出</button>{onCancel&&<button disabled={busy} onClick={onCancel}>返回</button>}</div></footer>
   </main>
 }

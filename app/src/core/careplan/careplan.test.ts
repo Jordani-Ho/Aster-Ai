@@ -14,10 +14,9 @@ import {
 } from './index'
 
 // 只用合成身份与合成方案，不连真实中继。
-const phrase = 'leader monkey parrot ring guide accident before fence cannon height naive bean'
-const teacher = createIdentity(phrase, 'english', 0)
-const student = createIdentity(phrase, 'english', 1)
-const stranger = createIdentity(phrase, 'english', 2)
+const teacher = createIdentity()
+const student = createIdentity()
+const stranger = createIdentity()
 
 function plan(version: number, overrides: Partial<CarePlan> = {}): CarePlan {
   return {

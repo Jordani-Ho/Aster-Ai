@@ -23,23 +23,6 @@ export interface SignedEncounter {
   encounter: Encounter
 }
 
-// 老师端签字后只保留这条索引，不留病历内容（事件 content 里是学生原话与附件索引）。
-export interface SignedEncounterIndex {
-  eventId: string
-  encounterId: string
-  version: number
-  student: string
-  createdAt: string
-}
-
-export interface CaseBookEntry {
-  gender: Encounter['profile']['gender']['value']
-  ageBand: string | null
-  judgment: Encounter['judgment']
-  plan: Encounter['plan']
-  outcome?: Encounter['outcome']
-}
-
 export interface ModificationLogEntry {
   path: string
   aiDraft: unknown
@@ -156,24 +139,6 @@ export function verifySignedEncounter(event: SignedEncounterEvent, options: Veri
   const wrongIntake = intakeSourceViolations(encounter)
   if (wrongIntake.length > 0) throw new Error('intake 来源不符合规则，拒绝接收：' + wrongIntake.join('、'))
   return encounter
-}
-
-function ageBand(age: number | null): string | null {
-  if (age === null || !Number.isFinite(age) || age < 0) return null
-  const low = Math.floor(age / 10) * 10
-  return low + '-' + (low + 9) + ' 岁'
-}
-
-// 去标识医案：只含判断、处理、结果与性别/年龄段，不含学生公钥、称呼、intake 原文和附件。
-export function deidentifiedCaseBook(encounter: Encounter): CaseBookEntry {
-  const entry: CaseBookEntry = {
-    gender: encounter.profile.gender.value,
-    ageBand: ageBand(encounter.profile.age.value),
-    judgment: encounter.judgment,
-    plan: encounter.plan,
-  }
-  if (encounter.outcome) entry.outcome = encounter.outcome
-  return entry
 }
 
 function valueAt(encounter: Encounter, path: string): unknown {

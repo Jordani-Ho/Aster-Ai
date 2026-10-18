@@ -17,8 +17,6 @@ import { createFamilyProof, FAMILY_PROOF_CONTENT, FAMILY_PROOF_KIND, verifyFamil
 import template from '../../../../domain/tcm/templates/default.json'
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
 
-const OWNER_PHRASE = 'leader monkey parrot ring guide accident before fence cannon height naive bean'
-const TEACHER_PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
 const handles: LocalStore[] = []
 const factory = new IDBFactory()
 
@@ -33,15 +31,14 @@ function ownerProfile(alias: string): Encounter['profile'] {
   return profile
 }
 async function setupFamily() {
-  const owner = createIdentity(OWNER_PHRASE, 'english')
-  const teacher = createIdentity(TEACHER_PHRASE, 'english')
+  const owner = createIdentity()
+  const teacher = createIdentity()
   const ownerStore = await open(owner), teacherStore = await open(teacher)
-  await ownerStore.put('recovery-words', 'self', { words: OWNER_PHRASE })
   await saveProfile(ownerStore, ownerProfile('王小明'))
   await addTeacher(ownerStore, teacher.publicKey)
   const dad = await addFamilyMember(ownerStore, owner, { alias: '爸爸', relation: 'father', gender: 'male', birthDate: '1958-03-02', city: '北京市' })
   const kid = await addFamilyMember(ownerStore, owner, { alias: '孩子', relation: 'child', gender: 'female', birthDate: '2016-06-01', city: '北京市' })
-  return { owner, teacher, ownerStore, teacherStore, dad, kid, dadIdentity: memberIdentity(dad, 'english'), kidIdentity: memberIdentity(kid, 'english') }
+  return { owner, teacher, ownerStore, teacherStore, dad, kid, dadIdentity: memberIdentity(dad), kidIdentity: memberIdentity(kid) }
 }
 function message(sender: string, envelope: Message['envelope']): Message {
   return { id: crypto.randomUUID(), sender, at: Math.floor(Date.now() / 1000), envelope }
@@ -50,15 +47,14 @@ function message(sender: string, envelope: Message['envelope']): Message {
 afterEach(() => { handles.splice(0).forEach(store => store.close()) })
 
 describe('M1-22 family accounts', () => {
-  it('1: adds family members with derived identities and keeps each member data isolated', async () => {
-    const { owner, ownerStore, dad, kid, dadIdentity, kidIdentity } = await setupFamily()
+  it('1: adds family members with generated identities and keeps each member data isolated', async () => {
+    const { owner, teacher, ownerStore, dad, kid, dadIdentity, kidIdentity } = await setupFamily()
     const members = await loadFamilyMembers(ownerStore)
     expect(members.map(member => member.alias)).toEqual(['爸爸', '孩子'])
+    expect(members.map(member => member.account)).toEqual([1, 2])
     expect(new Set([owner.publicKey, dadIdentity.publicKey, kidIdentity.publicKey]).size).toBe(3)
-    expect(dadIdentity.account).toBe(1)
-    expect(kidIdentity.account).toBe(2)
     // 老师名单自动带进每位家人；档案写明称呼、年龄与代管人。
-    expect(await memberStore(ownerStore, dad.account).get('settings', 'teachers')).toEqual([createIdentity(TEACHER_PHRASE, 'english').publicKey])
+    expect(await memberStore(ownerStore, dad.account).get('settings', 'teachers')).toEqual([teacher.publicKey])
     const dadProfile = await loadProfile(memberStore(ownerStore, dad.account))
     expect(dadProfile.alias.value).toBe('爸爸')
     expect(dadProfile.managedBy?.value).toBe('王小明')
@@ -75,18 +71,6 @@ describe('M1-22 family accounts', () => {
     expect(remaining.map(member => member.alias)).toEqual(['爸爸'])
     expect(await memberStore(ownerStore, kid.account).list('homework')).toEqual([])
     expect((await memberStore(ownerStore, dad.account).list('homework')).map(row => row.value)).toEqual(['synthetic-dad-homework'])
-  })
-
-  it('3: one encrypted backup restores every family member and their data', async () => {
-    const { owner, ownerStore, dad, kid } = await setupFamily()
-    await memberStore(ownerStore, dad.account).put('homework', 'h1', 'synthetic-dad-homework')
-    await memberStore(ownerStore, kid.account).put('homework', 'h2', 'synthetic-kid-homework')
-    const archive = await ownerStore.exportEncrypted()
-    const restored = await open(owner)
-    await restored.importEncrypted(JSON.parse(JSON.stringify(archive)), { replace: true })
-    expect((await loadFamilyMembers(restored)).map(member => member.alias)).toEqual(['爸爸', '孩子'])
-    expect((await memberStore(restored, dad.account).list('homework'))[0]?.value).toBe('synthetic-dad-homework')
-    expect((await memberStore(restored, kid.account).list('homework'))[0]?.value).toBe('synthetic-kid-homework')
   })
 
   it('2: a family consult is labelled with the manager and the signed record + homework land under the family member', async () => {
@@ -125,7 +109,7 @@ describe('M1-22 family accounts', () => {
     const chargeStudents: string[] = []
     const toMember: Message['envelope'][] = []
     const result = await completeConsultSigning({
-      identity: teacher, store: teacherStore, consult: consults[0], draft: structuredClone(final), final,
+      identity: teacher, consult: consults[0], final,
       send: async (student, envelope) => { expect(student).toBe(dadIdentity.publicKey); toMember.push(envelope) },
       ledger: { open: async () => {}, record: async (_teacher, student, draft) => { chargeStudents.push(student); charges.push(draft) } },
       charge: 3,
@@ -143,8 +127,6 @@ describe('M1-22 family accounts', () => {
     expect(records[0].encounter.student).toBe(dadIdentity.publicKey)
     expect((await memberScoped.list('homework')).map(row => (row.value as unknown as { homework: Homework }).homework.title)).toEqual(['SYNTHETIC_DAILY'])
     expect(await ownerStore.list('homework')).toEqual([])
-    // 诊毕即还：老师端原始问诊包已删除。
-    expect(await teacherStore.list('consult-package')).toEqual([])
   })
 
   it('4: mirror advice for a child drops alcohol, strong tea and coffee while keeping safe advice', async () => {
@@ -181,7 +163,7 @@ describe('M1-22 family accounts', () => {
 
   it('7: 代管证明只认代管人签给这位家人的 kind 2732 小事件', async () => {
     const { owner, dadIdentity } = await setupFamily()
-    const other = createIdentity(OWNER_PHRASE, 'english', 6)
+    const other = createIdentity()
     const proof = createFamilyProof(owner, dadIdentity.publicKey)
     expect(proof.kind).toBe(FAMILY_PROOF_KIND)
     expect(proof.content).toBe(FAMILY_PROOF_CONTENT)
@@ -198,7 +180,7 @@ describe('M1-22 family accounts', () => {
 
   it('8: 伪造的代管人（没有证明或证明是别人签的）不会把扣费记到另一位学生账上', async () => {
     const { owner, teacher, ownerStore, teacherStore, dad, dadIdentity } = await setupFamily()
-    const otherStudent = createIdentity(OWNER_PHRASE, 'english', 6)
+    const otherStudent = createIdentity()
     const memberScoped = memberStore(ownerStore, dad.account)
     const dadProfile = await loadProfile(memberScoped)
     const makeConsult = async (manager: string, managerProof: unknown) => {
@@ -233,7 +215,7 @@ describe('M1-22 family accounts', () => {
       const students: string[] = []
       const final: Encounter = structuredClone(consult.encounter)
       await completeConsultSigning({
-        identity: teacher, store: teacherStore, consult, draft: structuredClone(final), final,
+        identity: teacher, consult, final,
         send: async () => {},
         ledger: { open: async () => {}, record: async (_teacher, student) => { students.push(student) } },
         charge: 2,

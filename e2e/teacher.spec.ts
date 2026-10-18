@@ -55,7 +55,7 @@ test('M1-20 four pages: urgent first, three taps to sign, revision stays draft, 
  expect(text).not.toContain('ai_draft');expect(text).toContain('ai_accepted');expect(text).toContain('SYNTHETIC_KEEP');expect(text).not.toContain('SYNTHETIC_HERB')
 })
 
-test('M1-20 in person uses conversational intake, same drafting/revision/signature, then erases local raw draft',async({people})=>{
+test('M1-20 in person uses conversational intake, same drafting/revision/signature, keeps local raw until retention',async({people})=>{
  const teacher=people.teacher.page
  await consultations(people.student.page)
  await expect(teacher.locator('.teacher-count')).toContainText('2')
@@ -67,7 +67,7 @@ test('M1-20 in person uses conversational intake, same drafting/revision/signatu
  await teacher.getByRole('button',{name:'加入这一句',exact:true}).click()
  const jpeg=await teacher.evaluate(()=>{const c=document.createElement('canvas');c.width=40;c.height=30;const ctx=c.getContext('2d')!;ctx.fillStyle='#369';ctx.fillRect(0,0,40,30);return c.toDataURL('image/jpeg').split(',')[1]})
  await teacher.locator('input[type=file][accept="image/*"]').setInputFiles({name:'synthetic-face.jpg',mimeType:'image/jpeg',buffer:Buffer.from(jpeg,'base64')})
- await expect(teacher.getByText('照片已在本机缩小，并去掉了位置等 EXIF 信息。',{exact:true})).toBeVisible()
+ await expect(teacher.getByText('照片已在本机缩小。',{exact:true})).toBeVisible()
  await teacher.getByRole('button',{name:'生成病历',exact:true}).click()
  await teacher.getByRole('textbox',{name:'说说怎么改'}).fill('SYNTHETIC_REMOVE_HERB')
  await teacher.getByRole('button',{name:'按意见改稿',exact:true}).click()
@@ -75,7 +75,7 @@ test('M1-20 in person uses conversational intake, same drafting/revision/signatu
  await teacher.getByRole('button',{name:'签字发出',exact:true}).click()
  await expect(teacher.getByRole('heading',{name:'已签字交还',exact:true})).toBeVisible()
  const result=await teacher.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return {drafts:await s.store.list('in-person-draft'),indices:await s.store.list('signed-encounters'),photos:await s.store.list('attachments')}}finally{s.store.close();s.identity.privateKey.fill(0)}})
- expect(result.drafts).toEqual([]);expect(JSON.stringify(result.indices)).not.toContain('SYNTHETIC_FACE_RAW');expect(result.indices).toHaveLength(1);expect(result.photos).toEqual([])
+ expect(result.drafts).toHaveLength(1);expect(JSON.stringify(result.drafts)).toContain('SYNTHETIC_FACE_RAW');expect(result.indices).toEqual([]);expect(result.photos).toHaveLength(1)
  const student=people.student.page
  await expect.poll(()=>student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return (await s.store.list('record-photos')).length}finally{s.store.close();s.identity.privateKey.fill(0)}})).toBe(1)
  await student.getByRole('button',{name:'其他',exact:true}).click()

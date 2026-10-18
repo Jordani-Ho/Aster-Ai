@@ -37,12 +37,12 @@ it('daily与once支持指定时间，默认once为8点；错误输入明确拒�
  expect(()=>schedule([{...homework,schedule:{kind:'daily',time:'25:00'}}],'2026-10-01',2)).toThrow()
  expect(()=>schedule([homework],'2026-02-30',2)).toThrow()
 })
-it('6 加密打卡可读取且IndexedDB无明文；7全流程无fetch或WebSocket；8完成5天显示5/7',async()=>{
+it('6 打卡可读取且本机明存（V2 不再加密）；7全流程无fetch或WebSocket；8完成5天显示5/7',async()=>{
  const fetcher=vi.fn(()=>{throw Error('network forbidden')})
  const socket=vi.fn(()=>{throw Error('network forbidden')})
  vi.stubGlobal('fetch',fetcher);vi.stubGlobal('WebSocket',socket)
  const factory=new IDBFactory(), name=crypto.randomUUID()
- const identity=createIdentity('leader monkey parrot ring guide accident before fence cannon height naive bean','english')
+ const identity=createIdentity()
  const store=await openStore(identity,{factory,name})
  try {
  for(let i=1;i<=5;i++) await checkIn(store,homework.id,'SYNTHETIC_PRIVATE_NOTE',new Date(2026,9,i,9))
@@ -57,8 +57,9 @@ it('6 加密打卡可读取且IndexedDB无明文；7全流程无fetch或WebSocke
  const db=await new Promise<IDBDatabase>((resolve,reject)=>{const r=factory.open(name);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})
  const raw=await new Promise(resolve=>{const tx=db.transaction('records');const r=tx.objectStore('records').getAll();tx.oncomplete=()=>resolve(r.result)})
  db.close()
- expect(JSON.stringify(raw)).not.toContain('SYNTHETIC_PRIVATE_NOTE')
- expect(JSON.stringify(raw)).not.toContain(homework.id)
+ // V2：本机存储是普通 IndexedDB，业务值明文保存；仍不联网。
+ expect(JSON.stringify(raw)).toContain('SYNTHETIC_PRIVATE_NOTE')
+ expect(JSON.stringify(raw)).toContain(homework.id)
  expect(fetcher).not.toHaveBeenCalled();expect(socket).not.toHaveBeenCalled()
  } finally {store.close()}
 })

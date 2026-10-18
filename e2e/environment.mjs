@@ -6,7 +6,6 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { actors } from './actors.mjs'
 import { startGatewayFixture, listen, closeServer } from './gateway-fixture.mjs'
 import { root, linuxPath, stopChild } from './process.mjs'
 
@@ -40,7 +39,7 @@ export async function startEnvironment(build) {
     const relayPort = await port(), relayUrl = `ws://127.0.0.1:${relayPort}/`, database = path.join(directory, 'relay-data')
     await mkdir(database)
     const config = path.join(directory, 'relay.toml')
-    await writeFile(config, `[info]\nrelay_url = "${relayUrl}"\nname = "Synthetic E2E relay"\n[network]\naddress = "127.0.0.1"\nport = ${relayPort}\n[limits]\nmax_event_bytes = 2097152\nmax_ws_message_bytes = 2098176\nmax_ws_frame_bytes = 2098176\nevent_kind_allowlist = [1059, 30078]\n[authorization]\nnip42_auth = true\nnip42_dms = true\npubkey_whitelist = ${JSON.stringify([actors.teacher.pubkey, actors.student.pubkey])}\n`)
+    await writeFile(config, `[info]\nrelay_url = "${relayUrl}"\nname = "Synthetic E2E relay"\n[network]\naddress = "127.0.0.1"\nport = ${relayPort}\n[limits]\nmax_event_bytes = 2097152\nmax_ws_message_bytes = 2098176\nmax_ws_frame_bytes = 2098176\nevent_kind_allowlist = [1059]\n[authorization]\ncommunity_open = true\nnip42_auth = true\nnip42_dms = true\npubkey_whitelist = []\n`)
     const originalConfig=await (await import('node:fs/promises')).readFile(config,'utf8')
     const host = path.join(root, 'e2e/relay-host.mjs')
     let relay, currentDatabase = database
@@ -66,7 +65,7 @@ export async function startEnvironment(build) {
       try {
         let body='';for await(const chunk of req){body+=chunk;if(body.length>16384)throw Error('control body too large')}
         const options=body?JSON.parse(body):{}
-        let configText=originalConfig.replace('[authorization]','[authorization]\ncommunity_open = '+(options.communityOpen!==false))
+        let configText=originalConfig.replace(/community_open = .*/, 'community_open = '+(options.communityOpen!==false))
         if(Array.isArray(options.members))configText=configText.replace(/pubkey_whitelist = .*/, 'pubkey_whitelist = '+JSON.stringify(options.members))
         await writeFile(config,configText)
         if(!options.relayOnly)await gateway.resetMembers()

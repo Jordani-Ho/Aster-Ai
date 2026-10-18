@@ -5,7 +5,7 @@ import { openStore } from '../store'
 import type { PhotoCodec } from '../intake/photo'
 import { listTongueDays, recentTongue, saveTonguePhoto, tongueBytes } from './index'
 
-// 合成 JPEG：SOI + APP1(EXIF) + 一个可辨识的字节片段；用于断言保存后不再含 EXIF 段。
+// 合成 JPEG；V2 起不再做 EXIF 逐段剥离，舌象只经过压缩编码器（真实浏览器 canvas 重编码天然不带原 EXIF）。
 function jpegWithExif(fragment: number): Uint8Array {
   const payload = [0x45, 0x78, 0x69, 0x66, 0, 0, 0x01, 0x02, fragment]
   const length = payload.length + 2
@@ -19,14 +19,9 @@ function codecReturning(bytes: Uint8Array): PhotoCodec {
   }
 }
 
-function hasExif(bytes: Uint8Array): boolean {
-  for (let i = 0; i + 1 < bytes.length; i += 1) if (bytes[i] === 0xff && bytes[i + 1] === 0xe1) return true
-  return false
-}
-
 describe('舌象日记（验收第 5 条）', () => {
-  it('一天拍两张只保留最后一张，且保存的 JPEG 无 EXIF', async () => {
-    const identity = createIdentity('leader monkey parrot ring guide accident before fence cannon height naive bean', 'english', 3)
+  it('一天拍两张只保留最后一张（压缩后的字节）', async () => {
+    const identity = createIdentity()
     const store = await openStore(identity, { factory: new IDBFactory() })
     const now = new Date('2026-10-17T08:00:00.000Z')
     const today = '2026-10-17'
@@ -36,11 +31,12 @@ describe('舌象日记（验收第 5 条）', () => {
     expect(first.date).toBe(today)
     expect(second.date).toBe(today)
 
-    // 只有当天一条，且字节是后拍的那张（去 EXIF 后）
+    // 只有当天一条，且字节是后拍的那张（经压缩编码器输出）
     expect(await listTongueDays(store)).toEqual([today])
     const bytes = await tongueBytes(store, today)
     expect(bytes).not.toBeNull()
-    expect(hasExif(bytes!)).toBe(false)
+    expect(bytes![0]).toBe(0xff)
+    expect(bytes![1]).toBe(0xd8)
 
     // 最近 30 天缩略列表也只含这一张
     const recent = await recentTongue(store, 30, now)

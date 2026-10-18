@@ -47,7 +47,7 @@ export async function buildRelay(runTests = process.argv.includes('--test')) {
   env.RUSTC = await command(rustup, ['which', '--toolchain', RUST, 'rustc'], { env, quiet: true })
   env.RUSTDOC = await command(rustup, ['which', '--toolchain', RUST, 'rustdoc'], { env, quiet: true })
   const compiler = await protoc(), protocVersion = await command(compiler, ['--version'])
-  const patches = ['community-policy.patch', 'backup-policy.patch', 'onboarding-policy.patch'].map(name => path.join(root, 'relay', name))
+  const patches = ['community-policy.patch', 'onboarding-policy.patch'].map(name => path.join(root, 'relay', name))
   const docker = await readFile(path.join(root, 'relay/Dockerfile'), 'utf8')
   if (!docker.includes(UPSTREAM) || !docker.includes('rust:' + RUST + '-') || patches.some(p => !docker.includes(path.basename(p)))) throw Error('Builder pins no longer match relay/Dockerfile')
   const fingerprint = sha(Buffer.concat([Buffer.from([UPSTREAM, rustVersion, protocVersion, process.platform, process.arch].join('\n')), await readFile(fileURLToPath(import.meta.url)), ...await Promise.all(patches.map(p => readFile(p)))]))

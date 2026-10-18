@@ -8,8 +8,7 @@ import { createIdentity } from '../identity'
 import { append, createLedger, signDispute, signEvent } from './index'
 import { createLedgerSync } from './sync'
 
-const phrase = 'leader monkey parrot ring guide accident before fence cannon height naive bean'
-const teacher = createIdentity(phrase, 'english'), student = createIdentity(phrase, 'english', 1)
+const teacher = createIdentity(), student = createIdentity()
 const teacherPub = teacher.publicKey, studentPub = student.publicKey
 const at = (day: number) => new Date(Date.UTC(2026, 9, 1) + day * 86_400_000).toISOString()
 const closers: (() => void)[] = []
