@@ -29,9 +29,21 @@ export interface MirrorInput {
   recentCheckins: Checkin[]
   recentSymptoms: SelfRating[]
   recentStress?: StressRating[]
+  /** M1-22：家人（孩子、老人）的年龄带给模型；孩子的建议再按词表兜底过滤。 */
+  age?: number | null
   llm?: LlmClient
   prompt?: string
   now?: () => Date
+}
+
+// 给孩子的建议不能出现酒、浓茶、咖啡（M1-22 验收第 4 条）；模型不听话时这里兜底。
+const CHILD_FORBIDDEN = /酒|浓茶|咖啡/
+const CHILD_FALLBACK = '按时吃饭、多喝温水、早点睡觉。'
+
+export function ageFiltered(items: readonly string[], age: number | null | undefined): string[] {
+  if (age === null || age === undefined || !Number.isFinite(age) || age >= 18) return [...items]
+  const kept = items.filter(item => !CHILD_FORBIDDEN.test(item))
+  return kept.length > 0 ? kept : [CHILD_FALLBACK]
 }
 
 function greeting(now: Date): string {
@@ -87,6 +99,7 @@ export async function dailyMirror(input: MirrorInput): Promise<MirrorResult> {
         recentSymptoms: input.recentSymptoms,
         recentStress: stress,
         relaxFocus,
+        ...(input.age === undefined || input.age === null ? {} : { member: { age: input.age } }),
       })
       const reply = await input.llm.complete([{ role: 'system', content: system }, { role: 'user', content: user }])
       today = parseToday(reply)
@@ -95,7 +108,7 @@ export async function dailyMirror(input: MirrorInput): Promise<MirrorResult> {
     }
   }
   if (today.length === 0) today = fallbackToday(input.carePlan, input.jieqi, relaxFocus)
-  return { greeting: greeting(now), today, trend }
+  return { greeting: greeting(now), today: ageFiltered(today, input.age), trend }
 }
 
 // 同一天只生成一次：先查本机缓存，命中直接返回；否则生成后写缓存。

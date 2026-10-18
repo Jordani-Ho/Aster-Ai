@@ -166,3 +166,10 @@ M1-20 调养方案集合：care-plan-pending 使用随机 UUID 键，值 {studen
 M1-20 面诊照片：record-photo-index 随机 UUID 键 -> {eventId,refId,sha256,dataKey}，record-photos 随机 UUID 键 -> 压缩去 EXIF 的 JPEG 字节。所有关联值加密，不用身份或内容哈希作明文键；学生收到有效老师签名并核对引用后才保存。照片只在学生本机和含二进制的完整加密文件备份中，中继业务备份不含字节。
 
 M1-21：settings/personal-model -> {provider,baseUrl,model,apiKey,testedAt}，凭证与其他字段一起 AES-GCM 加密，仅本人设备保存；沿用结构化中继备份和加密文件备份。testedAt 只在本人模型连接验证成功后写入，恢复后不要求重填。设置修改未测试成功不会覆盖原记录。
+
+## M1-22 家人子账户分片
+
+- `store.scoped(prefix)` 在同一个加密库里返回带固定前缀的读写视图（前缀须匹配 `^[a-z][a-z0-9_-]{0,40}$`，本卡用 `f{account}-`）。集合名、键名与 AAD 都带前缀，所以每位家人的业务集合互不可见；分片实例不能导出、导入或关闭数据库连接。
+- 根实例的 `exportEncrypted()` / `importEncrypted()` 覆盖全部分片：一次备份、一次恢复全家。`clearScope(prefix)` 删除某位家人的全部记录（移除家人时调用）。
+- 集合登记：`family/members`（键固定 `members`，值为家人数组 `{account,alias,relation,gender,birthDate,city,publicKey,privateKey}`；privateKey 与全库一样由设备密钥保护的 AES-GCM 加密后落盘，供本机代管家人收发使用）。
+- 家人分片内沿用既有集合名（`profile`、`settings`、`homework`、`student-records`、`care-plans` 等），实体集合名前缀 `f1-`、`f2-`……；分片内 `settings/teachers` 在添加家人时复制本人的“我的老师”名单。

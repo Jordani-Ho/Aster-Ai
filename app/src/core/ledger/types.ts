@@ -41,6 +41,8 @@ export interface ChainEventDraft {
   chargeReason?: ChargeReason
   recordHash?: string
   refundFor?: string
+  /** M1-22 一家一本账：这笔扣费记在哪位家人名下（家人称呼）；本人消费省略。 */
+  forMember?: string
 }
 
 export interface DisputeDraft {
@@ -59,6 +61,7 @@ export interface ChainFields {
   chargeReason?: ChargeReason
   recordHash?: string
   refundFor?: string
+  forMember?: string
 }
 
 // 异议的 content 字段；没有 prev，用 disputeFor 指向扣费事件的 id。
@@ -108,6 +111,10 @@ export function parseChainFields(event: SignedLedgerEvent): ChainFields {
   if (!EVENT_TYPES.includes(fields.type as LedgerEventType)) throw new Error('事件类型无效')
   parseAt(fields.at)
   if (fields.prev !== null && !isHex64(fields.prev)) throw new Error('上一条事件引用无效')
+  if (fields.forMember !== undefined) {
+    const member = fields.forMember
+    if (typeof member !== 'string' || member.trim() === '' || member.length > 12 || /[\u0000-\u001f\u007f]/.test(member)) throw new Error('家人称呼无效')
+  }
   return fields as unknown as ChainFields
 }
 

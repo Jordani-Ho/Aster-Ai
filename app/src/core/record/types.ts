@@ -21,6 +21,8 @@ export interface Encounter {
     age: Field<number>
     bazi: Field<{ year: string | null; month: string | null; day: string; hour: string | null; flags: string[] }>
     city: Field<string>
+    /** M1-22：家人问诊时填代管人的称呼；本人问诊省略。老师端据此显示“（代管人代管）”。 */
+    managedBy?: Field<string>
   }
   intake: {                  // 原始资料：只能来自学生（source = 'student'）
     chiefComplaint: Field<string>
@@ -77,4 +79,6 @@ export interface ConsultPackage {
   redFlag?: { hit: boolean; crisis: boolean }
   /** 最近 14 天状态与压力走势（M1-19）：只随传输信封给老师端看，不进 Encounter schema。 */
   trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] }
+  /** M1-22 传输元数据：家人代管问诊时填代管人（根身份）公钥；本人问诊省略。不进病历 schema。 */
+  manager?: string
 }

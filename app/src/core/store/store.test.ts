@@ -207,3 +207,38 @@ describe('M1-02 acceptance with fake-indexeddb', () => {
     expect(await requestPersistence({ persist: async () => { throw new Error('synthetic') } })).toBe('error')
   })
 })
+
+// M1-22：同一加密库按家人编号分片，互不可见；根实例导出/导入覆盖全部分片。
+describe('M1-22 family scopes in one encrypted store', () => {
+  it('isolates scoped collections while the root export covers every family member', async () => {
+    const { open, options } = setup()
+    const store = await open()
+    const dad = store.scoped('f1-'), kid = store.scoped('f2-')
+    await store.put('homework', key, 'synthetic-owner-work')
+    await dad.put('homework', key, 'synthetic-dad-work')
+    await kid.put('homework', secondKey, 'synthetic-kid-work')
+    expect((await store.list('homework')).map(row => row.value)).toEqual(['synthetic-owner-work'])
+    expect((await dad.list('homework')).map(row => row.value)).toEqual(['synthetic-dad-work'])
+    expect((await kid.list('homework')).map(row => row.value)).toEqual(['synthetic-kid-work'])
+    const archive = await store.exportEncrypted()
+    expect(archive.records.map(record => record.c).sort()).toEqual(['f1-homework', 'f2-homework', 'homework'])
+    // 换一个库、同一身份恢复：分片记录随整库一起回来。
+    const fresh = await openStore(identity(), { name: crypto.randomUUID(), factory: options.factory })
+    handles.push(fresh)
+    await fresh.importEncrypted(archive, { replace: true })
+    expect(await fresh.scoped('f1-').list('homework')).toEqual([{ key, value: 'synthetic-dad-work' }])
+    expect(await fresh.scoped('f2-').list('homework')).toEqual([{ key: secondKey, value: 'synthetic-kid-work' }])
+    expect(await fresh.list('homework')).toEqual([{ key, value: 'synthetic-owner-work' }])
+  })
+  it('rejects invalid scope prefixes and clears one member slice without touching others', async () => {
+    const { open } = setup()
+    const store = await open()
+    expect(() => store.scoped('Bad.Scope')).toThrow('家人存储前缀无效')
+    await expect(store.clearScope('bad.prefix')).rejects.toThrow('家人存储前缀无效')
+    await store.scoped('f1-').put('homework', key, 'synthetic-dad-work')
+    await store.put('homework', key, 'synthetic-owner-work')
+    await store.clearScope('f1-')
+    expect(await store.scoped('f1-').list('homework')).toEqual([])
+    expect(await store.list('homework')).toEqual([{ key, value: 'synthetic-owner-work' }])
+  })
+})

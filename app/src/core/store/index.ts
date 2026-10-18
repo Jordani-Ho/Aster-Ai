@@ -39,10 +39,18 @@ function parseExport(input: unknown): EncryptedExport {
   return { format: 'aster-store-export', version: 1, createdAt: a.createdAt, owner: header.owner, kdf: header.kdf, cipher: 'AES-256-GCM', includesBinary: a.includesBinary, records }
 }
 
+const SCOPE = /^[a-z][a-z0-9_-]{0,40}$/
 export class LocalStore {
   private pending: Promise<unknown> = Promise.resolve()
   private closed = false
-  constructor(private db: IDBDatabase, private header: Header, private storageKey: CryptoKey, private privateKey: Uint8Array) {}
+  constructor(private db: IDBDatabase, private header: Header, private storageKey: CryptoKey, private privateKey: Uint8Array, private prefix = '', private ownsDb = true) {}
+  // M1-22 家人子账户：同一个加密库里按“家人编号”分片，集合名加固定前缀，读写天然隔离；
+  // 根实例导出/导入整库，所以一次备份、一次恢复覆盖全家。分片实例只做业务读写，不能导出、导入或关闭连接。
+  scoped(prefix: string): LocalStore {
+    if (!SCOPE.test(prefix)) throw new Error('家人存储前缀无效')
+    return new LocalStore(this.db, this.header, this.storageKey, this.privateKey, prefix, false)
+  }
+  private address(collection: string): string { return this.prefix + collection }
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.pending.then(() => {
       if (this.closed) throw new Error('存储已关闭，请重新打开')
@@ -64,8 +72,9 @@ export class LocalStore {
   }
   put(collection: string, key: string, value: StoreValue): Promise<void> {
     return this.enqueue(async () => {
-      validateAddress(collection, key)
-      const encrypted = await encryptRecord(this.storageKey, collection, key, value)
+      const address = this.address(collection)
+      validateAddress(address, key)
+      const encrypted = await encryptRecord(this.storageKey, address, key, value)
       await transaction(this.db, ['meta', 'records'], 'readwrite', async tx => {
         await this.assertCurrent(tx); tx.objectStore('records').put(encrypted)
       })
@@ -73,9 +82,10 @@ export class LocalStore {
   }
   get(collection: string, key: string): Promise<StoreValue | undefined> {
     return this.enqueue(async () => {
-      validateAddress(collection, key)
+      const address = this.address(collection)
+      validateAddress(address, key)
       const record = await transaction(this.db, ['meta', 'records'], 'readonly', async tx => {
-        const requested = requestResult(tx.objectStore('records').get([collection, key]))
+        const requested = requestResult(tx.objectStore('records').get([address, key]))
         await this.assertCurrent(tx); return requested
       })
       return record === undefined ? undefined : decryptRecord(this.storageKey, record)
@@ -83,16 +93,32 @@ export class LocalStore {
   }
   list(collection: string): Promise<{ key: string; value: StoreValue }[]> {
     return this.enqueue(async () => {
-      validateAddress(collection, 'validation')
+      const address = this.address(collection)
+      validateAddress(address, 'validation')
       const result = []
-      for (const record of await this.snapshot()) if (record.c === collection) result.push({ key: record.k, value: await decryptRecord(this.storageKey, record) })
+      for (const record of await this.snapshot()) if (record.c === address) result.push({ key: record.k, value: await decryptRecord(this.storageKey, record) })
       return result
     })
   }
   delete(collection: string, key: string): Promise<void> {
     return this.enqueue(async () => {
-      validateAddress(collection, key)
-      await transaction(this.db, ['meta', 'records'], 'readwrite', async tx => { await this.assertCurrent(tx); tx.objectStore('records').delete([collection, key]) })
+      const address = this.address(collection)
+      validateAddress(address, key)
+      await transaction(this.db, ['meta', 'records'], 'readwrite', async tx => { await this.assertCurrent(tx); tx.objectStore('records').delete([address, key]) })
+    })
+  }
+  // 删除某个分片的全部记录（移除家人时清掉他的本机资料）。
+  clearScope(prefix: string): Promise<void> {
+    return this.enqueue(async () => {
+      if (!SCOPE.test(prefix)) throw new Error('家人存储前缀无效')
+      if (this.prefix !== '') throw new Error('只能在根存储上清理分片')
+      const keys = (await this.snapshot()).filter(record => record.c.startsWith(prefix)).map(record => [record.c, record.k] as [string, string])
+      if (keys.length === 0) return
+      await transaction(this.db, ['meta', 'records'], 'readwrite', async tx => {
+        await this.assertCurrent(tx)
+        const records = tx.objectStore('records')
+        for (const key of keys) records.delete(key)
+      })
     })
   }
   exportEncrypted(options: { includeBinary?: boolean } = {}): Promise<EncryptedExport> {
@@ -129,6 +155,8 @@ export class LocalStore {
   }
   close(): void {
     this.closed = true
+    // 分片实例不拥有数据库连接；关连接与擦私钥只在根实例做。
+    if (!this.ownsDb) return
     void this.pending.finally(() => { this.privateKey.fill(0); this.db.close() })
   }
 }

@@ -30,6 +30,7 @@ export interface Encounter {
     age: Field<number>
     bazi: Field<{ year: string | null; month: string | null; day: string; hour: string | null; flags: string[] }>
     city: Field<string>
+    managedBy?: Field<string>  // M1-22：家人代管问诊时填代管人的称呼；本人问诊省略。只做展示，不参与签字校验
   }
   intake: {                  // 原始资料：只能来自学生（source = 'student'）
     chiefComplaint: Field<string>
@@ -101,6 +102,7 @@ export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: st
 ```ts
 export interface ConsultPackage {
   encounter: Encounter          // 只填了 profile 和 intake，来源都是 'student'
+  manager?: string              // M1-22 传输元数据：家人代管问诊时为代管人（根身份）公钥，不进病历、不参与签字
   history: string[]             // 学生授权附带的历史病历（签名事件 JSON 字符串），默认同一位老师的近 3 次
   attachments: { ref: AttachmentRef; data: Uint8Array }[]
 }

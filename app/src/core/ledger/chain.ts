@@ -12,7 +12,7 @@ import {
   type SignedLedgerEvent,
 } from './types'
 
-const OPTIONAL_FIELDS = ['amount', 'memo', 'chargeReason', 'recordHash', 'refundFor'] as const
+const OPTIONAL_FIELDS = ['amount', 'memo', 'chargeReason', 'recordHash', 'refundFor', 'forMember'] as const
 
 function draftTime(at?: string): { at: string; atMs: number } {
   const value = at ?? new Date().toISOString()
