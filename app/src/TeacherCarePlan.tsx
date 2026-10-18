@@ -6,6 +6,7 @@ import type { SendEnvelope } from './core/inbox'
 import { knownStudents } from './core/record/in-person'
 import { draftCarePlan } from './core/drafting/careplan'
 import { issueCarePlan, pendingCarePlan, retryCarePlan, PlanUndeliveredError, type CarePlanDraft } from './core/careplan/issue'
+import { loadRetentionDays, sendRetentionSetting } from './core/records/retention'
 
 export function TeacherCarePlan({ identity, store, student, llm, send }: {
   identity: Identity; store: LocalStore; student: string; llm: LlmClient | null; send?: SendEnvelope
@@ -45,6 +46,10 @@ export function TeacherCarePlan({ identity, store, student, llm, send }: {
         try {
           if (pending) await retryCarePlan({ identity, store, pendingKey: pending, send })
           else await issueCarePlan({ identity, store, student, draft, send })
+          // V2-05：保留期限随调养方案一起发给这位学生（学生端据此滚动删除自己的记录）。
+          if (send && student !== identity.publicKey) {
+            try { await sendRetentionSetting(send, identity.publicKey, await loadRetentionDays(store), [student]) } catch { /* 方案已发出，设置晚点再随下一次方案补发。 */ }
+          }
           setPending(null); setDraft(null); setInstruction('')
           setNotice(student === identity.publicKey ? '给自己的方案已确认，明天的建议会参考它。' : '调养方案已签发，学生明天的建议会参考它。')
           window.dispatchEvent(new Event('aster:data-changed'))

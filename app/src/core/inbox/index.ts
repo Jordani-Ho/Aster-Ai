@@ -10,6 +10,13 @@ import { verifyFamilyProof } from '../family/proof'
 import type { AdherenceReport } from '../adherence'
 import { INTAKE_COLLECTIONS, deleteDraft, restartAfterEmergency, type IntakeSession, type StoredPackage } from '../intake/session'
 import { localDay } from '../homework/schedule'
+import { saveTeacherRecord, rememberTeacherStudent } from '../records/teacher'
+import { updateFingerprint } from '../records/fingerprint'
+import { receiveRetentionSetting, RETENTION_TYPE } from '../records/retention'
+import {
+  backupEnvelope, backupForTeacher, loadRole, MAX_BACKUP_RECORDS, recordsForBackup,
+  RECORDS_BACKUP, RECORDS_PULL, RECORDS_REQUEST,
+} from '../records/backup'
 
 // M1-15a 串联：一个 createTransport 实例收到的信封按 type 分发给各模块。
 // - consult.package / consult.attachment：老师端问诊箱与附件（照片单独一条，避免 2 MB 单条上限）。
@@ -104,6 +111,7 @@ export interface InboxOptions {
   identity: Identity
   store: LocalStore
   ledger?: { receive(message: Message): Promise<void> }
+  send?: SendEnvelope
   now?: () => Date
 }
 
@@ -453,6 +461,8 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
     ...(managerInvalid ? { managerInvalid: true } : {}),
   }
   await store.put(INBOX_COLLECTIONS.consult, value.encounter.id, stored as unknown as StoreValue)
+  // V2-05：老师认得的学生的名单（只存公钥；换手机后靠它逐个向学生要回病历）。
+  await rememberTeacherStudent(store, value.encounter.student)
 }
 
 async function receiveAttachment(store: LocalStore, message: Message, payload: Record<string, unknown>, identity: Identity): Promise<void> {
@@ -601,10 +611,57 @@ export function createInbox(options: InboxOptions) {
         if (object(payload)) await receiveAdherence(store, message, payload)
         return
       }
+      if (type === RETENTION_TYPE) {
+        await receiveRetentionSetting(store, message)
+        return
+      }
+      if (type === RECORDS_REQUEST) {
+        await replyOwnRecords(store, message, options.send)
+        return
+      }
+      if (type === RECORDS_PULL) {
+        await replySavedRecords(identity, store, message, options.send)
+        return
+      }
+      if (type === RECORDS_BACKUP) {
+        await receiveRecordsBackup(identity, store, message, payload, now)
+        return
+      }
       if (type.startsWith('ledger.') && options.ledger) await options.ledger.receive(message)
       // 不认识的类型丢弃。
     },
   }
+}
+
+// records.request：学生请老师把保留期内的该学生记录发回来（老师端自动回，不用操作）。
+async function replyOwnRecords(store: LocalStore, message: Message, send: InboxOptions['send']): Promise<void> {
+  if (!send) return
+  if (await loadRole(store) !== 'teacher') return
+  if (typeof message.envelope.payload !== 'object' || message.envelope.payload === null) return
+  const records = await recordsForBackup(store, message.sender)
+  for (const record of records.slice(0, MAX_BACKUP_RECORDS)) await send(message.sender, backupEnvelope(record.event))
+}
+
+// records.pull：老师请学生把保存的、这位老师签的病历发回来（学生端自动回）。
+async function replySavedRecords(identity: Identity, store: LocalStore, message: Message, send: InboxOptions['send']): Promise<void> {
+  if (!send) return
+  if (await loadRole(store) !== 'student') return
+  if (!(await loadTeachers(store)).includes(message.sender)) return
+  const records = (await listReceivedRecords(store, identity)).filter(record => record.teacher === message.sender).slice(0, MAX_BACKUP_RECORDS)
+  for (const record of records) await send(message.sender, backupEnvelope(record.event))
+}
+
+// records.backup：学生端按老师名单收病历（与 record.signed 同一入库路径）；
+// 老师端只收自己签的、p 标签就是发件人的那份（学生回发备份）。
+async function receiveRecordsBackup(identity: Identity, store: LocalStore, message: Message, payload: unknown, now: () => Date): Promise<void> {
+  if ((await loadTeachers(store)).includes(message.sender)) {
+    await receiveSignedRecord(identity, store, message, payload, now)
+    return
+  }
+  if (await loadRole(store) !== 'teacher') return
+  const event = backupForTeacher(payload, identity.publicKey, message.sender)
+  if (!event) return
+  await saveTeacherRecord(store, event)
 }
 
 // 学生端病历页：只显示验签通过、且签名人在“我的老师”名单里的病历（旧数据也按名单过滤）；
@@ -644,8 +701,12 @@ export function groupReceivedRecords(records: readonly ReceivedRecord[]): Groupe
 
 export interface ConsultSigningOptions {
   identity: Identity
+  /** 老师本机存储：签字发送成功后把完整签名病历存进 teacher-records。 */
+  store: LocalStore
   consult: StoredConsult
   final: Encounter
+  /** AI 草稿（有的话）：用于记“草案 → 定稿”的思想指纹摘要。 */
+  draft?: Encounter
   send: SendEnvelope
   ledger?: LedgerRecorder
   charge?: number
@@ -689,15 +750,18 @@ async function recordCharge(
   }
 }
 
-// 老师签字交还：签字 → 发送 record.signed → 按需记一笔扣费。
-// V2-01：发送成功后不再删除问诊包/附件，也不写索引、日志与医案；记录删除由 V2-05 的保留期限统一处理。
+// 老师签字交还：签字 → 发送 record.signed → 存完整医案 → 按需记一笔扣费。
+// V2-05：发送成功后把完整签名病历存进 teacher-records（学生索引、医案检索、previousOf、recordHash 都从这里读）；
+// 问诊包与照片仍保留，按老师设定的保留期限统一删除。
 export async function completeConsultSigning(options: ConsultSigningOptions): Promise<ConsultSigningResult> {
   if (options.charge !== undefined && (!Number.isSafeInteger(options.charge) || options.charge <= 0)) throw new Error('扣费金额必须是正整数')
   const bookStudent = options.chargeBook?.student ?? options.final.student
   if (options.chargeBook?.student !== undefined && (typeof options.chargeBook.student !== 'string' || !HEX64.test(options.chargeBook.student))) throw new Error('代管人公钥格式无效')
   const signed = signEncounter(options.final, options.identity.privateKey)
   await options.send(options.consult.sender, { type: 'record.signed', version: 1, payload: signed })
-  const chargeError = await recordCharge(options.ledger, options.final.teacher, bookStudent, signed.id, options.charge, options.chargeBook?.forMember,options.currency)
+  await saveTeacherRecord(options.store, signed)
+  if (options.draft) await updateFingerprint(options.store, options.final.teacher, options.draft, options.final)
+  const chargeError = await recordCharge(options.ledger, options.final.teacher, bookStudent, signed.id, options.charge, options.chargeBook?.forMember, options.currency)
   return { signed, chargeError }
 }
 

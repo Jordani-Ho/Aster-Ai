@@ -73,8 +73,8 @@ test('M1-20 in person uses conversational intake, same drafting/revision/signatu
  await expect(teacher.getByText('SYNTHETIC_KEEP SYNTHETIC_DOSE',{exact:true})).toBeVisible()
  await teacher.getByRole('button',{name:'签字发出',exact:true}).click()
  await expect(teacher.getByRole('heading',{name:'已签字交还',exact:true})).toBeVisible()
- const result=await teacher.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return {drafts:await s.store.list('in-person-draft'),indices:await s.store.list('signed-encounters'),photos:await s.store.list('attachments')}}finally{s.store.close();s.identity.privateKey.fill(0)}})
- expect(result.drafts).toHaveLength(1);expect(JSON.stringify(result.drafts)).toContain('SYNTHETIC_FACE_RAW');expect(result.indices).toEqual([]);expect(result.photos).toHaveLength(0)
+ const result=await teacher.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return {drafts:await s.store.list('in-person-draft'),indices:await s.store.list('teacher-records'),photos:await s.store.list('attachments')}}finally{s.store.close();s.identity.privateKey.fill(0)}})
+ expect(result.drafts).toHaveLength(1);expect(JSON.stringify(result.drafts)).toContain('SYNTHETIC_FACE_RAW');expect(result.indices).toHaveLength(1);expect(result.photos).toHaveLength(0)
  const student=people.student.page
  await expect.poll(()=>student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return (await s.store.list('student-records')).length}finally{s.store.close();s.identity.privateKey.fill(0)}})).toBeGreaterThan(0)
  await student.getByRole('button',{name:'其他',exact:true}).click()

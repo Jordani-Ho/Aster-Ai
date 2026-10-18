@@ -39,14 +39,17 @@ V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`
 | `intake-attachments` | 采集照片处理后的 JPEG 字节（长边 ≤1600、≤500 KB） | 键为附件 id |
 | `profile` | 学生本机档案：称呼、性别、年龄、八字、城市（键 `self`） | 城市用于天气与真太阳时/时区 |
 | `student-records` | 学生收到的签名病历索引 `{id,teacher,createdAt,eventJson,version}` | 显示前重新验签 |
-| `settings` | 键 `role`、`teachers`（老师公钥数组）、`time-display`（时辰/钟点/两者）、`mirror-shichen`（照镜子时辰）等本机设置 | 家人分片内复制同一“我的老师”名单 |
-| `homework` | 作业 `{homework, startsOn}` | M1-13 |
+| `settings` | 键 `role`、`teachers`（老师公钥数组）、`time-display`、`mirror-shichen`、`retention-days`（老师设定的保留天数）、`last-retention-day`（上次清理日）、`last-backup-request`（上次备份请求日）、`restore-needed`（新进社区后待恢复） | 家人分片内复制同一“我的老师”名单 |
+| `homework` | 作业 `{homework, startsOn}` | M1-13；保留期限不删作业规则 |
 | `checkins` | 打卡 `{homeworkId, at, note?, shichen?, jieqi?, city?}` | 当日 00:00–00:59 的打卡算前一天（M1-23a 子时归日）；后三项为 V2-02 天时 |
-| `consult-package` | 老师端收到的问诊包（临时资料） | 签字交还后仍保留，删除由 V2-05 保留期限统一处理 |
-| `attachments` | 问诊包照片/语音字节 | 同上 |
+| `consult-package` | 老师端收到的问诊包（临时资料） | 按老师设定的保留期限删除 |
+| `attachments` | 问诊包照片/语音字节、面诊照片 | 同上；只留仍被记录引用的 |
 | `in-person-draft` | 老师端进行中的面诊草稿 | 同上 |
+| `teacher-records` | 老师端完整签名病历 `{eventId, encounterId, version, student, createdAt, eventJson}` | V2-05；不在则整块不存在，保留期限删除 |
+| `teacher-students` | 老师认得的学生的公钥名单 `{student}` | V2-05；换手机后逐个要回病历用，不含病历内容 |
+| `teacher-retention` | 学生端记下的每位老师的保留期限 `{teacher, days, updatedAt}`（键为老师公钥） | V2-05；多位老师取最短 |
+| `teacher-fingerprint` | 老师改稿习惯摘要 `{records, paths: {字段:{drafts,changed}}, updatedAt}`（键为老师公钥） | V2-05；只留计数，不受保留期限影响 |
 | `record-photo-index` / `record-photos` | 面诊照片索引与字节 | 学生核对签名引用后保存 |
-| `case-book` | 读取用的去标识医案（V2 起不再写入） | 无写入者时为空 |
 | `care-plans` | 调养方案（键为老师公钥） | 学生端只存名单内老师签发的最新版 |
 | `care-plan-pending` / `care-plan-issued` | 老师签发未送达的待发方案 / 版本索引 | |
 | `mirror` | 当日镜子建议缓存 `{greeting,today,trend}` | 同一天只生成一次 |
@@ -65,4 +68,4 @@ M1-22 家人分片：`store.scoped('f{account}-')` 在同一个库里给集合�
 
 - 本机数据不加密：能打开这台设备/浏览器库的人可以读取；V2 用“少留原文、按保留期限删除、由老师定保留”来控制风险（V2-03/V2-05）。
 - `list()` 一次读入该集合全部记录再返回；照片等大字节集合请按需 `get`。
-- 清理浏览器数据等同丢失本机资料，V2 不做助记词/备份恢复；换手机或清库后的数据恢复不在本卡。
+- 清理浏览器数据等同丢失本机资料（V2 没有助记词/身份恢复）；换手机后的记录恢复靠师生互为备份（V2-05）：记录被清空、身份还在时，连上中继会自动向老师和学生要回保留期内的记录。

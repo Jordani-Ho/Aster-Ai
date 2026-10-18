@@ -3,7 +3,8 @@ import type { LocalStore } from '../store'
 import type { Envelope, TransportOptions } from '../transport'
 import { createTransport } from '../transport'
 import { createLedgerSync } from '../ledger/sync'
-import { createInbox, flushIntakeOutbox, sendConsultPackage } from '../inbox'
+import { createInbox, flushIntakeOutbox, loadTeachers, sendConsultPackage } from '../inbox'
+import { autoRestore } from '../records/backup'
 import type { ConsultPackage } from '../record/types'
 
 // M1-15a：一个 createTransport 实例 + 一个收件分发 + 一个账本同步控制器。
@@ -30,7 +31,7 @@ export function createWiring(options: WiringOptions) {
     return id
   }
   const ledger = createLedgerSync({ identity, store, send, onChange: options.onChange, onError: options.onError })
-  const inbox = createInbox({ identity, store, ledger })
+  const inbox = createInbox({ identity, store, ledger, send })
   transport = createTransport({
     privateKey: identity.privateKey,
     relays: options.relays,
@@ -42,6 +43,11 @@ export function createWiring(options: WiringOptions) {
         transport.sync()
         // 重连后补一次对账与待发队列。
         void ledger.requestSync().then(() => ledger.flush()).catch(() => options.onError?.())
+        // V2-05：师生互为备份——连上中继后自动补发恢复请求（每天最多一次）。
+        void (async () => {
+          const teachers = await loadTeachers(store)
+          await autoRestore(store, teachers, send)
+        })().catch(() => {})
       }
     },
   })

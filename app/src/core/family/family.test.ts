@@ -109,7 +109,7 @@ describe('M1-22 family accounts', () => {
     const chargeStudents: string[] = []
     const toMember: Message['envelope'][] = []
     const result = await completeConsultSigning({
-      identity: teacher, consult: consults[0], final,
+      identity: teacher, store: teacherStore, consult: consults[0], final,
       send: async (student, envelope) => { expect(student).toBe(dadIdentity.publicKey); toMember.push(envelope) },
       ledger: { open: async () => {}, record: async (_teacher, student, draft) => { chargeStudents.push(student); charges.push(draft) } },
       charge: 3, currency:'CNY',
@@ -215,7 +215,7 @@ describe('M1-22 family accounts', () => {
       const students: string[] = []
       const final: Encounter = structuredClone(consult.encounter)
       await completeConsultSigning({
-        identity: teacher, consult, final,
+        identity: teacher, store: teacherStore, consult, final,
         send: async () => {},
         ledger: { open: async () => {}, record: async (_teacher, student) => { students.push(student) } },
         charge: 2, currency:'CNY',

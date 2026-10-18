@@ -15,6 +15,8 @@ import { createPushClient } from './core/push'
 import { TeacherListSettings } from './TeacherListSettings'
 import { StudentShell } from './StudentShell'
 import { loadFamilyMembers, memberIdentity, memberStore, type FamilyMember } from './core/family'
+import { markRestoreNeeded } from './core/records/backup'
+import { runRetentionOnce } from './core/records/retention'
 
 const TeacherWorkspace = lazy(() => import('./TeacherWorkspace').then(module => ({default:module.TeacherWorkspace})))
 
@@ -53,12 +55,23 @@ export function App() {
       storeRef.current=store;identityRef.current=person
       try {
         const invitation=readInviteLink(location.href)
-        if(invitation){await acceptInvite(person,store,invitation,gateway+'/invite/redeem');history.replaceState(null,'',location.pathname+location.search)}
+        if(invitation){
+          await acceptInvite(person,store,invitation,gateway+'/invite/redeem');history.replaceState(null,'',location.pathname+location.search)
+          // V2-05：重新进入社区后，连上中继时自动向老师要回保留期内的记录。
+          await markRestoreNeeded(store)
+        }
       } catch (cause) {setError(cause instanceof Error&&cause.message===INVITE_ERROR?INVITE_ERROR:'暂时未能加入社区，请稍后重新打开邀请。')}
       if(cancelled){store.close();person.privateKey.fill(0);return}
       const saved=await store.get('settings','role') as {role?:Role}|undefined
-      setRole(saved?.role??null);setIdentity(person)
-      void loadFamilyMembers(store).then(rows => { if (!cancelled) setFamily(rows) }).catch(() => {})
+      const nextRole=saved?.role??null
+      setRole(nextRole);setIdentity(person)
+      // V2-05 第 4 步：打开应用时每天跑一次保留期清理（不做后台任务）。
+      if(nextRole) void runRetentionOnce(store,nextRole).catch(()=>{})
+      void loadFamilyMembers(store).then(rows => {
+        if (cancelled) return
+        setFamily(rows)
+        for (const member of rows) void runRetentionOnce(memberStore(store,member.account),'student').catch(()=>{})
+      }).catch(() => {})
     }).catch(() => { if(!cancelled) setError('本机资料暂时无法打开，请稍后重试。') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true; stackRef.current?.close(); stackRef.current = null; storeRef.current?.close(); storeRef.current = null; identityRef.current?.privateKey.fill(0); identityRef.current = null }

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 import type { Encounter } from './types'
 import { signEncounter, verifySignedEncounter, type SignedEncounterEvent } from './sign'
+import { saveTeacherRecord } from '../records/teacher'
 import {
   IN_PERSON_COLLECTIONS,
   addInPersonPhoto,
@@ -122,19 +123,17 @@ describe('M1-12 面诊记录验收', () => {
     const signed = await signAndHandoverInPerson({
       encounter,
       privateKey: teacherKey,
+      store,
       send: async (type, payload) => { sent.push({ type, id: payload.id }) },
     })
     expect(sent).toHaveLength(1)
     expect(sent[0].type).toBe('record.signed')
     expect(sent[0].id).toBe(signed.id)
-    // V2-05 再管保留：照片字节与代录草稿都还在。
+    // V2-05：签字发送成功后完整签名病历进 teacher-records；照片字节与代录草稿都还在。
     expect(await store.get(IN_PERSON_COLLECTIONS.attachments, PHOTO.id)).toEqual(new Uint8Array([1, 2, 3]))
     expect(await store.get(IN_PERSON_COLLECTIONS.draft, encounter.id)).toBeDefined()
-    // 不再写索引、日志、医案或暂存。
-    expect(await store.list('signed-encounters')).toHaveLength(0)
+    expect(await store.list('teacher-records')).toHaveLength(1)
     expect(await store.list('record-log')).toHaveLength(0)
-    expect(await store.list('case-book')).toHaveLength(0)
-    expect(await store.list('pending-handover')).toHaveLength(0)
 
     // 未送达：错误原样上抛，资料和草稿都保留，也没有暂存。
     const offline = new MemoryStore()
@@ -144,21 +143,24 @@ describe('M1-12 面诊记录验收', () => {
     await expect(signAndHandoverInPerson({
       encounter: retryEncounter,
       privateKey: teacherKey,
+      store: offline,
       send: async () => { throw new Error('offline') },
     })).rejects.toThrow('offline')
     expect(await offline.get(IN_PERSON_COLLECTIONS.draft, retryEncounter.id)).toBeDefined()
     expect(await offline.get(IN_PERSON_COLLECTIONS.attachments, PHOTO.id)).toEqual(new Uint8Array([1, 2, 3]))
-    expect(await offline.list('pending-handover')).toHaveLength(0)
+    expect(await offline.list('teacher-records')).toHaveLength(0)
 
     // 老师再试一次即可：重新签字得到同一事件，发送成功后照片仍在。
     const resent: string[] = []
     const retried = await signAndHandoverInPerson({
       encounter: retryEncounter,
       privateKey: teacherKey,
+      store: offline,
       send: async (_type, payload) => { resent.push(payload.id) },
     })
     expect(resent).toEqual([retried.id])
     expect(await offline.get(IN_PERSON_COLLECTIONS.attachments, PHOTO.id)).toBeDefined()
+    expect(await offline.list('teacher-records')).toHaveLength(1)
   })
 
   it('5 界面 375px 可用，截图产物在 docs/screenshots', () => {
@@ -168,11 +170,16 @@ describe('M1-12 面诊记录验收', () => {
   })
 })
 
-it('M1-20 首次收到问诊即可选学生；本机面诊草稿也计入可选学生',async()=>{
-  const store=new MemoryStore()
-  await store.put('consult-package','first',{encounter:fresh()})
-  expect(await knownStudents(store)).toEqual([student])
-  const otherStudent=getPublicKey(generateSecretKey())
-  await saveInPersonDraft(store,startInPersonEncounter({teacher,student:otherStudent,now,id:'b'.repeat(32)}))
-  expect(await knownStudents(store)).toEqual([student,otherStudent].sort())
+it('V2-05：面诊“已有学生”只从 teacher-records 读，并按学生公钥去重', async () => {
+  const store = new MemoryStore()
+  const otherStudent = getPublicKey(generateSecretKey())
+  // 只有问诊包、没有签字医案时，不算“已有学生”。
+  await store.put('consult-package', 'first', { encounter: fresh() })
+  expect(await knownStudents(store)).toEqual([])
+  // 签字医案进来后按学生公钥去重（同一学生两份只算一个）。
+  const first = signEncounter(recordIntakeField(fresh(), 'chiefComplaint', 'SYNTHETIC_KNOWN').encounter, teacherKey)
+  await saveTeacherRecord(store, first)
+  const other = startInPersonEncounter({ teacher, student: otherStudent, now, id: 'b'.repeat(32) })
+  await saveTeacherRecord(store, signEncounter(recordIntakeField(other, 'chiefComplaint', 'SYNTHETIC_OTHER').encounter, teacherKey))
+  expect(await knownStudents(store)).toEqual([student, otherStudent].sort())
 })

@@ -13,6 +13,7 @@ import { prioritizeConsults,urgentConsult } from './core/inbox/priority'
 import { TeacherInboxPage } from './TeacherInboxPage'
 import { InPersonPage } from './InPersonPage'
 import { InviteSettings } from './InviteSettings'
+import { RetentionSettings } from './RetentionSettings'
 import './teacher.css'
 type Tab='今天'|'面诊'|'远程'|'管理'
 export function TeacherWorkspace({identity,store,stack,llm,gateway,settings,status,ledgerPanel,mirror,renderCarePlan}:{identity:Identity;store:LocalStore;stack:Wiring|null;llm:LlmClient|null;gateway:string;settings:ReactNode;status:ReactNode;ledgerPanel:ReactNode;mirror?:ReactNode;renderCarePlan?:(student:string)=>ReactNode}){
@@ -37,7 +38,7 @@ export function TeacherWorkspace({identity,store,stack,llm,gateway,settings,stat
       </main>}
       {tab==='面诊'&&<InPersonPage identity={identity} store={store} llm={llm} send={stack?.send} onBack={()=>setTab('今天')}/>}
       {tab==='远程'&&(stack?<TeacherInboxPage renderCarePlan={renderCarePlan??(student=><TeacherCarePlan key={student} identity={identity} store={store} student={student} llm={llm} send={stack.send}/>)} identity={identity} store={store} llm={llm} send={stack.send} ledger={stack.ledger} onBack={()=>setTab('今天')}/>:<main><h1>远程工作台</h1><p>暂未连接社区，请在管理页检查设置。</p></main>)}
-      {tab==='管理'&&<main><h1>管理</h1><section className="teacher-card">{ledgerPanel}</section><section className="teacher-card"><h2>邀请学生</h2><InviteSettings identity={identity} gateway={gateway}/></section><section className="teacher-card"><TemplateSettings store={store}/></section></main>}
+      {tab==='管理'&&<main><h1>管理</h1><section className="teacher-card">{ledgerPanel}</section><section className="teacher-card"><RetentionSettings identity={identity} store={store} send={stack?.send}/></section><section className="teacher-card"><h2>邀请学生</h2><InviteSettings identity={identity} gateway={gateway}/></section><section className="teacher-card"><TemplateSettings store={store}/></section></main>}
       <section hidden={tab!=='管理'} className="teacher-settings">{settings}</section>
     </div>
     <nav className="teacher-nav" aria-label="老师页面">{(['今天','面诊','远程','管理'] as Tab[]).map(name=><button key={name} aria-current={tab===name?'page':undefined} onClick={()=>setTab(name)}>{name}</button>)}</nav>

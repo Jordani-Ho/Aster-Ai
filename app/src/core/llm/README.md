@@ -6,7 +6,7 @@
 
 首次选择角色后必须测试本人模型成功，再保存并进入首页；旧用户无接入记录也要完成这一步。测试用 prompts/model-connection.md 的短句，绝不借后备模型冒充接入成功。修改凭证、服务商、地址或模型后必须重测。恢复有效设置直接使用，不强制再次联网。
 
-settings/personal-model 保存 {provider,baseUrl,model,apiKey,testedAt}，只经已有 AES-GCM LocalStore 写入，结构化中继和完整文件备份均包含。保存后触发既有备份组件检查；备份状态记录已捕获的 modelTestedAt，版本变化时即使当天已有成功备份也重做，失败仍保留本机设置并由原机制重试。不会写 localStorage、构建环境、URL 或日志。设置中已有凭证留空可保留，不回填密码输入框。家里网关仅将凭证临时放请求内存转发，不入业务存储。
+settings/personal-model 保存 {provider,baseUrl,model,apiKey,testedAt}，写入本机 LocalStore（V2 不加密、无备份）。不会写 localStorage、构建环境、URL 或日志。设置中已有凭证留空可保留，不回填密码输入框。家里网关仅将凭证临时放请求内存转发，不入业务存储。
 
 优先浏览器直连。只有 fetch TypeError（浏览器不能区分 CORS、DNS、TLS 等）才尝试签名 POST /v1/proxy，直连与代理共用 10 秒超时预算。HTTP 错误、超时及不合法回复在正常业务调用时才尝试原有 /v1/chat/completions 后备（另有 10 秒预算）；后备开关关闭或也失败时交回调用方既有固定问句/节气建议/保留草稿机制。流式输出一旦已有 token，不再切换另一模型拼接。后备成功才显示“今天用的是备用模型，请检查您的模型账户”。
 

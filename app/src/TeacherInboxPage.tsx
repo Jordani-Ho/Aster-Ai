@@ -25,6 +25,7 @@ import {
   type StoredConsult,
 } from './core/inbox'
 import type { Encounter } from './core/record/types'
+import { teacherCases } from './core/records/teacher'
 import type { Identity } from './core/identity'
 import type { LlmClient } from './core/llm'
 import type { LocalStore } from './core/store'
@@ -114,7 +115,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
       if (llm) {
         setStatus('正在整理草稿，老师看过整张卡片后签字发出。')
         let draftError = ''
-        next = await draftEncounter(pkg, await loadTeacherTemplate(store), [], llm, { level: 'prescription', onError: message => { draftError = message } })
+        next = await draftEncounter(pkg, await loadTeacherTemplate(store), await teacherCases(store), llm, { level: 'prescription', onError: message => { draftError = message } })
         if (draftError) throw Error(draftError)
         setStatus('草稿尚未签字，改稿不会自动发出。')
       } else {
@@ -138,7 +139,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
       const metric = calculateMetric(draft ?? final, final, startedAt.current, signedAt.current, currentReport(selected.sender)?.weeklyRate ?? null)
       // M1-22 一家一本账：只有代管证明验过的问诊才把扣费记到代管人那本账；否则按发件人自己处理。
       const chargeBook = consultChargeBook(selected)
-      const result = await completeConsultSigning({ identity, consult: selected, final, send, ledger, charge: amount,currency, ...(chargeBook ? { chargeBook } : {}) })
+      const result = await completeConsultSigning({ identity, store, consult: selected, final, ...(draft ? { draft } : {}), send, ledger, charge: amount, currency, ...(chargeBook ? { chargeBook } : {}) })
       if (result.chargeError) setStatus('已签字交还；扣费没有记上：' + result.chargeError)
       else setStatus('已签字交还。')
       try { await saveMetric(store, metricKey.current, metric); setRatingKey(metricKey.current) }
