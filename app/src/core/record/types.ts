@@ -75,4 +75,6 @@ export interface ConsultPackage {
   attachments: { ref: AttachmentRef; data: Uint8Array }[]
   /** 急症/自伤标记（M1-19）：只随传输信封给老师端看，不进 Encounter schema。 */
   redFlag?: { hit: boolean; crisis: boolean }
+  /** 最近 14 天状态与压力走势（M1-19）：只随传输信封给老师端看，不进 Encounter schema。 */
+  trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] }
 }

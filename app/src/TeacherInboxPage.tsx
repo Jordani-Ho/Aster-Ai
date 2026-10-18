@@ -34,6 +34,15 @@ function message(cause: unknown): string {
   return uiError(cause,'操作失败，请重试')
 }
 
+// 最近 14 天状态/压力小走势（M1-19 问诊包附带的只读数据，老师端草稿卡片展示）。
+function MiniTrend({ trend }: { trend: { days: string[]; scores: (number | null)[]; stress: (number | null)[] } }) {
+  const dots = (values: (number | null)[]) => values.map(value => (value === null ? '·' : String(value))).join(' ')
+  return <div className="mini-trend">
+    <p className="mini-trend-line">状态 {dots(trend.scores)}</p>
+    <p className="mini-trend-line">压力 {dots(trend.stress)}</p>
+  </div>
+}
+
 export interface TeacherInboxPageProps {
   identity: Identity
   store: LocalStore
@@ -158,7 +167,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
         {status && <p role="status" className="inbox-status">{status}</p>}
         {error && <p role="alert" className="inbox-error">{error}</p>}
       </div>
-      <section className="inbox-card"><h2>这位学生的调养方案</h2>{renderCarePlan ? renderCarePlan(selected.sender) : null}</section>
+      <section className="inbox-card">{selected.trend && <><h2>最近 14 天状态与压力</h2><MiniTrend trend={selected.trend} /></>}<h2>这位学生的调养方案</h2>{renderCarePlan ? renderCarePlan(selected.sender) : null}</section>
       <SignEncounterPage
         initial={draft}
         onConfirm={confirm}

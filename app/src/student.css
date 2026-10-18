@@ -54,6 +54,7 @@
 .mirror-trend-day { display: block; font-size: 10px; color: #aaa; }
 .mirror-trend-dot { display: block; font-size: 13px; color: #ccc; }
 .mirror-trend-dot.done { color: #0a6f4f; }
+.mirror-trend-dot.stress { color: #c26d1a; }
 .mirror-meta { font-size: 12px; color: #888; }
 
 .redflag-notice {

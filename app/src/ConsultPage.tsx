@@ -12,6 +12,8 @@ import {
   type IntakeKey, type IntakeSession,
 } from './core/intake'
 import { loadTeachers } from './core/inbox'
+import { listCheckins } from './core/homework'
+import { listSelfRatings, listStressRatings, last14DayTrend } from './core/mirror/trend'
 import { detectRegion } from './core/redflags'
 import { RedFlagAlert } from './RedFlagAlert'
 import { uiError } from './core/onboarding/ui'
@@ -133,7 +135,9 @@ export function ConsultPage({ store, identity, llm, sendConsult }: ConsultPagePr
       const candidates = await loadHistory(store, session.teacher)
       const history = defaultHistorySelection(candidates, session.teacher)
       const sendFn = sendConsult ?? (async () => {})
-      await confirmAndSend(store, session, await loadProfile(store), history, photos, sendFn)
+      const [checkins, ratings, stress] = await Promise.all([listCheckins(store), listSelfRatings(store), listStressRatings(store)])
+      const trend = last14DayTrend(checkins, ratings, stress)
+      await confirmAndSend(store, session, await loadProfile(store), history, photos, sendFn, trend)
       setSent(true)
       setSession({ ...session, phase: 'sent' })
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }

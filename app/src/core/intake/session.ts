@@ -250,6 +250,7 @@ export function buildConsultPackage(
   profile: Encounter['profile'],
   history: readonly HistoryCandidate[],
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
+  trend?: ConsultPackage['trend'],
 ): ConsultPackage {
   const checkResult = canConfirm(state)
   if (!checkResult.ok) throw new Error(checkResult.reason)
@@ -299,6 +300,7 @@ export function buildConsultPackage(
     history: history.map(candidate => candidate.eventJson),
     attachments: attachments.map(item => ({ ref: { ...item.ref }, data: item.data })),
     ...(redFlag ? { redFlag } : {}),
+    ...(trend ? { trend } : {}),
   }
 }
 
@@ -322,8 +324,9 @@ export async function confirmAndSend(
   history: readonly HistoryCandidate[],
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
   send: SendConsultPackage,
+  trend?: ConsultPackage['trend'],
 ): Promise<ConsultPackage> {
-  const pkg = buildConsultPackage(state, profile, history, attachments)
+  const pkg = buildConsultPackage(state, profile, history, attachments, trend)
   // 只有学生明确点“确认发送”才走到这里；之前任何一步都不调用 send。
   await send(pkg)
   await saveStoredPackage(store, pkg, INTAKE_COLLECTIONS.sent, state.encounterId)
