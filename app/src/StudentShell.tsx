@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useState, type ReactNode } from 'react'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
@@ -31,12 +31,15 @@ export interface StudentShellProps {
   persistence: PersistenceStatus
   defaultRelays: string[]
   onRestore: (result: Identity) => Promise<void>
+  /** M1-21 的模型提示（备用模型/恢复提示）与“我的大模型”设置，由 App 传入。 */
+  modelNotice?: ReactNode
+  modelSettings?: ReactNode
 }
 
 type Tab = 'mirror' | 'consult' | 'other'
 type OtherView = 'menu' | 'records' | 'homework'
 
-export function StudentShell({ store, identity, llm, stack, stackStatus, persistence, defaultRelays, onRestore }: StudentShellProps) {
+export function StudentShell({ store, identity, llm, stack, stackStatus, persistence, defaultRelays, onRestore, modelNotice, modelSettings }: StudentShellProps) {
   const [tab, setTab] = useState<Tab>('mirror')
   const [other, setOther] = useState<OtherView>('menu')
   const [allowReplace, setAllowReplace] = useState(false)
@@ -62,6 +65,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, persist
   return <div className="student-shell">
     <div className="student-main">
       <p role="status" className="relay-status">中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : stackStatus === 'rejected' ? '连接未成功，请联系老师' : '尚未连接'}</p>
+      {modelNotice}
       {tab === 'mirror' && <MirrorPage store={store} llm={llm} />}
       {tab === 'consult' && <ConsultPage store={store} identity={identity} llm={llm} sendConsult={stack?.sendConsult} />}
       {tab === 'other' && <main className="other-page">
@@ -73,6 +77,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, persist
         <p role="status" className="other-relay">中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : '尚未连接'}</p>
         {error && <p role="alert">{error}</p>}
         <details><summary>设置</summary>
+          {modelSettings}
           <LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} />
           <TeacherListSettings store={store} />
           <h3>存储状态</h3><p role="status">{persistenceLabels[persistence]}</p>
