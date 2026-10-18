@@ -1,6 +1,6 @@
 # M1-19 学生端三页：镜子、问诊（对话式）、其他
 
-- 状态：待派（DeepSeek，M1-17 与 M1-18 合并后开工）
+- 状态：已派（DeepSeek，2026-10-17）
 - 依据：`docs/product/two-agents.md`
 
 ## 范围
