@@ -109,6 +109,7 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   const exportRequests:string[]=[]
   const observe=(request:any)=>{if(/^https?:/.test(request.url()))exportRequests.push(request.url())}
   teacher.on('request',observe)
+  await settings(teacher)
   const downloadPromise=teacher.waitForEvent('download')
   await teacher.getByRole('button',{name:'导出试点指标',exact:true}).click()
   const csv=await readFile((await (await downloadPromise).path())!,'utf8'),lines=csv.trim().split(/\r?\n/),cells=lines[1].split(',')
