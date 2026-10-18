@@ -35,6 +35,8 @@ export interface ConsultEnvelopePayload {
   encounter: Encounter
   history: string[]
   attachments: AttachmentRef[]
+  /** 急症/自伤标记（M1-19）：只给老师端看，不进 Encounter schema。 */
+  redFlag?: { hit: boolean; crisis: boolean }
 }
 
 export interface AttachmentEnvelopePayload {
@@ -51,6 +53,8 @@ export interface StoredConsult {
   receivedAt: string
   sender: string
   droppedHistory: number
+  /** 急症/自伤标记（M1-19）：老师问诊箱据此醒目标出，只做展示不进入病历。 */
+  redFlag: { hit: boolean; crisis: boolean } | null
 }
 
 export interface ConsultReadiness {
@@ -193,6 +197,7 @@ export function consultEnvelope(pkg: ConsultPackage): Envelope {
       encounter: structuredClone(pkg.encounter),
       history: [...pkg.history],
       attachments: pkg.attachments.map(item => ({ ...item.ref })),
+      ...(pkg.redFlag ? { redFlag: pkg.redFlag } : {}),
     } satisfies ConsultEnvelopePayload,
   }
 }
@@ -297,6 +302,11 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
   if (!Array.isArray(value.attachments) || value.attachments.length > MAX_PHOTOS || !value.attachments.every(isRef)) return
   const history = Array.isArray(value.history) ? value.history : []
   const checked = validHistory({ ...value, history }, identity)
+  const redFlagRaw = value.redFlag as unknown
+  const redFlag = typeof redFlagRaw === 'object' && redFlagRaw !== null && !Array.isArray(redFlagRaw)
+    && typeof (redFlagRaw as { hit?: unknown }).hit === 'boolean' && typeof (redFlagRaw as { crisis?: unknown }).crisis === 'boolean'
+    ? { hit: (redFlagRaw as { hit: boolean }).hit, crisis: (redFlagRaw as { crisis: boolean }).crisis }
+    : null
   const stored: StoredConsult = {
     encounter: value.encounter,
     history: checked.history,
@@ -304,6 +314,7 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
     receivedAt: new Date().toISOString(),
     sender: message.sender,
     droppedHistory: checked.dropped,
+    redFlag,
   }
   await store.put(INBOX_COLLECTIONS.consult, value.encounter.id, stored as unknown as StoreValue)
 }

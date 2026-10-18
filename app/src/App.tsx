@@ -1,4 +1,3 @@
-import { DailyMirrorCard } from './DailyMirrorCard'
 import { PasskeySettings, configuredRelays } from './PasskeySettings'
 import { authenticatePasskey } from './core/onboarding/passkey'
 import { recoverPasskey } from './core/onboarding/identity-relay'
@@ -24,10 +23,10 @@ import { persistenceLabels, requestPersistence, type PersistenceStatus } from '.
 import { createWiring, type Wiring } from './core/wiring'
 import { createPushClient } from './core/push'
 import { TeacherListSettings } from './TeacherListSettings'
+import { StudentShell } from './StudentShell'
 
 const TeacherWorkspace = lazy(() => import('./TeacherWorkspace').then(module => ({default:module.TeacherWorkspace})))
 const HomeworkPage = lazy(() => import('./HomeworkPage').then(module => ({ default: module.HomeworkPage })))
-const IntakePage = lazy(() => import('./IntakePage').then(module => ({ default: module.IntakePage })))
 const StudentRecordsPage = lazy(() => import('./StudentRecordsPage').then(module => ({ default: module.StudentRecordsPage })))
 
 type Role = 'student' | 'teacher'
@@ -46,7 +45,6 @@ export function App() {
   const [restoreNotice,setRestoreNotice]=useState('')
   const [locked,setLocked]=useState(false),[recovering,setRecovering]=useState(false),[allowReplace,setAllowReplace]=useState(false)
   const [homeworkPage, setHomeworkPage] = useState(false)
-  const [intakePage, setIntakePage] = useState(false)
   const [recordsPage, setRecordsPage] = useState(false)
   const [stackRevision, setStackRevision] = useState(0)
   const [role, setRole] = useState<Role | null>(null)
@@ -152,7 +150,7 @@ export function App() {
     setIdentity(null);setRole(null);setModelConfig(undefined);setRestoreNotice('')
     await clearStore()
     const fresh=await openStore(result);storeRef.current=fresh;identityRef.current=result;await after?.(fresh);const saved=await fresh.get('settings','role') as {role?:Role}|undefined;setRole(saved?.role??null);setIdentity(result);setLocked(false)
-    setIntakePage(false);setRecordsPage(false);setHomeworkPage(false);setError('')
+    setRecordsPage(false);setHomeworkPage(false);setError('')
   }
   const chooseRole = async (next: Role) => {
     setError('')
@@ -168,8 +166,9 @@ export function App() {
   const modelNotice=<>{restoreNotice&&<p role="status">{restoreNotice}</p>}{backupModel&&<p role="status" style={{fontSize:12}}>今天用的是备用模型，请检查您的模型账户</p>}</>
   const modelSettings=store?<details><summary>我的大模型</summary><ModelSettings key={modelConfig?.testedAt??'new'} store={store} gateway={modelGateway} current={modelConfig??null} onSaved={config=>{setModelConfig(config);window.dispatchEvent(new Event('aster:model-changed'))}}/></details>:null
   if(identity&&role&&store&&!modelConfig)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1>{modelNotice}{modelConfig===undefined?<p>正在读取接入设置…</p>:<><ModelSettings initial store={store} gateway={modelGateway} current={null} onSaved={setModelConfig}/>{role==='teacher'&&<details><summary>社区首次登记</summary><InviteSettings identity={identity} gateway={gateway}/></details>}<details><summary>从备份恢复接入</summary><BackupSettings onRestored={setRestoreNotice} identity={identity} store={store}/><AdvancedRecovery store={store} onRestore={replaceIdentity}/></details></>}</main>
+  // 学生端三个底部标签（镜子/问诊/其他）；老师端走 TeacherWorkspace 四页。模型由 M1-21 的 personal client 提供。
+  if (store && identity && role === 'student') return <StudentShell store={store} identity={identity} llm={llm} stack={stack} stackStatus={stackStatus} persistence={persistence} defaultRelays={defaultRelays} onRestore={replaceIdentity} />
   if (homeworkPage && store && identity) return <>{modelNotice}<div hidden><BackupSettings onRestored={setRestoreNotice} identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={store} onBack={() => setHomeworkPage(false)} /></Suspense></>
-  if (intakePage && store && identity) return <>{modelNotice}<div hidden><BackupSettings onRestored={setRestoreNotice} identity={identity} store={store} /><LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} /></div><Suspense fallback={<p>正在打开采集页…</p>}><IntakePage store={store} identity={identity} llm={llm} sendConsult={stack?.sendConsult} onBack={() => setIntakePage(false)} /></Suspense></>
   if (recordsPage && store && identity) return <Suspense fallback={<p>正在打开病历…</p>}><StudentRecordsPage identity={identity} store={store} onBack={() => setRecordsPage(false)} /></Suspense>
   if (role==='teacher' && store && identity) return <Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherWorkspace identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} status={<>{modelNotice}<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p></>} ledgerPanel={<LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus}/>} settings={<details><summary>设置</summary>
       <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button onClick={()=>void chooseRole('student')}>我是学生</button></details>
@@ -185,12 +184,6 @@ export function App() {
     {loading&&<p>正在准备…</p>}{error&&<p role="alert">{error}</p>}
     {!loading&&locked&&<button onClick={()=>void(async()=>{try{const {key}=await authenticatePasskey(),session=await resumeStore({unlockKey:key});if(!session)throw Error();storeRef.current=session.store;identityRef.current=session.identity;const saved=await session.store.get('settings','role') as {role?:Role}|undefined;setRole(saved?.role??null);setIdentity(session.identity);setLocked(false);setError('')}catch{setError('解锁未完成，请重试或使用恢复资料。')}})()}>刷脸解锁</button>}
     {!loading&&identity&&!role&&<section><h2>您是老师还是学生？</h2><button onClick={()=>void chooseRole('teacher')}>我是老师</button>{' '}<button onClick={()=>void chooseRole('student')}>我是学生</button></section>}
-    {identity&&role&&<>
-      <h2>{role==='teacher'?'老师首页':'问诊首页'}</h2>
-      <p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':stackStatus==='rejected'?'连接未成功，请联系老师':'尚未连接'}</p>
-      {store&&<section><h2>我的镜子</h2><DailyMirrorCard store={store} llm={llm}/></section>}
-      {<><p><button onClick={()=>setIntakePage(true)}>开始采集</button></p><p><button onClick={()=>setRecordsPage(true)}>我的病历</button></p><p><button onClick={()=>setHomeworkPage(true)}>今日作业</button></p></>}
-    </>}
     {store&&identity&&<details><summary>设置</summary>
       <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button disabled={role==='student'} onClick={()=>void chooseRole('student')}>我是学生</button></details>
       {modelSettings}<TeacherListSettings store={store}/>{role==='teacher'&&<PilotSettings store={store}/>}

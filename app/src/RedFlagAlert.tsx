@@ -1,56 +1,28 @@
-import { contactsForAlert } from './core/redflags'
+import { getContact } from './core/redflags'
 import type { RedFlagResult } from './core/redflags'
 
 interface RedFlagAlertProps {
   result: RedFlagResult
   region: string | null
-  status: string
-  onNotifyTeacher: () => void
-  onDismiss: () => void
 }
 
-// 全屏急症提示。只说“请就医”，不给诊断或分诊结论。
-// 同时命中急症与自伤时，急救电话在前、心理援助热线在后，两个都显示。
-export function RedFlagAlert({ result, region, status, onNotifyTeacher, onDismiss }: RedFlagAlertProps) {
-  const contacts = contactsForAlert(result, region)
-  const emergency = contacts.find(item => item.action === 'emergency')
-  const crisis = contacts.find(item => item.action === 'crisis')
-  const showEmergency = result.actions.includes('emergency')
-  const showCrisis = result.actions.includes('crisis')
+// M1-19 新规则：急症只在对话里内联提示“请尽快去医院”，不显示任何电话号码，不拦截发送；
+// 唯一例外是自伤/轻生类，只显示心理援助热线（不给急救号码）。M1-04 规则引擎本身不变。
+export function RedFlagAlert({ result, region }: RedFlagAlertProps) {
+  const crisis = result.actions.includes('crisis')
+  const hotline = crisis ? getContact(region, 'crisis') : null
   return (
-    <div
-      role="alertdialog"
-      aria-modal="true"
-      aria-label="急症提示"
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: '#fff', color: '#111', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 16, padding: 24, overflowY: 'auto' }}
-    >
-      <p style={{ margin: 0, fontWeight: 700, letterSpacing: 2 }}>急症提示</p>
-      <h1 style={{ margin: 0, fontSize: 32, lineHeight: 1.2 }}>请立即就医</h1>
-      {showCrisis && <p style={{ margin: 0 }}>你并不孤单。如果现在就处于危险中，请立即联系专业援助。</p>}
-      {showEmergency && (
-        <p style={{ margin: 0, fontSize: 28 }}>
-          <span style={{ fontSize: 14, color: '#555', marginRight: 8 }}>急救</span>
-          {emergency
-            ? <><strong>{emergency.contact.number}</strong>{emergency.contact.name ? ' · ' + emergency.contact.name : ''}</>
-            : '请拨打当地急救电话'}
-        </p>
+    <div role="alert" className="redflag-notice">
+      {crisis ? (
+        <>
+          <p>你并不孤单。如果现在就处于危险中，请立即联系专业援助。</p>
+          {hotline
+            ? <p className="redflag-hotline"><strong>{hotline.number}</strong>{hotline.name ? ' · ' + hotline.name : ''}</p>
+            : <p className="redflag-hotline">请拨打当地心理援助热线，或让可信任的人陪着你。</p>}
+        </>
+      ) : (
+        <p>您说的情况需要尽快去医院，请不要耽误。</p>
       )}
-      {showCrisis && (
-        <p style={{ margin: 0, fontSize: 28 }}>
-          <span style={{ fontSize: 14, color: '#555', marginRight: 8 }}>心理援助</span>
-          {crisis
-            ? <><strong>{crisis.contact.number}</strong>{crisis.contact.name ? ' · ' + crisis.contact.name : ''}</>
-            : '请拨打当地心理援助热线，或让可信任的人陪着你'}
-        </p>
-      )}
-      <p style={{ margin: 0, color: '#555' }}>这是本地筛查，不是诊断；如有紧急情况，请立即前往医院或拨打急救电话。</p>
-      {result.matched.length > 0 && <p style={{ margin: 0, color: '#555' }}>检测到：{result.matched.join('、')}</p>}
-      {result.source === 'model' && <p style={{ margin: 0, color: '#555' }}>由模型复核补充</p>}
-      {status && <p role="status">{status}</p>}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <button type="button" onClick={onNotifyTeacher}>通知老师</button>
-        <button type="button" onClick={onDismiss}>我已知晓</button>
-      </div>
     </div>
   )
 }

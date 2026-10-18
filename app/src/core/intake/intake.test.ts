@@ -23,7 +23,6 @@ import {
   loadDraft,
   markReviewed,
   organizeSession,
-  restartAfterEmergency,
   saveDraft,
   skipFocus,
   startSession,
@@ -153,15 +152,15 @@ describe('M1-09 学生采集验收', () => {
     expect(canConfirm(markReviewed(state)).ok).toBe(true)
   })
 
-  it('3 命中急症立即中断，不能发送；点我已知晓后可以重新开始', () => {
+  it('3 命中急症只标记不阻断，包上带 redFlag 仍可发送', () => {
     let state = addUtterance(fresh(), '胸口压着疼，出冷汗')
     expect(state.emergency?.hit).toBe(true)
-    expect(canConfirm(state).ok).toBe(false)
-    expect(() => buildConsultPackage(state, emptyProfile(), [], [])).toThrow()
-    const restarted = restartAfterEmergency(state, now)
-    expect(restarted.emergency).toBeNull()
-    expect(restarted.texts).toEqual([])
-    expect(restarted.encounterId).not.toBe(state.encounterId)
+    // 不阻断：还能继续说话、还能进包。
+    expect(() => addUtterance(state, '还有点头晕')).not.toThrow()
+    const confirmed = markReviewed({ ...state, phase: 'confirm' })
+    expect(canConfirm(confirmed).ok).toBe(true)
+    const pkg = buildConsultPackage(confirmed, emptyProfile(), [], [])
+    expect(pkg.redFlag).toEqual({ hit: true, crisis: false })
   })
 
   it('4 带 GPS EXIF 的合成 JPEG 处理后没有 EXIF、不超过 500 KB，长边 ≤1600', async () => {
@@ -323,18 +322,20 @@ describe('M1-09 学生采集验收', () => {
     expect(outcome.questions.length).toBeLessThanOrEqual(2)
   })
 
-  it('9 确认页把字段改成急症描述后不能发送，send 不会被调用；发送前再查一遍', async () => {
+  it('9 确认页把字段改成急症描述后仍可发送，包上带 redFlag；发送前再查一遍', async () => {
     const store = new MemoryStore()
     const state = await confirmedOffline()
     const risky = updateField(state, 'chiefComplaint', '胸口压着疼，出冷汗')
     expect(risky.emergency?.hit).toBe(true)
-    expect(canConfirm(risky).ok).toBe(false)
+    const reviewed = markReviewed(risky)
+    expect(canConfirm(reviewed).ok).toBe(true)
     const send = vi.fn().mockResolvedValue(undefined)
-    await expect(confirmAndSend(store, risky, emptyProfile(), [], [], send)).rejects.toThrow()
-    expect(send).not.toHaveBeenCalled()
-    // 纵深防御：即使状态里没有 emergency，buildConsultPackage 也会重新检查 intake 全字段。
-    const tampered: IntakeSession = { ...risky, emergency: null, reviewed: true }
-    expect(() => buildConsultPackage(tampered, emptyProfile(), [], [])).toThrow('急症')
+    const pkg = await confirmAndSend(store, reviewed, emptyProfile(), [], [], send)
+    expect(send).toHaveBeenCalled()
+    expect(pkg.redFlag).toEqual({ hit: true, crisis: false })
+    // 纵深防御：即使状态里没有 emergency，buildConsultPackage 也会重新检查并标记。
+    const tampered: IntakeSession = { ...reviewed, emergency: null }
+    expect(buildConsultPackage(tampered, emptyProfile(), [], []).redFlag).toEqual({ hit: true, crisis: false })
   })
 
   it('10 附件必须与确认页逐个一致（id、sha256、bytes），否则拒绝', async () => {

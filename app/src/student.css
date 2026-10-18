@@ -1,0 +1,96 @@
+.student-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+.student-main {
+  flex: 1;
+  padding-bottom: 72px;
+}
+.tabbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  height: 56px;
+  border-top: 1px solid #e5e5e5;
+  background: #fff;
+  z-index: 50;
+}
+.tabbar .tab {
+  flex: 1;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 15px;
+  color: #666;
+}
+.tabbar .tab.active { color: #0a6f4f; font-weight: 700; }
+
+.mirror-page, .consult-page, .other-page {
+  padding: 16px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.consult-page { padding-bottom: 140px; }
+.mirror-page header, .consult-page header, .other-page header { margin-bottom: 12px; }
+.eyebrow { margin: 0; font-size: 12px; color: #888; letter-spacing: 2px; }
+.mirror-page h1, .consult-page h1, .other-page h1 { margin: 4px 0 0; font-size: 24px; }
+.mirror-card, .consult-card {
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 14px;
+  margin: 10px 0;
+}
+.mirror-card h2 { margin: 0 0 8px; font-size: 16px; }
+.mirror-weather { color: #555; font-size: 13px; margin: 4px 0 8px; }
+.mirror-today { margin: 0; padding-left: 18px; }
+.mirror-today li { margin: 4px 0; }
+.mirror-homework { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+.mirror-rating { display: flex; gap: 6px; flex-wrap: wrap; }
+.mirror-rating button { flex: 1; min-width: 52px; padding: 8px 4px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa; }
+.mirror-rating button span { display: block; font-size: 11px; color: #888; }
+.mirror-trend { display: flex; gap: 2px; list-style: none; padding: 8px 0 0; margin: 0; overflow-x: auto; }
+.mirror-trend li { text-align: center; min-width: 22px; }
+.mirror-trend-day { display: block; font-size: 10px; color: #aaa; }
+.mirror-trend-dot { display: block; font-size: 13px; color: #ccc; }
+.mirror-trend-dot.done { color: #0a6f4f; }
+.mirror-meta { font-size: 12px; color: #888; }
+
+.redflag-notice {
+  border: 1px solid #e0b23a;
+  background: #fff7e6;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0;
+}
+.redflag-notice p { margin: 4px 0; }
+.redflag-hotline { font-size: 16px; }
+
+.chat { padding: 8px 0; }
+.bubble { max-width: 85%; padding: 10px 12px; border-radius: 12px; margin: 6px 0; }
+.bubble.student { margin-left: auto; background: #e8f5ef; }
+.bubble.ai { margin-right: auto; background: #f2f2f2; }
+.bubble-focus { margin: 0; font-size: 12px; color: #0a6f4f; }
+.bubble-actions { margin-top: 6px; }
+.consult-note { font-size: 12px; color: #888; }
+.consult-card label { display: block; margin: 8px 0; }
+.consult-card textarea { width: 100%; box-sizing: border-box; }
+.consult-send {
+  display: block; width: 100%; padding: 14px; margin-top: 12px;
+  background: #0a6f4f; color: #fff; border: none; border-radius: 12px; font-size: 17px;
+}
+.consult-input-row {
+  position: fixed; left: 0; right: 0; bottom: 56px;
+  display: flex; gap: 6px; align-items: flex-end; padding: 8px;
+  background: #fff; border-top: 1px solid #e5e5e5; z-index: 60;
+  max-width: 480px; margin: 0 auto;
+}
+.consult-input-row textarea { flex: 1; resize: none; padding: 10px; border: 1px solid #ddd; border-radius: 10px; }
+.consult-camera { padding: 10px; background: none; border: none; font-size: 20px; }
+.consult-send-btn { padding: 10px 14px; background: #0a6f4f; color: #fff; border: none; border-radius: 10px; }
+.consult-error { color: #b00020; }
+.consult-status { color: #555; }
+
+.other-menu { display: grid; gap: 8px; }
+.other-menu button { padding: 14px; border: 1px solid #eee; border-radius: 12px; background: #fafafa; font-size: 15px; text-align: left; }
+.other-relay { font-size: 13px; color: #555; }
