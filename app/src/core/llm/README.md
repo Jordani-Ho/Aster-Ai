@@ -37,3 +37,5 @@ settings/personal-model 保存 {provider,baseUrl,model,apiKey,testedAt}，只经
 | 其他兼容接口 | 取决于用户填的服务商，未验 | |
 
 每次 NIP-98 请求仍用 crypto.getRandomValues 生成 128 位随机 nonce，合法重试不复用旧事件，网关继续拒绝原事件重放。
+
+V2-03 的独立视觉路径见 [vision.md](vision.md)。它只调用本人所选视觉模型，不复用家里后备或图片代理；存储与 UI 接线待 V2-01。

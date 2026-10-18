@@ -10,3 +10,5 @@
 | 子午流注、节气 | `calendar/` | 已实现（M1-13，待审核） |
 | 通用节气养生 | `seasonal.json`（类型与查询在 `seasonal.ts`） | M1-18：24 节气起居/饮食/情志要点，只写养生常识不写药方 |
 | 擅长方向标签表 | `specialties.json` | M2 |
+
+V2-03：tongue-features.json 定义舌象外观取值与配色，tongue.ts 负责严格校验和固定路径的标准 SVG；不输出诊断，也不使用照片像素。
