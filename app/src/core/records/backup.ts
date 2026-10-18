@@ -108,6 +108,8 @@ export async function autoRestore(store: LocalStore, teachers: readonly string[]
   if (last === today) return false
   if (role === 'student') {
     if (teachers.length === 0) return false
+    // 只在“要恢复”或本机一份病历都没有时才请求，避免每次打开都向老师要一遍。
+    if (!(await restoreNeeded(store)) && (await store.list('student-records')).length > 0) return false
     await requestOwnRecords(store, teachers, send)
   } else {
     if ((await listTeacherRecords(store)).length > 0) return false
