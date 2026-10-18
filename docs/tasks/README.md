@@ -29,7 +29,7 @@
 
 ## M1 单师闭环：任务清单
 
-✅ **M1 代码全部完成**（M1-01 至 M1-15b）。施工中：M1-16 内测部署（DeepSeek）、**[M1-17 无感上手](M1-17-frictionless-onboarding.md)**（Codex，发起人自测前必须完成）。共用的病历格式见 `docs/schemas/encounter.md`。详细卡片由技术合伙人按顺序展开，**领卡前先确认卡片已经展开**。
+✅ **M1 代码全部完成**（M1-01 至 M1-16）。**内测前的改版**（依据 `docs/product/two-agents.md`）：Codex 做 [M1-17 无感上手](M1-17-frictionless-onboarding.md) → [M1-20 老师四页](M1-20-teacher-four-pages.md)；DeepSeek 做 [M1-18 镜子核心](M1-18-mirror-core.md) → [M1-19 学生三页](M1-19-student-three-pages.md)。共用的病历格式见 `docs/schemas/encounter.md`。详细卡片由技术合伙人按顺序展开，**领卡前先确认卡片已经展开**。
 
 | 编号 | 任务 | 依赖 | 白皮书 | 核心验收 |
 | :-- | :-- | :-- | :-- | :-- |
