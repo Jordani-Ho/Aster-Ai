@@ -1,4 +1,5 @@
-import { TongueFigure } from './TongueFigure'
+import { TonguePair } from './TonguePair'
+import { parseTongueAbstract, type TongueAbstract } from '../../domain/tcm/tongue'
 import { toMinor, moneyCurrencyFor } from './core/ledger/money'
 import { recordObservation } from './core/kangbi'
 import { CarePlanStudentPicker } from './TeacherCarePlan'
@@ -18,6 +19,7 @@ import {
   completeConsultSigning,
   consultReadiness,
   draftPackage,
+  INBOX_COLLECTIONS,
   listConsults,
   type ConsultReadiness,
   type LedgerRecorder,
@@ -60,7 +62,7 @@ export interface TeacherInboxPageProps {
   llm?: LlmClient | null
 }
 
-// 老师端问诊箱：列出收到的问诊包；照片到齐才能起草，缺照片时显示“照片还在路上”。
+// 老师端问诊箱：列出收到的问诊包；附件（照片、舌头裁剪图）到齐才能起草，缺附件时显示“附件还在路上”。
 // 起草复用 M1-10，审改签字与交还复用 M1-11，扣费走 M1-14b 的账本记录。
 export function TeacherInboxPage({ identity, store, onBack, send, ledger, renderCarePlan, llm = null }: TeacherInboxPageProps) {
   const startedAt = useRef(0), signedAt = useRef<number | null>(null), metricKey = useRef('')
@@ -71,6 +73,8 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
   const [readiness, setReadiness] = useState<Record<string, ConsultReadiness>>({})
   const [selected, setSelected] = useState<StoredConsult | null>(null)
   const [draft, setDraft] = useState<Encounter | null>(null)
+  // V2-08：老师逐项改过的舌象；签字时替换进病历，模型原值留作思想指纹差异对照。
+  const [tongues, setTongues] = useState<TongueAbstract[] | null>(null)
   const [charge, setCharge] = useState('')
   const [currency,setCurrency]=useState('')
   useEffect(()=>{let active=true;setCurrency('');const student=selected?(consultChargeBook(selected)?.student??selected.encounter.student):undefined;void moneyCurrencyFor(store,identity.publicKey,student).then(value=>{if(active)setCurrency(value??'')}).catch(()=>{if(active)setError('钱账币种读取失败，请核对钱账')});return()=>{active=false}},[store,identity.publicKey,selected])
@@ -129,6 +133,8 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
       // V2-06：签字病历沿用问诊包里的天地人，不重新取；草稿卡片上也带着它。
       const heaven = ready.heaven ?? ready.encounter.heaven
       setDraft(heaven && !next.heaven ? { ...next, heaven: { ...heaven } } : next)
+      // V2-08：并排对照与逐项改值只在老师端；候选值来自模型，裁剪图从附件里读。
+      setTongues(next.intake.tongues?.length ? next.intake.tongues.map(record => parseTongueAbstract(record)) : null)
       setCharge('')
       setDone(false)
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -138,18 +144,22 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
     if (!selected) return
     setError(''); setStatus('')
     try {
+      // V2-08：老师逐项改过的舌象替换进签字病历；模型原值仍在 draft 里，供思想指纹记差异计数。
+      const signedFinal: Encounter = tongues && final.intake.tongues
+        ? { ...final, intake: { ...final.intake, tongues: tongues.map(record => parseTongueAbstract(record)) } }
+        : final
       const amount=charge.trim()===''?undefined:toMinor(charge.trim(),currency)
       signedAt.current ??= Date.now()
       // M1-23a：试点指标多一列“作业坚持率”（学生发来的本周坚持率；没有就留空）。
-      const metric = calculateMetric(draft ?? final, final, startedAt.current, signedAt.current, currentReport(selected.sender)?.weeklyRate ?? null)
+      const metric = calculateMetric(draft ?? signedFinal, signedFinal, startedAt.current, signedAt.current, currentReport(selected.sender)?.weeklyRate ?? null)
       // M1-22 一家一本账：只有代管证明验过的问诊才把扣费记到代管人那本账；否则按发件人自己处理。
       const chargeBook = consultChargeBook(selected)
-      const result = await completeConsultSigning({ identity, store, consult: selected, final, ...(draft ? { draft } : {}), send, ledger, charge: amount, currency, ...(chargeBook ? { chargeBook } : {}) })
+      const result = await completeConsultSigning({ identity, store, consult: selected, final: signedFinal, ...(draft ? { draft } : {}), send, ledger, charge: amount, currency, ...(chargeBook ? { chargeBook } : {}) })
       if (result.chargeError) setStatus('已签字交还；扣费没有记上：' + result.chargeError)
       else setStatus('已签字交还。')
       try { await saveMetric(store, metricKey.current, metric); setRatingKey(metricKey.current) }
       catch { setStatus(previous => previous + ' 试点指标未能保存，不影响已交还病历。') }
-      setSelected(null); setDraft(null)
+      setSelected(null); setDraft(null); setTongues(null)
       try {await recordObservation(store,{id:result.signed.id,student:selected.encounter.student,teacher:identity.publicKey,at:new Date(signedAt.current!).toISOString(),practiceDays:0,teacherMinutes:Math.max(0,(signedAt.current!-startedAt.current)/60000),consultations:1,effects:{teacher:null,self:null,measurement:null}})}
       catch {setStatus(previous=>previous+' 观察时长暂未保存，不影响已交还病历。')}
       setDone(true)
@@ -172,9 +182,9 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
       </section>}
       <section className="inbox-card">
         <p>学生已收到这份签名病历；作业会自动进入学生的“今日作业”。</p>
-        <p className="inbox-note">问诊包与照片仍在本机；记录删除按老师设定的保留期限统一处理。</p>
+        <p className="inbox-note">问诊包与附件仍在本机；记录删除按老师设定的保留期限统一处理。</p>
         {status && <p role="status" className="inbox-status">{status}</p>}
-        <div className="inbox-actions"><button onClick={() => { setDone(false); setSelected(null); setDraft(null); void refresh() }}>返回问诊箱</button><button onClick={onBack}>返回首页</button></div>
+        <div className="inbox-actions"><button onClick={() => { setDone(false); setSelected(null); setDraft(null); setTongues(null); void refresh() }}>返回问诊箱</button><button onClick={onBack}>返回首页</button></div>
       </section>
     </main>
   }
@@ -189,13 +199,32 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
         {error && <p role="alert" className="inbox-error">{error}</p>}
       </div>
       {heavenLineText && <p className="inbox-note" role="status">{heavenLineText}</p>}
-      <section className="inbox-card">{selected.encounter.intake.tongues?.map((record,index)=><TongueFigure key={index} record={record}/>)}{selected.trend && <><h2>最近 14 天状态与压力</h2><MiniTrend trend={selected.trend} /></>}<h2>这位学生的调养方案</h2>{renderCarePlan ? renderCarePlan(selected.sender) : null}</section>
+      <section className="inbox-card">
+        {tongues?.map((record, index) => {
+          const candidate = selected.encounter.intake.tongues?.[index]
+          return <TonguePair
+            key={'tongue-' + index}
+            record={record}
+            {...(candidate ? { candidate } : {})}
+            editable
+            title={`舌象 ${index + 1} · ${record.shichen}时 · ${record.jieqi} · ${record.city}`}
+            loadCrop={async () => {
+              const id = record.crop?.id
+              if (!id) return null
+              const data = await store.get(INBOX_COLLECTIONS.attachments, id)
+              return data instanceof Uint8Array ? data : null
+            }}
+            missingCropState="expired"
+            onChange={next => setTongues(list => list ? list.map((item, i) => i === index ? next : item) : list)}
+          />
+        })}
+        {selected.trend && <><h2>最近 14 天状态与压力</h2><MiniTrend trend={selected.trend} /></>}<h2>这位学生的调养方案</h2>{renderCarePlan ? renderCarePlan(selected.sender) : null}</section>
       <SignEncounterPage
         initial={draft}
         onConfirm={confirm}
         onRevise={llm ? (encounter, instruction) => reviseEncounter(encounter, instruction, llm) : undefined}
         onCancel={() => {
-          setSelected(null); setDraft(null)
+          setSelected(null); setDraft(null); setTongues(null)
           void refresh().catch(() => setError('问诊箱刷新失败，请稍后重试。'))
         }}
       />
@@ -206,7 +235,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
     <header className="inbox-head">
       <button className="inbox-back" onClick={onBack}>返回</button>
       <h1>远程工作台</h1>
-      <p>学生确认发送后才会出现。照片到齐才能起草；签字交还后问诊资料仍在本机，按保留期限统一清理。</p>
+      <p>学生确认发送后才会出现。附件到齐才能起草；签字交还后问诊资料仍在本机，按保留期限统一清理。</p>
     </header>
     {error && <p role="alert" className="inbox-error">{error}</p>}
     {status && <p role="status" className="inbox-status">{status}</p>}
@@ -222,7 +251,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
         <p className="inbox-meta">{managedLabel(consult.encounter.profile)} · 学生 {consult.sender.slice(0, 8)}… · {new Date(consult.receivedAt).toLocaleString()}</p>
         {consult.managerInvalid && <p className="inbox-alert" role="note">代管证明无效 · 扣费不会记到别人账上</p>}
         {report && <p className="inbox-note">本周练习 {report.practiceDays} 天{report.weeklyRate === null ? '' : ` · 坚持率 ${Math.round(report.weeklyRate * 100)}%`}</p>}
-        <p className={state?.ready ? 'inbox-status' : 'inbox-error'}>照片 {arrived}/{total}{state?.ready ? '' : ' · 照片还在路上'}</p>
+        <p className={state?.ready ? 'inbox-status' : 'inbox-error'}>附件 {arrived}/{total}{state?.ready ? '' : ' · 附件还在路上'}</p>
         <div className="inbox-actions"><button disabled={busy || !state?.ready} onClick={() => void startDraft(consult)}>打开问诊</button></div>
       </article>
     })}

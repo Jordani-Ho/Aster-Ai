@@ -2,7 +2,7 @@
 
 V2-04：`node e2e/money.browser.mjs` 使用真实 Chromium、LedgerSettings/MoneyEntry、普通 IndexedDB 和真实签名同步控制器（内存投递，无中继），验证限额失败恢复、重载草稿不自动入账、确认不调用模型、双击不重复、离线出站与恢复补送、学生余额和无身份汇总。`money.spec.ts` 再经真实中继验证充值/赠送/退款/扣费、退款不能套现赠送、允许欠费及康币继续停用。CI 运行两者，无真实支付或真实模型凭据。
 
-V2-03：`node e2e/abstractor.browser.mjs` 独立启动本机 Vite + Chromium，不需中继/Rust；使用实际镜子与问诊组件、普通 IndexedDB、真实 inbox 收件，视觉模型为合成替身，覆盖重拍失败、重载、家人隔离、草稿与发送、文件输入清空及所有业务记录无原图。CI 也运行。完整 `flow.spec.ts` 已改成发送抽象舌象；面诊测试断言不再有原图拍摄入口，签字/作业/账本/CSV 路径保留。
+V2-08：`node e2e/abstractor.browser.mjs` 独立启动本机 Vite + Chromium，不需中继/Rust；使用实际镜子与问诊组件、普通 IndexedDB、真实 inbox 收件，视觉模型为合成替身（返回舌头框 box 与偏色标记），覆盖裁剪后重拍失败、重载、家人隔离、草稿与发送、文件输入清空及所有业务记录无原图。CI 也运行。完整 `flow.spec.ts` 已改成发送裁剪图 + 候选特征；面诊测试断言不再有原图拍摄入口，签字/作业/账本/CSV 路径保留。
 
 这里只运行合成身份和资料。M1-15a 合并后接入完整九步问诊与四条硬性验收，使用真实编译中继、真实网关和 Chromium；模型与推送为本地替身，不需要 API Key。
 

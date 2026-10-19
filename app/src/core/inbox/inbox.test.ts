@@ -307,7 +307,7 @@ it('3 照片缺一张时老师端不能起草，补到后可以', async () => {
   const partial = await consultReadiness(teacherStore, pkg.encounter.id)
   expect(partial.arrived).toBe(1)
   expect(partial.missing).toEqual([second.ref.id])
-  await expect(assertConsultReady(teacherStore, pkg.encounter.id)).rejects.toThrow('照片还在路上')
+  await expect(assertConsultReady(teacherStore, pkg.encounter.id)).rejects.toThrow('附件还在路上')
   await student.send(pkg.encounter.teacher, {
     type: 'consult.attachment', version: 1,
     payload: { encounterId: pkg.encounter.id, ref: second.ref, data: toBase64(second.data) },

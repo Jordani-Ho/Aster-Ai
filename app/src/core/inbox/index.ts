@@ -44,6 +44,8 @@ const HEX32 = /^[0-9a-f]{32}$/
 const HEX64 = /^[0-9a-f]{64}$/
 const REF_ID = /^[A-Za-z0-9_-]{1,64}$/
 const MAX_PHOTOS = 4
+// V2-08：问诊包里除最多 4 张照片，还可能有最多 4 张舌象裁剪图（每份舌象一张）。
+const MAX_ATTACHMENTS = MAX_PHOTOS + 4
 
 export interface ConsultEnvelopePayload {
   encounter: Encounter
@@ -379,7 +381,7 @@ export async function consultReadiness(store: LocalStore, encounterId: string): 
 export async function assertConsultReady(store: LocalStore, encounterId: string): Promise<StoredConsult> {
   const status = await consultReadiness(store, encounterId)
   if (!status.consult) throw new Error('还没有收到这份问诊')
-  if (!status.ready) throw new Error('照片还在路上，等照片到齐再起草')
+  if (!status.ready) throw new Error('附件还在路上，等附件到齐再起草')
   return status.consult
 }
 
@@ -444,7 +446,7 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
     } catch { managerInvalid = true }
   }
   // 已交还的问诊包不再从老师端删除；中继重放同一问诊包只会覆盖为相同内容。
-  if (!Array.isArray(value.attachments) || value.attachments.length > MAX_PHOTOS || !value.attachments.every(isRef)) return
+  if (!Array.isArray(value.attachments) || value.attachments.length > MAX_ATTACHMENTS || !value.attachments.every(isRef)) return
   const history = Array.isArray(value.history) ? value.history : []
   const checked = validHistory({ ...value, history }, identity)
   const redFlagRaw = value.redFlag as unknown

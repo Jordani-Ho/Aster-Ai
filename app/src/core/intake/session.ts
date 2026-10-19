@@ -210,9 +210,12 @@ export function removePhoto(state: IntakeSession, refId: string): IntakeSession 
   return { ...state, attachments: state.attachments.filter(ref => ref.id !== refId) }
 }
 
+// V2-08：一次问诊最多附四份舌象（每份带一张裁剪图）。
+export const MAX_TONGUES = 4
+
 export function addTongue(state:IntakeSession,record:TongueAbstract):IntakeSession {
  if(state.phase==='sent')throw Error('这次采集已经发送')
- if((state.tongues?.length??0)>=4)throw Error('最多附四份舌象示意')
+ if((state.tongues?.length??0)>=MAX_TONGUES)throw Error('最多附四份舌象示意')
  return {...state,tongues:[...(state.tongues??[]),parseTongueAbstract(record)]}
 }
 
@@ -277,12 +280,21 @@ export function buildConsultPackage(
   for (const candidate of history) {
     if (candidate.teacher !== state.teacher) throw new Error('附带的病历不是这位老师的')
   }
-  if (attachments.length !== state.attachments.length) throw new Error('附件与确认页不一致')
+  const crops = (state.tongues ?? []).flatMap(record => record.crop ? [record.crop] : [])
+  if (attachments.length !== state.attachments.length + crops.length) throw new Error('附件与确认页不一致')
   for (const [index, expected] of state.attachments.entries()) {
     const given = attachments[index]
     if (!given || given.ref.id !== expected.id || given.ref.sha256 !== expected.sha256
       || given.ref.bytes !== expected.bytes || given.ref.type !== expected.type
       || given.data.length !== expected.bytes) {
+      throw new Error('附件与确认页不一致')
+    }
+  }
+  // V2-08：舌头裁剪图走同一条附件通道，只带裁剪图、不带原图。
+  for (const [index, expected] of crops.entries()) {
+    const given = attachments[state.attachments.length + index]
+    if (!given || given.ref.id !== expected.id || given.ref.sha256 !== expected.sha256
+      || given.ref.bytes !== expected.bytes || given.ref.type !== 'photo' || given.data.length !== expected.bytes) {
       throw new Error('附件与确认页不一致')
     }
   }

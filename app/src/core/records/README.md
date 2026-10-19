@@ -15,15 +15,15 @@
 - 老师设置存在 `settings/retention-days`：默认 90 天，可选 30 天到 3 年（1095 天），非法值不入库。
 - 随调养方案发给学生：`retention.setting` 信封，载荷 `{ teacher, days, updatedAt }`；学生端按老师公钥存在 `teacher-retention`。学生可能有多位老师，取最短的期限（最保守）。
 - `runRetention(store, role, { now, days })`：时间可注入，不依赖真实时钟。
-  - 老师端：删超过期限的 `teacher-records`、`consult-package`、`in-person-draft`，再删不再被这些记录引用的 `attachments`。
-  - 学生端：删超过期限的 `self-ratings`、`self-stress`、`tongue-records`（V2-03 起只存抽象舌象，不再有原图字节）、`checkins`、`intake-sent`、`intake-draft`、不再被引用的 `intake-attachments`，以及收到的签名病历 `student-records` 与随它的面诊照片索引/字节（`record-photo-index`/`record-photos`）。
+  - 老师端：删超过期限的 `teacher-records`、`consult-package`、`in-person-draft`，再删不再被这些记录引用的 `attachments`（V2-08 起包括病历里引用的舌头裁剪图）。
+  - 学生端：删超过期限的 `self-ratings`、`self-stress`、`tongue-records`、`tongue-crops`（V2-08 镜子只留最新裁剪图，按保留期限删）、`checkins`、`intake-sent`、`intake-draft`、不再被引用的 `intake-attachments`（含问诊舌象裁剪图），以及收到的签名病历 `student-records` 与随它的面诊照片索引/字节（`record-photo-index`/`record-photos`）。
 - `runRetentionOnce`：打开应用时每天只跑一次（`settings/last-retention-day` 去重），不做后台任务。
 - 长期保留的沉淀：`care-plans`（最新一版）、`homework`（作业规则）、`teacher-fingerprint`（改稿习惯摘要）、`kangbi-observations`（康币观察记录，只有计数与评分、没有内容，是将来给康币定值的依据）与 `kangbi-events`，都登记在 `LONG_TERM_COLLECTIONS`，不在删除范围。
 - 钱账与康币账的长期数据一律不碰：保留期只清医案、问诊包、照片与本机记录类集合。
 
 ## fingerprint.ts：老师的思想指纹
 
-- 集合 `teacher-fingerprint`，键为老师公钥，值为 `{ records, paths: { 字段: { drafts, changed } }, updatedAt }`；只留计数，不留原文、不留学生身份。签字时用 `modificationLog` 累计，不受保留期限影响。
+- 集合 `teacher-fingerprint`，键为老师公钥，值为 `{ records, paths: { 字段: { drafts, changed } }, tongueDiffs: { "齿痕：模型不确定→老师有": 次数 }, updatedAt }`；只留计数，不留原文、不留图、不留学生身份。签字时用 `modificationLog` 累计改稿路径，V2-08 起另把“模型候选舌象特征 → 老师定值”的逐项差异累计进 `tongueDiffs`，不受保留期限影响。
 
 ## backup.ts：师生互为备份
 

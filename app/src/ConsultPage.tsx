@@ -6,7 +6,7 @@ import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
 import type { ConsultPackage, Encounter } from './core/record/types'
 import {
-  addTongue, addUtterance, answerFocus, canConfirm, confirmAndSend,
+  addTongue, addUtterance, answerFocus, canConfirm, confirmAndSend, INTAKE_COLLECTIONS,
   defaultHistorySelection, loadDraft, loadHistory, loadProfile, markReviewed,
   organizeSession, saveDraft, skipFocus, startSession, updateField,
   type IntakeKey, type IntakeSession,
@@ -22,7 +22,7 @@ import { detectRegion } from './core/redflags'
 import { RedFlagAlert } from './RedFlagAlert'
 import { uiError } from './core/onboarding/ui'
 import { TongueCapture } from './TongueCapture'
-import { TongueFigure } from './TongueFigure'
+import { TonguePair } from './TonguePair'
 
 const FIELD_LABELS: Record<IntakeKey, string> = {
   chiefComplaint: '最不舒服的地方（主诉）',
@@ -135,11 +135,19 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
       const currentProfile = await loadProfile(store)
       // V2-06：学生点“确认发送”时取一次天地人（时辰、节气、城市），随问诊包给老师；签字病历原样沿用。
       const heaven = heavenStampOf(await heavenNow(store))
+      // V2-08：每份舌象只把舌头裁剪图放进既有附件通道，原图早已清零、不会出现在这里。
+      const attachments: { ref: { id: string; type: 'photo'; sha256: string; bytes: number }; data: Uint8Array }[] = []
+      for (const record of session.tongues ?? []) {
+        if (!record.crop) continue
+        const data = await store.get(INTAKE_COLLECTIONS.attachmentData, record.crop.id)
+        if (!(data instanceof Uint8Array) || data.length !== record.crop.bytes) throw Error('舌象裁剪图缺失，请重拍后再发送')
+        attachments.push({ ref: { ...record.crop }, data })
+      }
       const options = {
         ...(managerIdentity ? { manager: managerIdentity.publicKey, managerProof: createFamilyProof(managerIdentity, identity.publicKey) } : {}),
         heaven,
       }
-      await confirmAndSend(store, session, currentProfile, history, [], sendFn, trend, options)
+      await confirmAndSend(store, session, currentProfile, history, attachments, sendFn, trend, options)
       setSent(true)
       setSession({ ...session, phase: 'sent' })
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -180,12 +188,12 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
       {(Object.keys(FIELD_LABELS) as IntakeKey[]).map(key => <label key={key}>{FIELD_LABELS[key]}
         <textarea disabled={busy} rows={2} value={session.fields[key].value ?? ''} onChange={event => setSession(updateField(session, key, event.target.value))} onBlur={() => void saveDraft(store, session).catch(() => {})} />
       </label>)}
-      {session.tongues?.map((record,index)=><TongueFigure key={index} record={record}/>)}
+      {session.tongues?.map((record,index)=><TonguePair key={index} record={record} candidate={record} studentNote title={`舌象 ${index+1} · ${record.shichen}时`} loadCrop={async()=>{const id=record.crop?.id;if(!id)return null;const data=await store.get(INTAKE_COLLECTIONS.attachmentData,id);return data instanceof Uint8Array?data:null}} missingCropState="missing"/>)}
       <button className="consult-send" disabled={busy} onClick={() => void sendPackage()}>发给老师</button>
     </section>}
 
     {!sent && <div className="consult-input-row">
-      <TongueCapture store={store} modelStore={modelStore} onBusyChange={setBusy} disabled={!session||busy||(session.tongues?.length??0)>=4} onCaptured={async record=>{if(session){const next=addTongue(session,record);await saveDraft(store,next);setSession(next);setStatus('已附舌象示意，原图已从应用内清除')}}}/>
+      <TongueCapture store={store} modelStore={modelStore} onBusyChange={setBusy} disabled={!session||busy||(session.tongues?.length??0)>=4} onCaptured={async(record,_at,crop)=>{if(session){await store.put(INTAKE_COLLECTIONS.attachmentData,record.crop!.id,crop);const next=addTongue(session,record);await saveDraft(store,next);setSession(next);setStatus('已附舌象裁剪图与候选特征，原图已从应用内清除')}}}/>
       <textarea aria-label="按键盘上的🎤说话就行" rows={1} placeholder="按键盘上的🎤说话就行" value={draftText} onChange={event => setDraftText(event.target.value)} />
       <button className="consult-send-btn" disabled={busy || draftText.trim() === ''} onClick={() => void send()}>发送</button>
     </div>}

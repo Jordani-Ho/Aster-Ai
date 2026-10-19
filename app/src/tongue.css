@@ -1,0 +1,27 @@
+.tongue-pair { margin: 12px 0; }
+.tongue-title { font-weight: 600; margin: 0 0 4px; }
+.tongue-alert { margin: 0 0 6px; color: #8a5a00; }
+.tongue-frames { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 420px; }
+.tongue-frame { margin: 0; }
+.tongue-frame-box { aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; background: #f3f1ec; border: 1px solid #dcd7cc; border-radius: 10px; overflow: hidden; }
+.tongue-frame-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.tongue-figure svg { width: 100%; height: 100%; display: block; }
+.tongue-frame figcaption { font-size: 12px; color: #6b6b6b; margin-top: 4px; text-align: center; }
+.tongue-frame-missing { font-size: 12px; color: #6b6b6b; padding: 8px; text-align: center; margin: 0; }
+.tongue-pair.expanded .tongue-frames { max-width: 640px; }
+.tongue-switch { display: flex; gap: 6px; margin: 4px 0 8px; }
+.tongue-switch button[aria-pressed="true"] { font-weight: 600; }
+.tongue-legend { font-size: 12px; color: #6b6b6b; margin: 8px 0 4px; }
+.tongue-expand { margin: 2px 0 8px; }
+.tongue-summary { margin: 6px 0; }
+.tongue-rows { list-style: none; padding: 0; margin: 6px 0 0; }
+.tongue-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0; }
+.tongue-row-label { width: 3em; color: #444; }
+.tongue-row-value { min-width: 3em; }
+.tongue-row-pending { font-size: 12px; color: #8a5a00; }
+.tongue-row-diff { font-size: 12px; color: #31506b; }
+.tongue-details summary { cursor: pointer; margin-top: 6px; }
+.tongue-note { font-size: 12px; color: #6b6b6b; margin: 6px 0 0; }
+.tongue-hint { margin: 6px 0 2px; }
+.tongue-help summary { cursor: pointer; font-size: 13px; }
+.tongue-help p { margin: 4px 0; font-size: 13px; color: #555; }

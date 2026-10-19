@@ -1,13 +1,14 @@
 {
-  "version": 1,
-  "labels": {"pale":"淡白","pink":"淡红","red":"红","darkRed":"绛","purple":"紫","white":"白","yellow":"黄","gray":"灰","black":"黑","none":"无","thin":"薄","thick":"厚","narrow":"瘦","standard":"正常","wide":"胖","unknown":"未知"},
-  "note": "仅描述看见的外观，不作诊断。unknown 表示未看清；标记 null 表示位置未知，[] 表示未见标记。",
+  "version": 2,
+  "labels": {"pale":"淡白","pink":"淡红","red":"红","darkRed":"绛","purple":"紫","white":"白","yellow":"黄","gray":"灰","black":"黑","none":"无","thin":"薄","thick":"厚","narrow":"瘦","standard":"正常","wide":"胖","uncertain":"不确定","unknown":"不确定"},
+  "note": "仅描述看见的外观，不作诊断。uncertain 表示未看清/不敢定（V2-08 新记录只用它）；unknown 是 V2-03 旧记录的存量取值，读入时按不确定显示，不再写出。标记 null 表示有、位置不确定，[] 表示未见标记，'uncertain' 表示不确定。",
   "color": {
     "pale": "#e7b8bd",
     "pink": "#d98f9a",
     "red": "#c95666",
     "darkRed": "#963b56",
     "purple": "#8c6a95",
+    "uncertain": "#c6c6c6",
     "unknown": "#c6c6c6"
   },
   "coatingColor": {
@@ -16,18 +17,21 @@
     "gray": "#a8a6a1",
     "black": "#58565a",
     "none": "none",
+    "uncertain": "none",
     "unknown": "#c6c6c6"
   },
   "coatingThickness": {
     "none": 0,
     "thin": 0.35,
     "thick": 0.85,
+    "uncertain": 0,
     "unknown": 0.15
   },
   "shape": {
     "narrow": 0.82,
     "standard": 1,
     "wide": 1.12,
+    "uncertain": 1,
     "unknown": 1
   },
   "teeth": [

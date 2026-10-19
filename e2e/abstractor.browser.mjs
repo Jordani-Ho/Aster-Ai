@@ -10,7 +10,7 @@ try {
  const page=await browser.newPage({viewport:{width:375,height:812}})
  const errors=[];page.on('pageerror',e=>errors.push(e.message))
  const png=await readFile(new URL('../app/src/core/abstractor/fixtures/tongue.png',import.meta.url)), image=png.toString('base64')
- const features={color:'pale',coatingColor:'white',coatingThickness:'thin',shape:'wide',teeth:[],cracks:[],confidence:0.7}
+ const features={color:'pale',coatingColor:'white',coatingThickness:'thin',shape:'wide',teeth:[],cracks:[],confidence:0.7,box:{x:0.2,y:0.2,width:0.6,height:0.6},lightingNote:false}
  let failure=false,requests=0
  await page.route('https://synthetic.invalid/**',async route=>{requests++;await route.fulfill({status:failure?500:200,contentType:'application/json',body:JSON.stringify({choices:[{message:{content:JSON.stringify(features)}}]})})})
  await page.route('https://geocoding-api.open-meteo.com/**',route=>route.fulfill({status:200,body:'{}'}))
