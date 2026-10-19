@@ -12,6 +12,10 @@ import { bootstrapIdentity, readInviteLink, acceptInvite, gatewayBase, INVITE_ER
 import { loadTeachers } from './core/inbox'
 import { readReidentifyLink } from './core/reidentify'
 import { StudentReidentifyRequestPage, TeacherReidentifyPrompt } from './ReidentifyPages'
+import { inviteWelcome, loadCachedStorefront, saveReceivedStorefront, type Storefront } from './core/storefront'
+import { readStorefrontLink } from './core/storefront/invite'
+import { StorefrontWelcome } from './StorefrontWelcome'
+import type { Event } from 'nostr-tools/pure'
 import type { LocalStore } from './core/store'
 import { createWiring, type Wiring } from './core/wiring'
 import { createPushClient } from './core/push'
@@ -48,6 +52,9 @@ export function App() {
   const [stackStatus, setStackStatus] = useState<LinkStatus>('offline')
   const [identity, setIdentity] = useState<Identity | null>(null)
   const [recovery, setRecovery] = useState<RecoveryFlow | null>(null)
+  // V2-09：新学生打开有效邀请、本机还没有这位老师时，先看老师的邀请首屏。
+  const [welcome, setWelcome] = useState<{ invitation: Event; storefront: Storefront | null } | null>(null)
+  const [welcomeBusy, setWelcomeBusy] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const storeRef = useRef<LocalStore | null>(null)
@@ -80,9 +87,21 @@ export function App() {
         }else{
           const invitation=readInviteLink(location.href)
           if(invitation){
-            await acceptInvite(person,store,invitation,gateway+'/invite/redeem');history.replaceState(null,'',location.pathname+location.search)
-            // V2-05：重新进入社区后，连上中继时自动向老师要回保留期内的记录。
-            await markRestoreNeeded(store)
+            // V2-09：邀请核验失败或过期只提示，不显示门面；门面必须由邀请里的老师本人签名。
+            if(!validateInvite(invitation,gateway+'/invite/redeem'))throw Error(INVITE_ERROR)
+            const teachers=await loadTeachers(store)
+            const linked=readStorefrontLink(location.href,invitation.pubkey)
+            if(linked)await saveReceivedStorefront(store,linked.event,invitation.pubkey).catch(()=>{})
+            const cached=await loadCachedStorefront(store,invitation.pubkey)
+            const decision=inviteWelcome(teachers,invitation.pubkey,linked?.storefront??cached)
+            if(decision.kind==='welcome'){
+              // 首屏先认门；点“开始使用”才走原来的加入流程。
+              if(!cancelled)setWelcome({invitation,storefront:decision.storefront})
+            }else{
+              await acceptInvite(person,store,invitation,gateway+'/invite/redeem');history.replaceState(null,'',location.pathname+location.search)
+              // V2-05：重新进入社区后，连上中继时自动向老师要回保留期内的记录。
+              await markRestoreNeeded(store)
+            }
           }
         }
       } catch (cause) {setError(cause instanceof Error&&cause.message===INVITE_ERROR?INVITE_ERROR:'暂时未能加入社区，请稍后重新打开邀请。')}
@@ -165,6 +184,23 @@ export function App() {
     catch { setError('角色没有保存成功，请重试。') }
   }
 
+  // V2-09：邀请首屏点“开始使用”才加入社区；失败停在首屏提示，不显示门面以外的东西。
+  const startWelcome = async () => {
+    if (!welcome) return
+    const savedStore = storeRef.current, person = identityRef.current
+    if (!savedStore || !person) return
+    setWelcomeBusy(true); setError('')
+    try {
+      await acceptInvite(person, savedStore, welcome.invitation, gateway + '/invite/redeem')
+      await markRestoreNeeded(savedStore)
+      history.replaceState(null, '', location.pathname + location.search)
+      setWelcome(null)
+      setRole('student')
+    } catch (cause) {
+      setError(cause instanceof Error && cause.message === INVITE_ERROR ? INVITE_ERROR : '暂时未能加入社区，请稍后重新打开邀请。')
+    } finally { setWelcomeBusy(false) }
+  }
+
   // 家人被移除后，当前查看的家人切回本人。
   useEffect(() => {
     if (active !== 0 && !family.some(member => member.account === active)) setActive(0)
@@ -189,7 +225,11 @@ export function App() {
       ? <StudentReidentifyRequestPage store={store} teacher={recovery.teacher} name={recovery.name} send={stack?.send} connected={stackStatus === 'ready'} onDone={() => setRecovery(null)} />
       : <TeacherReidentifyPrompt store={store} newTeacher={recovery.newTeacher} name={recovery.name} oldTeachers={recovery.oldTeachers} send={stack?.send} connected={stackStatus === 'ready'} onDone={() => setRecovery(null)} />
   }
-  if(identity&&role&&store&&!modelConfig)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1>{modelNotice}{modelConfig===undefined?<p>正在读取接入设置…</p>:<><ModelSettings initial store={store} gateway={modelGateway} current={null} onSaved={setModelConfig}/>{role==='teacher'&&<details><summary>社区首次登记</summary><InviteSettings identity={identity} gateway={gateway}/></details>}</>}</main>
+  // V2-09：新学生的邀请首屏（标志、馆名、老师邀请你、短介绍、一个“开始使用”）。
+  if (store && identity && welcome) {
+    return <StorefrontWelcome storefront={welcome.storefront} teacher={welcome.invitation.pubkey} busy={welcomeBusy} error={error} onStart={() => void startWelcome()} />
+  }
+  if(identity&&role&&store&&!modelConfig)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1>{modelNotice}{modelConfig===undefined?<p>正在读取接入设置…</p>:<><ModelSettings initial store={store} gateway={modelGateway} current={null} onSaved={setModelConfig}/>{role==='teacher'&&<details><summary>社区首次登记</summary><InviteSettings identity={identity} gateway={gateway} store={store}/></details>}</>}</main>
   // 学生端三个底部标签（镜子/问诊/其他）；老师端走 TeacherWorkspace 四页。模型由 M1-21 的 personal client 提供。
   // M1-22：学生壳用“当前家人”的分片存储与身份，设置区仍用根身份；家人切换在镜子页/问诊页顶部。
   if (store && identity && role === 'student') return <StudentShell store={store} identity={identity} llm={llm} stack={stack} stackStatus={activeStatus} modelNotice={modelNotice} modelSettings={modelSettings} family={memberOptions} active={active} onSwitch={setActive} memberStore={activeStore ?? store} memberIdentity={activeIdentity ?? identity} sendConsult={activeStack?.sendConsult} sendEnvelope={activeStack?.send} onFamilyChanged={refreshFamily} />

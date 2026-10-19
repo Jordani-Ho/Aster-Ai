@@ -2,6 +2,7 @@ import type { Identity } from '../identity'
 import type { LocalStore } from '../store'
 import type { Envelope } from '../transport'
 import { signCarePlan, sendCarePlan, storeCarePlan, verifySignedCarePlan, type CarePlan, type SignedCarePlanEvent } from './index'
+import { sendStorefrontTo } from '../storefront'
 
 export type CarePlanDraft = Pick<CarePlan, 'constitution' | 'points' | 'avoid'> & { source: 'ai_draft' }
 type Send = (student: string, envelope: Envelope) => Promise<unknown>
@@ -30,6 +31,8 @@ export async function retryCarePlan(options: { identity: Identity; store: LocalS
     else {
       if (!send) throw Error('offline')
       await sendCarePlan(send, value.student, value.event)
+      // V2-09：签发调养方案时顺带发一次老师当前门面；门面不是签发条件，失败不影响方案。
+      try { await sendStorefrontTo({ store, identity, recipients: [value.student], send }) } catch { /* 门面下次同步再说 */ }
     }
     const rows = await store.list('care-plan-issued')
     const row = rows.find(item => (item.value as unknown as Issued).student === value.student)

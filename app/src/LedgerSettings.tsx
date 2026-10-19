@@ -10,6 +10,8 @@ import type { LlmClient } from './core/llm'
 import { MoneyEntry } from './MoneyEntry'
 import { formatMoney } from './core/ledger/money'
 import { parseChainFields } from './core/ledger'
+import { listIdentityLinks, type IdentityLink } from './core/identity/links'
+import { booksForTeacher } from './core/storefront/active'
 
 const defaults = ((import.meta as ImportMeta & { env: Record<string, string | undefined> }).env.VITE_COMMUNITY_RELAYS ?? '').split(',').map(s => s.trim()).filter(Boolean)
 const labels = { topup: '充值', gift: '赠送', charge: '扣费', refund: '退款' }
@@ -17,7 +19,7 @@ type LinkStatus = Parameters<NonNullable<TransportOptions['onStatus']>>[0]
 
 // 账本设置：默认自己起一个 transport；M1-15a 之后 App 传入已有的同步控制器（同一个 transport），
 // 避免同一份加密存储上同时跑两个账本控制器。
-export function LedgerSettings({ identity, store, ledger, managed = false, status: sharedStatus, members = [],llm=null }: {
+export function LedgerSettings({ identity, store, ledger, managed = false, status: sharedStatus, members = [],llm=null,teacher=null,teacherName='' }: {
   identity: Identity
   store: LocalStore
   managed?: boolean
@@ -25,8 +27,12 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
   status?: LinkStatus
   members?: readonly { alias: string }[]
   llm?:LlmClient|null
+  /** V2-09：学生端只显示当前在用的馆那本账，并写明“在某某老师这里的余额”。 */
+  teacher?: string | null
+  teacherName?: string
 }) {
   const [books, setBooks] = useState<LedgerView[]>([]), [error, setError] = useState('')
+  const [links, setLinks] = useState<IdentityLink[]>([])
   const [revision, setRevision] = useState(0)
   const [memberFilter, setMemberFilter] = useState<string | null>(null)
   const [status, setStatus] = useState<LinkStatus>(sharedStatus ?? 'offline')
@@ -82,6 +88,12 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
       window.removeEventListener('aster:data-changed',changed)
     }
   }, [identity, store, revision, ledger, managed])
+  useEffect(() => {
+    let active = true
+    if (!teacher) { setLinks([]); return }
+    void listIdentityLinks(store).then(rows => { if (active) setLinks(rows) }).catch(() => { if (active) setLinks([]) })
+    return () => { active = false }
+  }, [store, teacher])
   const run = async (action: (runtime: ReturnType<typeof createLedgerSync>) => Promise<unknown>) => {
     setError('')
     try {
@@ -89,12 +101,15 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
       await action(runtimeRef.current)
     } catch (cause) { setError(uiError(cause,'账本同步失败，请重试')) }
   }
+  // V2-09：学生端只显示当前在用的馆那本账；老师端与未切换过的旧界面保持原样。
+  const visibleBooks = booksForTeacher(books, teacher, links)
   return <details><summary>钱账与对账</summary>
     <p role="status">{status === 'ready' ? '已连接社区中继' : status === 'connecting' ? '正在连接社区中继' : status === 'rejected' ? '中继拒绝连接，请核对成员资格' : '等待连接社区中继'}</p>
     {error && <p role="alert">{error}</p>}
     <p>打开老师邀请后会自动建立师生账本。</p><button type="button" onClick={()=>void run(runtime=>runtime.requestSync())}>立即对账</button>
-    {!books.length && <p>尚未登记账本。</p>}
-    {books.map(book => <section key={book.ledger.teacher + book.ledger.student}>
+    {teacher && teacherName && <p className="ledger-venue">在{teacherName}这里的余额</p>}
+    {!visibleBooks.length && <p>尚未登记账本。</p>}
+    {visibleBooks.map(book => <section key={book.ledger.teacher + book.ledger.student}>
       <p style={{ overflowWrap: 'anywhere' }}>对方：{identity.publicKey === book.ledger.teacher ? '学生' : '老师'}</p>
       {book.code !== null && <p>钱账余额：{book.ledger.events.length?formatMoney(book.balance!,parseChainFields(book.ledger.events[0]).currency):'尚未记账'} · 对账码：{book.code}</p>}
       {identity.publicKey===book.ledger.teacher&&runtimeRef.current&&<MoneyEntry store={store} book={book.ledger} writer={runtimeRef.current} llm={llm} onConfirmed={()=>setRevision(v=>v+1)}/>}

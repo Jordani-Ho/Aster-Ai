@@ -85,6 +85,8 @@ jobs:
         run: node e2e/abstractor.browser.mjs
       - name: V2-04 money browser integration
         run: node e2e/money.browser.mjs
+      - name: V2-09 storefront browser integration
+        run: node e2e/storefront.browser.mjs
       - run: npm run test:e2e-env
       - run: npm run test:deployment
       - name: Build patched relay

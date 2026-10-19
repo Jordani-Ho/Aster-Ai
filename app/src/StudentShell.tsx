@@ -18,6 +18,8 @@ import { effectiveDay } from './core/homework/schedule'
 import './student.css'
 import { observationId, recordObservation } from './core/kangbi'
 import { checkinDay } from './core/homework/schedule'
+import { useTeacherVenue } from './useTeacherVenue'
+import { venueHeading } from './core/storefront/active'
 
 const HomeworkPage = lazy(() => import('./HomeworkPage').then(module => ({ default: module.HomeworkPage })))
 const StudentRecordsPage = lazy(() => import('./StudentRecordsPage').then(module => ({ default: module.StudentRecordsPage })))
@@ -53,6 +55,8 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   const pagesStore = scopedStore ?? store
   const pagesIdentity = scopedIdentity ?? identity
   const activeMember = family.find(member => member.account === active) ?? null
+  // V2-09：当前在用的馆；三页门牌、问诊收件人、方案来源和钱账都跟着它。
+  const venue = useTeacherVenue(store)
 
   // M1-23a 第 5 条：把本周坚持率小结发给“我的老师”（只有数值，不含原文/身份）。
   // 打卡后发一次，连接就绪或切换家人时也补发一次；发送失败不影响本机打卡。
@@ -60,7 +64,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
     void (async () => {
       try {
         if (!sendEnvelope) return
-        const teacher = (await loadTeachers(pagesStore))[0]
+        const teacher = venue.active ?? (await loadTeachers(pagesStore))[0]
         if (!teacher) return
         const [rows, checkins] = await Promise.all([pagesStore.list('homework'), listCheckins(pagesStore)])
         const assignments = rows.map(row => row.value as unknown as Assignment)
@@ -74,7 +78,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
       } catch { /* 上报不是打卡成功条件。 */ }
     })()
   }
-  useEffect(() => { if (stackStatus === 'ready') reportAdherence() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pagesStore, stackStatus, active])
+  useEffect(() => { if (stackStatus === 'ready') reportAdherence() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pagesStore, stackStatus, active, venue.active])
 
   if (other === 'records') return <Suspense fallback={<p>正在打开病历…</p>}><StudentRecordsPage identity={pagesIdentity} store={pagesStore} onBack={() => setOther('menu')} /></Suspense>
   if (other === 'homework') return <Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={pagesStore} onBack={() => setOther('menu')} onCheckedIn={reportAdherence} /></Suspense>
@@ -82,9 +86,10 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   return <div className="student-shell">
     <div className="student-main">
       <p role="status" className="relay-status">中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : stackStatus === 'rejected' ? '连接未成功，请联系老师' : '尚未连接'}</p>
+      {venue.active && <p className="teacher-venue">{venueHeading(venue)}</p>}
       {modelNotice}
-      {tab === 'mirror' && <MirrorPage key={active} store={pagesStore} modelStore={store} settingsStore={store} llm={llm} family={family} active={active} onSwitch={onSwitch} member={activeMember} onCheckedIn={reportAdherence} />}
-      {tab === 'consult' && <ConsultPage key={active} store={pagesStore} modelStore={store} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} />}
+      {tab === 'mirror' && <MirrorPage key={active} store={pagesStore} modelStore={store} settingsStore={store} llm={llm} family={family} active={active} onSwitch={onSwitch} member={activeMember} onCheckedIn={reportAdherence} teacher={venue.active} />}
+      {tab === 'consult' && <ConsultPage key={active} store={pagesStore} modelStore={store} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} teacher={venue.active} teacherName={venue.call} />}
       {tab === 'other' && <main className="other-page">
         <header><p className="eyebrow">知衡 · 学生</p><h1>其他</h1></header>
         <nav className="other-menu" aria-label="其他">
@@ -95,9 +100,9 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
         <FamilySettings store={store} identity={identity} send={sendEnvelope} onChanged={onFamilyChanged} />
         <details><summary>设置</summary>
           {modelSettings}
-          <LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} members={family} />
+          <LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} members={family} teacher={venue.active} teacherName={venue.call} />
           <TimeSettings store={store} />
-          <TeacherListSettings store={store} />
+          <TeacherListSettings store={store} active={venue.active} onSwitch={teacher => void venue.switchTo(teacher)} />
           <PushSettings identity={identity} />
         </details>
       </main>}
