@@ -8,6 +8,8 @@ V2-09：`node e2e/storefront.browser.mjs` 同样独立启动 Vite + Chromium，�
 
 V2-10：签字页多了一行“和上次比”四选一（不选也能签）；学生镜子页多了一块“这段时间自己感觉”，只写本机 `kangbi-self`。观察周期/三方一句话/影子试算的验收在 `app/src/core/kangbi/observation.test.ts`（合成作业、打卡、舌象与内存投递），完整 e2e 只做回归：签字流程照旧，签名后照常交还。
 
+V2-11：`node e2e/selftest.walkthrough.mjs` 是《内测怎么开始》的干净环境走查脚本（不跑在 CI）：`BASE_URL=https://<临时隧道域名> DEPLOY_TOKEN=<data/teacher-setup-code.txt> node e2e/selftest.walkthrough.mjs`，用两个 375px 浏览器上下文分别当老师和学生，按八件事走一遍并截图到 `docs/screenshots/selftest-*.png`。模型请求用本地固定替身（没有真实模型密钥），其余（网关登记、邀请、中继、签名、门面、换机、家人）都走真实部署。
+
 这里只运行合成身份和资料。M1-15a 合并后接入完整九步问诊与四条硬性验收，使用真实编译中继、真实网关和 Chromium；模型与推送为本地替身，不需要 API Key。
 
 ## 一条命令
