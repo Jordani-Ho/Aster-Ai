@@ -15,6 +15,11 @@ export const REIDENTIFY_REJECT = 'reidentify.reject'
 export const REIDENTIFY_REQUESTS = 'reidentify-requests'
 /** 学生端收到的“老师没确认”通知时间；只做提示，不改名单与记录。 */
 export const REIDENTIFY_REJECTED_SETTING = 'reidentify-rejected'
+/** 老师生成“老师换手机”链接时记的时间；只有生成后 30 天内才接受 teacher 类确认。 */
+export const TEACHER_REIDENTIFY_OPEN_SETTING = 'teacher-reidentify-open'
+export const TEACHER_REIDENTIFY_WINDOW_DAYS = 30
+/** 老师端按发件人记住已接受的 teacher 类确认，防止同一人反复改映射。 */
+export const TEACHER_CONFIRMS = 'reidentify-teacher-confirms'
 
 export type ReidentifyPurpose = 'student' | 'teacher'
 export type ReidentifyLinkKind = ReidentifyPurpose
@@ -23,6 +28,7 @@ export interface PendingReidentifyRequest { student: string; alias: string; rece
 
 const HEX64 = /^[0-9a-f]{64}$/
 const MAX_ALIAS = 12
+const DAY = 86400000
 
 export function validReidentifyAlias(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== '' && value.trim().length <= MAX_ALIAS && !/[\u0000-\u001f\u007f]/.test(value)
@@ -97,6 +103,42 @@ export async function markReidentifyRejected(store: Pick<LocalStore, 'put'>, at 
 export async function reidentifyRejectedAt(store: Pick<LocalStore, 'get'>): Promise<string | null> {
   const value = await store.get('settings', REIDENTIFY_REJECTED_SETTING)
   return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : null
+}
+
+// 老师生成“老师换手机”链接时写标记；只有刚换手机的老师才会接受学生发来的 teacher 类确认。
+export async function openTeacherReidentify(store: Pick<LocalStore, 'put'>, at = new Date()): Promise<void> {
+  await store.put('settings', TEACHER_REIDENTIFY_OPEN_SETTING, at.toISOString() as unknown as StoreValue)
+}
+
+export async function teacherReidentifyOpenAt(store: Pick<LocalStore, 'get'>): Promise<string | null> {
+  const value = await store.get('settings', TEACHER_REIDENTIFY_OPEN_SETTING)
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : null
+}
+
+/** 标记存在且未超过 30 天才算有效（时间可注入，测试不依赖真实时钟）。 */
+export function teacherReidentifyWindowOpen(openedAt: string | null, now = new Date()): boolean {
+  if (typeof openedAt !== 'string' || !Number.isFinite(Date.parse(openedAt))) return false
+  const age = now.getTime() - Date.parse(openedAt)
+  return age >= 0 && age <= TEACHER_REIDENTIFY_WINDOW_DAYS * DAY
+}
+
+export interface TeacherConfirmRecord { student: string; oldKey: string; at: string }
+
+/** 同一发件人只认第一次的旧老师公钥；第二次带不同旧公钥一律不认。 */
+export async function loadTeacherConfirm(store: Pick<LocalStore, 'get'>, student: string): Promise<TeacherConfirmRecord | null> {
+  if (!HEX64.test(student)) return null
+  const value = await store.get(TEACHER_CONFIRMS, student) as Partial<TeacherConfirmRecord> | undefined
+  if (!value || typeof value !== 'object') return null
+  if (value.student !== student || typeof value.oldKey !== 'string' || !HEX64.test(value.oldKey)) return null
+  if (typeof value.at !== 'string' || !Number.isFinite(Date.parse(value.at))) return null
+  return { student, oldKey: value.oldKey, at: value.at }
+}
+
+export async function saveTeacherConfirm(store: Pick<LocalStore, 'put'>, student: string, oldKey: string, at = new Date()): Promise<TeacherConfirmRecord> {
+  if (!HEX64.test(student) || !HEX64.test(oldKey)) throw new Error('换机确认公钥无效')
+  const record: TeacherConfirmRecord = { student, oldKey, at: at.toISOString() }
+  await store.put(TEACHER_CONFIRMS, student, record as unknown as StoreValue)
+  return record
 }
 
 const REIDENTIFY_PARAM = 'reidentify'

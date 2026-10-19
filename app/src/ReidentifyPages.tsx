@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import type { LocalStore } from './core/store'
 import type { Identity } from './core/identity'
 import { makeInvite } from './core/onboarding'
+import { loadTeacherLabels, type TeacherLabels } from './core/identity/teacher-labels'
 import {
+  canConfirmTeacherReidentify,
   confirmStudentReidentify, confirmTeacherReidentify, listReidentifyRequests, matchCandidate,
-  reidentifyLink, rejectStudentReidentify, sendStudentReidentifyRequest, teacherStudentCandidates,
+  openTeacherReidentify, reidentifyLink, rejectStudentReidentify, sendStudentReidentifyRequest,
+  teacherChoices, teacherStudentCandidates,
   type PendingReidentifyRequest, type SendEnvelope, type StudentCandidate,
 } from './core/reidentify'
 import './inbox.css'
@@ -63,19 +66,32 @@ export function TeacherReidentifyPrompt({ store, newTeacher, name, oldTeachers, 
   connected: boolean
   onDone: () => void
 }) {
-  const [oldTeacher, setOldTeacher] = useState(oldTeachers[0] ?? '')
+  const [labels, setLabels] = useState<TeacherLabels>({})
+  const [oldTeacher, setOldTeacher] = useState('')
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
+  // 两位及以上老师默认不选；只有一位或链接称呼与本机记的某位老师一致时才预选。选中的人始终看得见。
+  useEffect(() => {
+    let active = true
+    void loadTeacherLabels(store).then(value => {
+      if (!active) return
+      setLabels(value)
+      setOldTeacher(current => canConfirmTeacherReidentify(current) && oldTeachers.includes(current)
+        ? current
+        : teacherChoices(oldTeachers, value, name).selected)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [store, oldTeachers, name])
+  const choices = teacherChoices(oldTeachers, labels, name).choices
   const who = name ? name + '老师' : '老师'
   const confirm = async () => {
-    if (!send || !oldTeacher || busy) return
+    if (!send || !canConfirmTeacherReidentify(oldTeacher) || !oldTeachers.includes(oldTeacher) || busy) return
     setBusy(true); setError('')
     try {
       const events = (await store.list('student-records')).map(row => (row.value as { eventJson?: unknown }).eventJson).filter((value): value is string => typeof value === 'string')
-      const result = await confirmTeacherReidentify({ store, oldTeacher, newTeacher, events, send })
+      await confirmTeacherReidentify({ store, oldTeacher, newTeacher, events, send })
       setDone(true)
-      if (result.records === 0) setError('')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '没有认回成功，请连上社区后再试。')
     } finally { setBusy(false) }
@@ -97,14 +113,15 @@ export function TeacherReidentifyPrompt({ store, newTeacher, name, oldTeachers, 
   return shell(<>
     <h1>{who}说她换了手机，是她吗？</h1>
     <p>只有你点了“是”，新手机上的{who}才被当作原来那位老师；点“不是”什么都不改、也不发。</p>
-    {oldTeachers.length > 1 && <label>对应本机的哪位老师
+    <label>要认回本机的哪位老师
       <select value={oldTeacher} disabled={busy} onChange={event => setOldTeacher(event.target.value)}>
-        {oldTeachers.map(key => <option key={key} value={key}>{key.slice(0, 8)}…</option>)}
+        {!canConfirmTeacherReidentify(oldTeacher) && <option value="">请选择</option>}
+        {choices.map(choice => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
       </select>
-    </label>}
+    </label>
     {error && <p role="alert">{error}</p>}
     <p className="inbox-note">{connected ? '' : '正在连接社区，连上后才能确认。'}</p>
-    <button disabled={busy || !connected || !send} onClick={() => void confirm()}>是</button>
+    <button disabled={busy || !connected || !send || !canConfirmTeacherReidentify(oldTeacher)} onClick={() => void confirm()}>是</button>
     <button disabled={busy} onClick={onDone}>不是</button>
   </>)
 }
@@ -174,16 +191,18 @@ export function TeacherReidentifyInbox({ store, send }: { store: LocalStore; sen
   </section>
 }
 
-/** 老师端：生成两种换机找回链接（学生换手机 / 老师换手机）。 */
-export function ReidentifyLinks({ identity, gateway }: { identity: Identity; gateway: string }) {
+/** 老师端：生成两种换机找回链接（学生换手机 / 老师换手机）。生成“老师换手机”时记 30 天标记。 */
+export function ReidentifyLinks({ identity, store, gateway }: { identity: Identity; store: LocalStore; gateway: string }) {
   const [name, setName] = useState('')
   const [studentLink, setStudentLink] = useState('')
   const [teacherLink, setTeacherLink] = useState('')
   const [message, setMessage] = useState('')
-  const generate = (kind: 'student' | 'teacher') => {
+  const generate = async (kind: 'student' | 'teacher') => {
     if (!gateway) { setMessage('还没有配置社区网关，暂时不能生成找回链接。'); return }
     try {
       const value = reidentifyLink(location.href, makeInvite(identity, gateway + '/invite/redeem'), kind, kind === 'teacher' ? name : undefined)
+      // 只有老师自己刚换手机（生成“老师换手机”链接）时，才接受学生发来的 teacher 类确认。
+      if (kind === 'teacher') await openTeacherReidentify(store)
       if (kind === 'student') setStudentLink(value)
       else setTeacherLink(value)
       setMessage('此链接 7 天内有效；换手机的人打开后按提示操作。')
@@ -195,8 +214,8 @@ export function ReidentifyLinks({ identity, gateway }: { identity: Identity; gat
     <p>不用抄任何东西，靠师生互认。学生换手机：发“学生换手机”链接给他；老师换手机：把“老师换手机”链接发给每位学生。</p>
     <label>你的称呼（学生提示里会显示“阿慈老师”）<input value={name} maxLength={12} onChange={event => setName(event.target.value)} placeholder="例如：阿慈" /></label>
     <div className="inbox-actions">
-      <button disabled={!gateway} onClick={() => generate('student')}>生成“学生换手机”链接</button>
-      <button disabled={!gateway || name.trim() === ''} onClick={() => generate('teacher')}>生成“老师换手机”链接</button>
+      <button disabled={!gateway} onClick={() => void generate('student')}>生成“学生换手机”链接</button>
+      <button disabled={!gateway || name.trim() === ''} onClick={() => void generate('teacher')}>生成“老师换手机”链接</button>
     </div>
     {studentLink && <label>学生换手机链接<input readOnly value={studentLink} style={{ width: '100%' }} /><button onClick={() => copy(studentLink)}>复制</button></label>}
     {teacherLink && <label>老师换手机链接<input readOnly value={teacherLink} style={{ width: '100%' }} /><button onClick={() => copy(teacherLink)}>复制</button></label>}

@@ -12,15 +12,20 @@ import { saveRetentionDays } from '../records/retention'
 import { makeInvite } from '../onboarding'
 import { listIdentityLinks } from '../identity/links'
 import {
+  canConfirmTeacherReidentify,
+  confirmEnvelope,
   confirmStudentReidentify,
   confirmTeacherReidentify,
   listReidentifyRequests,
   matchCandidate,
+  openTeacherReidentify,
   readReidentifyLink,
   reidentifyLink,
   reidentifyRejectedAt,
   rejectStudentReidentify,
   sendStudentReidentifyRequest,
+  teacherChoices,
+  teacherReidentifyWindowOpen,
   teacherStudentCandidates,
 } from './index'
 
@@ -138,6 +143,66 @@ describe('V2-07 验收 1：学生换手机，老师点“是”后收回保留�
   })
 })
 
+describe('V2-07 审核补强：学生端选旧老师', () => {
+  it('两位老师默认不选；链接称呼与本机称呼一致时预选；只有一位时可默认选中；未选不能点“是”', () => {
+    const a = 'a'.repeat(64), b = 'b'.repeat(64)
+    const two = teacherChoices([a, b], {}, '阿慈')
+    expect(two.choices).toHaveLength(2)
+    expect(two.selected).toBe('')
+    expect(canConfirmTeacherReidentify(two.selected)).toBe(false)
+    const named = teacherChoices([a, b], { [a]: '阿慈' }, '阿慈')
+    expect(named.selected).toBe(a)
+    expect(named.choices.find(choice => choice.key === a)?.label).toBe('阿慈')
+    expect(teacherChoices([a], {}, '阿慈').selected).toBe(a)
+    expect(teacherChoices([a, b], { [a]: '阿慈' }, '别人').selected).toBe('')
+    expect(teacherChoices([a], {}, '').choices[0].label).toBe('老师 ' + a.slice(-6))
+    expect(canConfirmTeacherReidentify(a)).toBe(true)
+  })
+})
+
+describe('V2-07 审核补强：老师端只在自己刚换手机时接受 teacher 类确认', () => {
+  const DAY = 86400000
+  async function world() {
+    const teacher = await endpoint(createIdentity(), 'teacher')
+    const student = await endpoint(createIdentity(), 'student')
+    const oldA = createIdentity(), oldB = createIdentity()
+    return { teacher, student, oldA, oldB }
+  }
+  const confirm = (student: Endpoint, teacher: Endpoint, oldTeacher: string) => deliver(
+    student.identity.publicKey, teacher.identity.publicKey,
+    confirmEnvelope('teacher', oldTeacher, teacher.identity.publicKey),
+  )
+
+  it('没有“刚换手机”标记：确认直接丢弃，名单/映射/记录都不变', async () => {
+    const w = await world()
+    await confirm(w.student, w.teacher, w.oldA.publicKey)
+    expect(await listIdentityLinks(w.teacher.store)).toEqual([])
+    expect(await teacherStudents(w.teacher.store)).toEqual([])
+    expect(await w.teacher.store.list('teacher-records')).toEqual([])
+  })
+
+  it('标记超过 30 天：确认丢弃', async () => {
+    const w = await world()
+    await openTeacherReidentify(w.teacher.store, new Date(Date.now() - 31 * DAY))
+    expect(teacherReidentifyWindowOpen(await w.teacher.store.get('settings', 'teacher-reidentify-open') as string)).toBe(false)
+    await confirm(w.student, w.teacher, w.oldA.publicKey)
+    expect(await listIdentityLinks(w.teacher.store)).toEqual([])
+    expect(await teacherStudents(w.teacher.store)).toEqual([])
+  })
+
+  it('标记新鲜时接受；同一发件人第二次带不同旧公钥一律不认', async () => {
+    const w = await world()
+    await openTeacherReidentify(w.teacher.store)
+    await confirm(w.student, w.teacher, w.oldA.publicKey)
+    expect((await listIdentityLinks(w.teacher.store)).map(link => link.oldKey)).toEqual([w.oldA.publicKey])
+    expect(await teacherStudents(w.teacher.store)).toEqual([w.student.identity.publicKey])
+
+    await confirm(w.student, w.teacher, w.oldB.publicKey)
+    expect((await listIdentityLinks(w.teacher.store)).map(link => link.oldKey)).toEqual([w.oldA.publicKey])
+    expect(await w.teacher.store.list('reidentify-teacher-confirms')).toHaveLength(1)
+  })
+})
+
 describe('V2-07 找回链接：换机标记与普通邀请分开', () => {
   it('带 reidentify 标记的链接能读回类型与老师称呼；普通邀请链接不被当成找回链接', async () => {
     const identity = createIdentity()
@@ -168,8 +233,9 @@ describe('V2-07 验收 2：老师换手机，学生逐个点“是”；没点�
     await signedRecord(oldTeacher, b.identity, NOW, '4'.repeat(32))
     await signedRecord(oldTeacher, c.identity, NOW, '5'.repeat(32))
 
-    // 老师清空浏览器：新身份、新库；生成“换机找回链接”发给学生。
+    // 老师清空浏览器：新身份、新库；生成“换机找回链接”发给学生（生成时记 30 天标记）。
     const newTeacher = await endpoint(createIdentity(), 'teacher')
+    await openTeacherReidentify(newTeacher.store)
     const link = reidentifyLink('https://app.example/', makeInvite(newTeacher.identity, 'https://community.example/invite/redeem', Math.floor(NOW.getTime() / 1000)), 'teacher', '阿慈')
     const parsed = readReidentifyLink(link)!
     expect(parsed.kind).toBe('teacher')

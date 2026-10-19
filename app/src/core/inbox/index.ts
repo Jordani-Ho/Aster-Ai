@@ -17,8 +17,9 @@ import { updateFingerprint } from '../records/fingerprint'
 import { receiveRetentionSetting, RETENTION_TYPE } from '../records/retention'
 import { listIdentityLinks, saveIdentityLink } from '../identity/links'
 import {
-  markReidentifyRejected, parseReidentifyConfirm, parseReidentifyReject, parseReidentifyRequest,
-  REIDENTIFY_CONFIRM, REIDENTIFY_REJECT, REIDENTIFY_REQUEST, saveReidentifyRequest,
+  loadTeacherConfirm, markReidentifyRejected, parseReidentifyConfirm, parseReidentifyReject, parseReidentifyRequest,
+  REIDENTIFY_CONFIRM, REIDENTIFY_REJECT, REIDENTIFY_REQUEST, saveReidentifyRequest, saveTeacherConfirm,
+  teacherReidentifyOpenAt, teacherReidentifyWindowOpen,
 } from '../reidentify/messages'
 import {
   backupEnvelope, backupForTeacher, loadRole, MAX_BACKUP_RECORDS, recordsForBackup,
@@ -650,9 +651,14 @@ async function receiveReidentifyConfirm(identity: Identity, store: LocalStore, m
     await saveIdentityLink(store, 'student', parsed.oldKey, parsed.newKey)
     return
   }
-  // 学生确认“旧老师 → 这位新老师”：老师端记下关系，并把这名学生重新记进名单（不含病历）。
+  // 学生确认“旧老师 → 这位新老师”：只有老师自己刚换手机（生成过找回链接、30 天内）才认；
+  // 同一发件人第二次带不同旧公钥一律不认，防止反复改映射。
   if (role !== 'teacher') return
+  if (!teacherReidentifyWindowOpen(await teacherReidentifyOpenAt(store))) return
+  const previous = await loadTeacherConfirm(store, message.sender)
+  if (previous && previous.oldKey !== parsed.oldKey) return
   await saveIdentityLink(store, 'teacher', parsed.oldKey, parsed.newKey)
+  await saveTeacherConfirm(store, message.sender, parsed.oldKey)
   await rememberTeacherStudent(store, message.sender)
 }
 

@@ -4,6 +4,7 @@ import { backupEnvelope, ownBackupsForTeacher, recordsForBackup } from '../recor
 import { listTeacherRecords, rememberTeacherStudent, TEACHER_STUDENTS } from '../records/teacher'
 import { loadTeachers, saveTeachers } from '../inbox'
 import { saveIdentityLink } from '../identity/links'
+import { teacherLabel, type TeacherLabels } from '../identity/teacher-labels'
 import {
   confirmEnvelope, dropReidentifyRequest, requestEnvelope, rejectEnvelope,
   validReidentifyAlias, type PendingReidentifyRequest,
@@ -19,6 +20,23 @@ const HEX64 = /^[0-9a-f]{64}$/
 const REIDENTIFY_REQUEST_AT = 'reidentify-request-at'
 
 export interface StudentCandidate { student: string; alias: string | null }
+
+export interface TeacherChoice { key: string; label: string }
+
+// 学生端“旧老师换了手机”选择：只有一位老师时可以默认选中；两位以上必须手动选，
+// 除非找回链接里的称呼与本机记的某一位老师称呼一致（仍要把选中的人显示出来）。
+export function teacherChoices(teachers: readonly string[], labels: TeacherLabels = {}, linkName = ''): { choices: TeacherChoice[]; selected: string } {
+  const choices = teachers.map(key => ({ key, label: teacherLabel(labels, key) }))
+  if (choices.length === 1) return { choices, selected: choices[0].key }
+  const name = typeof linkName === 'string' ? linkName.trim() : ''
+  const matched = name === '' ? [] : choices.filter(choice => labels[choice.key]?.trim() === name)
+  return { choices, selected: matched.length === 1 ? matched[0].key : '' }
+}
+
+/** 未选中任何旧老师时“是”不可点。 */
+export function canConfirmTeacherReidentify(selected: string): boolean {
+  return typeof selected === 'string' && HEX64.test(selected)
+}
 
 /** 学生换机：新身份向老师发“我是原来的某某”。 */
 export async function sendStudentReidentifyRequest(
