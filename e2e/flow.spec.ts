@@ -93,7 +93,11 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   await student.getByRole('button',{name:'返回',exact:true}).click()
   await studentHomework(student)
   await student.getByRole('button',{name:'已完成',exact:true}).click()
-  await expect(student.getByRole('button',{name:'今日已完成 ✓',exact:true})).toBeDisabled()
+  // 打卡一定落库；但 M1-23a 的“子时归日”规定本地 00:00–00:59 的打卡算前一天，
+  // 在凌晨 0 点这一小时里按钮不会变成“今日已完成”（今天这份还没算完成），只断言落库。
+  await expect.poll(async()=> (await stored(student,'checkins')).length).toBe(1)
+  const hour=await student.evaluate(()=>new Date().getHours())
+  if(hour!==0) await expect(student.getByRole('button',{name:'今日已完成 ✓',exact:true})).toBeDisabled()
   await student.getByRole('button',{name:'返回',exact:true}).click()
   const records=await stored(student,'student-records'),assignments=await stored(student,'homework')
   expect(records).toHaveLength(1);expect(assignments).toHaveLength(1)
