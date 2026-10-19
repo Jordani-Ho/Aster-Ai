@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Encounter, Source } from './core/record/types'
 import { acceptDraftForSigning } from './core/record/sign'
+import { OBSERVATION_CHOICES, type ObservationChoice, type ObservationNote } from './core/kangbi'
 import './sign-encounter.css'
 const labels:Record<Source,string>={student:'学生陈述',teacher:'老师判断',ai_draft:'AI 草稿',external:'外部证据',unknown:'未知'}
 const fields:Record<string,string>={look:'望',listenSmell:'闻',ask:'问',pulse:'切',symptomSummary:'症状摘要',pattern:'证候',mechanism:'病机',rationale:'辨证依据',principle:'治则治法',prescription:'方子',advice:'医嘱',change:'变化',adverse:'不良反应',next:'下次计划'}
@@ -23,12 +24,15 @@ function scheduleLabel(spec: Encounter['plan']['homework'][number]['schedule']):
 }
 export interface SignEncounterPageProps {
   initial:Encounter
-  onConfirm:(encounter:Encounter)=>Promise<void>|void
+  onConfirm:(encounter:Encounter, comparison?:ObservationNote)=>Promise<void>|void
   onCancel?:()=>void
   onRevise?:(encounter:Encounter,instruction:string)=>Promise<Encounter>
+  /** V2-10：老师签字前自己选“和上次比”；不选也能签字，记为未评价（不是持平）。 */
+  comparison?:ObservationNote
+  onComparisonChange?:(value:ObservationChoice|null)=>void
 }
 // 仅展示与真人确认；模型调用由起草父组件提供，签字处理从不调用 onRevise。
-export function SignEncounterPage({initial,onConfirm,onCancel,onRevise}:SignEncounterPageProps){
+export function SignEncounterPage({initial,onConfirm,onCancel,onRevise,comparison=null,onComparisonChange}:SignEncounterPageProps){
   const [encounter,setEncounter]=useState(initial),[instruction,setInstruction]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('')
   return <main className="sign-page">
     <header className="sign-head"><h1>病历草稿</h1><p>看过整张卡片后，按“签字发出”确认全部内容。</p></header>
@@ -42,6 +46,14 @@ export function SignEncounterPage({initial,onConfirm,onCancel,onRevise}:SignEnco
     {onRevise&&<form className="sign-editor" onSubmit={event=>{event.preventDefault();if(busy||!instruction.trim())return;setBusy(true);setError('');void onRevise(encounter,instruction).then(next=>{setEncounter(next);setInstruction('')}).catch(cause=>setError(cause instanceof Error?cause.message:'改稿未完成，请重试。')).finally(()=>setBusy(false))}}>
       <label>说说怎么改<textarea rows={2} value={instruction} disabled={busy} onChange={e=>setInstruction(e.target.value)} placeholder="用键盘话筒说话，或打字：去掉某味药、作业改成每晚泡脚"/></label><button disabled={busy||!instruction.trim()}>按意见改稿</button>
     </form>}
-    <footer className="sign-foot">{error&&<p role="alert">{error}</p>}<div className="sign-actions"><button className="sign-primary" disabled={busy} onClick={async()=>{setBusy(true);setError('');try{await onConfirm(acceptDraftForSigning(encounter))}catch(cause){setError(cause instanceof Error?cause.message:'发出未完成，请重试。')}finally{setBusy(false)}}}>签字发出</button>{onCancel&&<button disabled={busy} onClick={onCancel}>返回</button>}</div></footer>
+    <footer className="sign-foot">{error&&<p role="alert">{error}</p>}
+      {onComparisonChange&&<section className="sign-compare" aria-label="和上次比">
+        <p>和上次比：</p>
+        <div className="sign-compare-options" role="group" aria-label="和上次比">
+          {OBSERVATION_CHOICES.map(choice=><button type="button" key={choice.value} aria-pressed={comparison===choice.value} disabled={busy} onClick={()=>onComparisonChange(comparison===choice.value?null:choice.value)}>{choice.label}</button>)}
+        </div>
+        <p className="sign-compare-note">不选也能签字，记为未评价（不是持平）。</p>
+      </section>}
+      <div className="sign-actions"><button className="sign-primary" disabled={busy} onClick={async()=>{setBusy(true);setError('');try{await onConfirm(acceptDraftForSigning(encounter),comparison??null)}catch(cause){setError(cause instanceof Error?cause.message:'发出未完成，请重试。')}finally{setBusy(false)}}}>签字发出</button>{onCancel&&<button disabled={busy} onClick={onCancel}>返回</button>}</div></footer>
   </main>
 }

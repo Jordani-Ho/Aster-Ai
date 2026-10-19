@@ -12,6 +12,7 @@ import { INTAKE_COLLECTIONS, deleteDraft, restartAfterEmergency, type IntakeSess
 import { localDay } from '../homework/schedule'
 import { isHeavenStamp } from '../heaven/stamp'
 import type { HeavenStamp } from '../heaven/stamp'
+import { parsePeriodObservation, type PeriodObservation } from '../../../../domain/tcm/observation'
 import { saveTeacherRecord, rememberTeacherStudent } from '../records/teacher'
 import { updateFingerprint } from '../records/fingerprint'
 import { receiveRetentionSetting, RETENTION_TYPE } from '../records/retention'
@@ -71,6 +72,8 @@ export interface ConsultEnvelopePayload {
   managerProof?: unknown
   /** V2-06：发送那一刻学生那边的天地人；签字病历原样沿用。 */
   heaven?: unknown
+  /** V2-10：这段时间的计数与智能体那一句；不含本人感受、病历内容或照片。 */
+  observation?: unknown
 }
 
 export interface AttachmentEnvelopePayload {
@@ -97,6 +100,8 @@ export interface StoredConsult {
   managerInvalid?: boolean
   /** V2-06：学生发送时的天地人（时辰、节气、城市）；老师起草页显示，签字病历沿用。 */
   heaven?: HeavenStamp | null
+  /** V2-10：这段时间的计数与智能体那句（只在签字时写进观察记录，签字前界面不显示）。 */
+  observation?: PeriodObservation | null
 }
 
 export interface ConsultReadiness {
@@ -293,6 +298,7 @@ export function consultEnvelope(pkg: ConsultPackage): Envelope {
       ...(pkg.manager ? { manager: pkg.manager } : {}),
       ...(pkg.managerProof ? { managerProof: structuredClone(pkg.managerProof) } : {}),
       ...((pkg.heaven ?? pkg.encounter.heaven) ? { heaven: structuredClone(pkg.heaven ?? pkg.encounter.heaven) } : {}),
+      ...(pkg.observation ? { observation: structuredClone(pkg.observation) } : {}),
     } satisfies ConsultEnvelopePayload,
   }
 }
@@ -507,6 +513,8 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
   const heavenRaw = value.heaven ?? value.encounter.heaven
   if (heavenRaw !== undefined && !isHeavenStamp(heavenRaw)) return
   const heaven: HeavenStamp | undefined = heavenRaw
+  // V2-10：观察周期元数据格式不对就忽略（不影响问诊本身）；签字前界面不显示智能体那句。
+  const observation = parsePeriodObservation(value.observation)
   const stored: StoredConsult = {
     encounter: heaven && !value.encounter.heaven ? { ...value.encounter, heaven: { ...heaven } } : value.encounter,
     history: checked.history,
@@ -519,6 +527,7 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
     ...(heaven ? { heaven: { ...heaven } } : {}),
     ...(manager ? { manager } : {}),
     ...(managerInvalid ? { managerInvalid: true } : {}),
+    ...(observation ? { observation } : {}),
   }
   await store.put(INBOX_COLLECTIONS.consult, value.encounter.id, stored as unknown as StoreValue)
   // V2-05：老师认得的学生的名单（只存公钥；换手机后靠它逐个向学生要回病历）。

@@ -25,6 +25,7 @@ import {
   type SendSignedRecord,
 } from './core/record/in-person'
 import { sendInPersonRecord, type SendEnvelope } from './core/inbox'
+import { recordSignedObservation, type ObservationNote } from './core/kangbi'
 import { teacherCases } from './core/records/teacher'
 import type { Encounter } from './core/record/types'
 import type { LocalStore } from './core/store'
@@ -66,6 +67,8 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // V2-10：签字页“和上次比”老师自己选；面诊也一样可以不选（未评价）。
+  const [comparison, setComparison] = useState<ObservationNote>(null)
   const [utterance,setUtterance]=useState('')
   const [questionIndex,setQuestionIndex]=useState(0)
   const [template,setTemplate]=useState<TeacherTemplate>(defaultTemplate)
@@ -165,17 +168,24 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
     }catch(cause){setError(message(cause))}finally{setBusy(false)}
   }
 
-  const confirm = async (finalEncounter: Encounter) => {
+  const confirm = async (finalEncounter: Encounter, chosen?: ObservationNote) => {
     if (!draftEncounter) return
     setError('')
     try {
-      await signAndHandoverInPerson({
+      const signed = await signAndHandoverInPerson({
         encounter: finalEncounter,
         privateKey: identity.privateKey,
         send,
         store,
         ...(draftEncounter ? { draft: draftEncounter } : {}),
       })
+      // V2-10：面诊也记一条观察（本人感受不在老师端；面诊没有学生上报的坚持天数，按 0 记）。
+      try {
+        await recordSignedObservation(store, {
+          id: signed.id, student: finalEncounter.student, teacher: identity.publicKey, at: new Date(),
+          teacherMinutes: 0, consultations: 1, teacherNote: chosen ?? null, report: null,
+        })
+      } catch { /* 观察记录暂未保存不影响已交还病历 */ }
       setPhase('sent')
     } catch (cause) {
       // 发送失败只提示；照片与代录原文原样保留，老师可再试。
@@ -223,6 +233,8 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
         onRevise={llm ? (current,instruction)=>reviseEncounter(current,instruction,llm) : undefined}
         initial={draftEncounter}
         onConfirm={confirm}
+        comparison={comparison}
+        onComparisonChange={setComparison}
         onCancel={() => { setPhase('intake'); setStatus('已返回录入页，内容都还在本机。') }}
       />
     </>

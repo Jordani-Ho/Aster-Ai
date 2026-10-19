@@ -1,5 +1,5 @@
 {
-  "weights": { "teacher": null, "self": null, "measurement": null },
+  "weights": { "teacher": null, "measurement": null },
   "kePerPracticeDay": null,
   "declinePerUnit": null,
   "kePerConsultation": null,

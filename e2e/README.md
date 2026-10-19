@@ -6,6 +6,8 @@ V2-08：`node e2e/abstractor.browser.mjs` 独立启动本机 Vite + Chromium，�
 
 V2-09：`node e2e/storefront.browser.mjs` 同样独立启动 Vite + Chromium，不需中继/Rust；用两份合成门面（阿慈养生馆/小黄运动馆）出两张邀请首屏、断言首屏无免责句，再用真实 `StorefrontSettings` 走“直接改 → 学生视角预览 → 用这个样子 → 恢复上次样子”，重开页面仍用已生效版本。非 CI 时写 `docs/screenshots/storefront-{aci,huang,teacher}-375.png`（375px）。`fixtures.ts` 已改为新学生先看到邀请首屏、点“开始使用”后再接入；过期/非成员邀请的报错文案改为卡里的“邀请暂不可用，请向老师要一个新链接”。CI 运行本文件。
 
+V2-10：签字页多了一行“和上次比”四选一（不选也能签）；学生镜子页多了一块“这段时间自己感觉”，只写本机 `kangbi-self`。观察周期/三方一句话/影子试算的验收在 `app/src/core/kangbi/observation.test.ts`（合成作业、打卡、舌象与内存投递），完整 e2e 只做回归：签字流程照旧，签名后照常交还。
+
 这里只运行合成身份和资料。M1-15a 合并后接入完整九步问诊与四条硬性验收，使用真实编译中继、真实网关和 Chromium；模型与推送为本地替身，不需要 API Key。
 
 ## 一条命令

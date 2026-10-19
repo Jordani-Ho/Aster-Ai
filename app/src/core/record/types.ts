@@ -4,6 +4,7 @@
 import type { FamilyProof } from '../family/proof'
 import type { HeavenStamp } from '../heaven'
 import type { TongueAbstract } from '../../../../domain/tcm/tongue'
+import type { PeriodObservation } from '../../../../domain/tcm/observation'
 
 /** 每个字段的来源。界面用颜色区分；AI 推测永远不能显示成事实。 */
 export type Source = 'student' | 'teacher' | 'ai_draft' | 'external' | 'unknown'
@@ -93,4 +94,9 @@ export interface ConsultPackage {
   manager?: string
   /** M1-22 代管证明：代管人私钥签名的 kind 2732 小事件，老师端验过才认 manager。不进病历 schema。 */
   managerProof?: FamilyProof
+  /**
+   * V2-10：这段时间的计数与“学生智能体”那一句，只随信封给老师端写观察记录用。
+   * 不含本人感受（本人感受只存在学生本机）、不含病历内容或照片。
+   */
+  observation?: PeriodObservation
 }

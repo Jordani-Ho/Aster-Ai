@@ -13,10 +13,12 @@ import { TonguePair } from './TonguePair'
 import { CITY_UNKNOWN_HINT, DEFAULT_MIRROR_SHICHEN, DEFAULT_TIME_DISPLAY, formatHeavenTime, heavenNow, heavenStampOf, loadMirrorShichen, loadTimeDisplay, type HeavenTime, type TimeDisplay } from './core/heaven'
 import { MemberSwitcher } from './MemberSwitcher'
 import type { FamilyMember } from './core/family'
+import type { Identity } from './core/identity'
+import { OBSERVATION_CHOICES, latestSelfObservation, recordSelfObservation, studentObservationWindow, type ObservationChoice } from './core/kangbi'
 
 const DAY_NAMES: Record<number, string> = { 1: '差', 2: '一般', 3: '还行', 4: '不错', 5: '很好' }
 
-export function MirrorPage({ store, modelStore, settingsStore, llm, family = [], active = 0, onSwitch, member, onCheckedIn, teacher }: {
+export function MirrorPage({ store, modelStore, settingsStore, llm, family = [], active = 0, onSwitch, member, onCheckedIn, teacher, identity }: {
   store: LocalStore
   modelStore?: LocalStore
   /** V2-06：时间显示方式与照镜子时辰沿用管理人的设置（家人不单独设）。 */
@@ -30,6 +32,8 @@ export function MirrorPage({ store, modelStore, settingsStore, llm, family = [],
   onCheckedIn?: () => void
   /** V2-09：当前在用的馆；每日建议取这位老师的调养方案。 */
   teacher?: string | null
+  /** V2-10：本人感受只记在本人本机；没有身份（测试夹具）时不显示这一块。 */
+  identity?: Identity
 }) {
   const [checkins, setCheckins] = useState<Checkin[]>([])
   const [ratings, setRatings] = useState<SelfRating[]>([])
@@ -47,6 +51,9 @@ export function MirrorPage({ store, modelStore, settingsStore, llm, family = [],
   const [mirrorShichen, setMirrorShichen] = useState(DEFAULT_MIRROR_SHICHEN)
   const assignmentsRef = useRef<Assignment[]>([])
   const [now] = useState(() => new Date())
+  // V2-10：本人这一句只存在本机；老师看不到，也不随问诊包发出。
+  const [selfNote, setSelfNote] = useState<ObservationChoice | null>(null)
+  const [selfStatus, setSelfStatus] = useState('')
   // 打卡相关一律用 effectiveDay（与 checkinDay 同一口径）；舌象按自然日存档，用 calendarToday。
   const today = effectiveDay(now)
   const calendarToday = localDay(now)
@@ -98,6 +105,28 @@ export function MirrorPage({ store, modelStore, settingsStore, llm, family = [],
 
   const stamp = heaven ? heavenStampOf(heaven) : undefined
 
+  useEffect(() => {
+    if (!identity || !teacher) { setSelfNote(null); return }
+    let cancelled = false
+    void (async () => {
+      try {
+        const window = await studentObservationWindow(store, { teacher })
+        const latest = await latestSelfObservation(store, { student: identity.publicKey, teacher, window })
+        if (!cancelled) setSelfNote(latest?.choice ?? null)
+      } catch { /* 读不到本人感受不影响镜子其它内容 */ }
+    })()
+    return () => { cancelled = true }
+  }, [store, identity, teacher])
+
+  const rateSelf = async (choice: ObservationChoice) => {
+    if (!identity || !teacher) return
+    try {
+      await recordSelfObservation(store, { student: identity.publicKey, teacher, choice })
+      setSelfNote(choice)
+      setSelfStatus('已记在这台手机上，只有你能看到。')
+    } catch { setSelfStatus('没记上，请再试一次。') }
+  }
+
   const complete = async (homeworkId: string) => {
     try {
       await checkIn(store, homeworkId, undefined, new Date(), stamp)
@@ -141,6 +170,15 @@ export function MirrorPage({ store, modelStore, settingsStore, llm, family = [],
     {status && <p role="status">{status}</p>}
     {shichenNotice && <p role="status">{shichenNotice}</p>}
     <section className="mirror-card"><DailyMirrorCard store={store} llm={llm} teacher={teacher ?? undefined} /></section>
+
+    {identity && teacher && <section className="mirror-card" aria-label="这段时间自己感觉">
+      <h2>这段时间自己感觉</h2>
+      <div className="mirror-rating" role="group" aria-label="这段时间自己感觉">
+        {OBSERVATION_CHOICES.map(choice => <button key={choice.value} aria-pressed={selfNote === choice.value} onClick={() => void rateSelf(choice.value)}>{choice.label}</button>)}
+      </div>
+      <p className="mirror-meta">只记在这台手机上，老师看不到，也不会随问诊发出去；也可以不记。</p>
+      {selfStatus && <p className="mirror-meta" role="status">{selfStatus}</p>}
+    </section>}
 
     <section className="mirror-card">
       <h2>今天的作业</h2>

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "minPracticeDays": 3,
+  "adherence": { "improvedAt": 0.8, "worsenedAt": 0.4 },
+  "tongue": {
+    "betterColor": "pink",
+    "coatingColorOrder": ["none", "white", "yellow", "gray", "black"],
+    "coatingThicknessOrder": ["none", "thin", "thick"]
+  }
+}

@@ -15,8 +15,8 @@ export const RETENTION_TYPE = 'retention.setting'
 export const TEACHER_RETENTION_COLLECTION = 'teacher-retention'
 export const RETENTION_DAYS_SETTING = 'retention-days'
 export const LAST_RETENTION_DAY_SETTING = 'last-retention-day'
-/** 长期保留的沉淀：保留期只删记录，不碰这些集合。 */
-export const LONG_TERM_COLLECTIONS = ['care-plans', 'homework', 'teacher-fingerprint', 'kangbi-observations', 'kangbi-events'] as const
+/** 长期保留的沉淀：保留期只删记录，不碰这些集合。kangbi-self 是学生本人的感受，只在这台手机上。 */
+export const LONG_TERM_COLLECTIONS = ['care-plans', 'homework', 'teacher-fingerprint', 'kangbi-observations', 'kangbi-events', 'kangbi-self'] as const
 
 const DAY = 86400000
 const HEX64 = /^[0-9a-f]{64}$/

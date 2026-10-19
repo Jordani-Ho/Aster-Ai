@@ -1,7 +1,7 @@
 import { TonguePair } from './TonguePair'
 import { parseTongueAbstract, type TongueAbstract } from '../../domain/tcm/tongue'
 import { toMinor, moneyCurrencyFor } from './core/ledger/money'
-import { recordObservation } from './core/kangbi'
+import { recordSignedObservation, type ObservationNote } from './core/kangbi'
 import { CarePlanStudentPicker } from './TeacherCarePlan'
 import { loadTeacherTemplate } from './core/drafting/template'
 import { reviseEncounter } from './core/drafting/revise'
@@ -75,6 +75,8 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
   const [draft, setDraft] = useState<Encounter | null>(null)
   // V2-08：老师逐项改过的舌象；签字时替换进病历，模型原值留作思想指纹差异对照。
   const [tongues, setTongues] = useState<TongueAbstract[] | null>(null)
+  // V2-10：老师签字前自己选“和上次比”；不选也能签，记为未评价。
+  const [comparison, setComparison] = useState<ObservationNote>(null)
   const [charge, setCharge] = useState('')
   const [currency,setCurrency]=useState('')
   useEffect(()=>{let active=true;setCurrency('');const student=selected?(consultChargeBook(selected)?.student??selected.encounter.student):undefined;void moneyCurrencyFor(store,identity.publicKey,student).then(value=>{if(active)setCurrency(value??'')}).catch(()=>{if(active)setError('钱账币种读取失败，请核对钱账')});return()=>{active=false}},[store,identity.publicKey,selected])
@@ -113,7 +115,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
   }, [store])
 
   const startDraft = async (consult: StoredConsult) => {
-    startedAt.current = Date.now(); signedAt.current = null; metricKey.current = crypto.randomUUID(); setRatingKey(null)
+    startedAt.current = Date.now(); signedAt.current = null; metricKey.current = crypto.randomUUID(); setRatingKey(null); setComparison(null)
     setBusy(true); setError(''); setStatus('')
     try {
       const ready = await assertConsultReady(store, consult.encounter.id)
@@ -140,7 +142,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
 
-  const confirm = async (final: Encounter) => {
+  const confirm = async (final: Encounter, chosen?: ObservationNote) => {
     if (!selected) return
     setError(''); setStatus('')
     try {
@@ -160,8 +162,20 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
       try { await saveMetric(store, metricKey.current, metric); setRatingKey(metricKey.current) }
       catch { setStatus(previous => previous + ' 试点指标未能保存，不影响已交还病历。') }
       setSelected(null); setDraft(null); setTongues(null)
-      try {await recordObservation(store,{id:result.signed.id,student:selected.encounter.student,teacher:identity.publicKey,at:new Date(signedAt.current!).toISOString(),practiceDays:0,teacherMinutes:Math.max(0,(signedAt.current!-startedAt.current)/60000),consultations:1,effects:{teacher:null,self:null,measurement:null}})}
-      catch {setStatus(previous=>previous+' 观察时长暂未保存，不影响已交还病历。')}
+      // V2-10：观察记录 = 周期起止 + 有效坚持天数 + 老师分钟 + 老师一句 + 智能体一句（都不含病历内容/照片）。
+      // 智能体那句来自学生随问诊包发来的计数；本人感受永远不在老师端。
+      try {
+        await recordSignedObservation(store, {
+          id: result.signed.id,
+          student: selected.encounter.student,
+          teacher: identity.publicKey,
+          at: new Date(signedAt.current!),
+          teacherMinutes: Math.max(0, (signedAt.current! - startedAt.current) / 60000),
+          consultations: 1,
+          teacherNote: chosen ?? null,
+          report: selected.observation ?? null,
+        })
+      } catch { setStatus(previous => previous + ' 观察记录暂未保存，不影响已交还病历。') }
       setDone(true)
     } catch (cause) {
       signedAt.current = null
@@ -222,6 +236,8 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
       <SignEncounterPage
         initial={draft}
         onConfirm={confirm}
+        comparison={comparison}
+        onComparisonChange={setComparison}
         onRevise={llm ? (encounter, instruction) => reviseEncounter(encounter, instruction, llm) : undefined}
         onCancel={() => {
           setSelected(null); setDraft(null); setTongues(null)

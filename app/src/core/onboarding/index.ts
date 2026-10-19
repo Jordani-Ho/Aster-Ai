@@ -20,6 +20,8 @@ export async function acceptInvite(identity:Identity,store:LocalStore,event:Even
  if(!validateInvite(event,url))throw Error(INVITE_ERROR)
  await onboardingRequest(identity,url,{invite:event})
  await addTeacher(store,event.pubkey)
+ // V2-10：第一次加入时记下加入时间，观察周期的第一次从这天算起；再打开邀请不覆盖。
+ if(!await store.get('settings','joined-at'))await store.put('settings','joined-at',new Date().toISOString() as unknown as import('../store').StoreValue)
  // Before App starts its shared controller; no second live transport and no coin transaction.
  const sync=createLedgerSync({identity,store,send:async()=>''})
  try{await sync.open(event.pubkey,identity.publicKey)}finally{await sync.close()}
