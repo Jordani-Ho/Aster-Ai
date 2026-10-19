@@ -236,7 +236,9 @@ describe('V2-05 验收 1：老师设定保留期限', () => {
     await storeCarePlan(studentStore, teacher.publicKey, { constitution: '平和质', points: ['早睡'], avoid: ['生冷'], updatedAt: NOW.toISOString(), version: 1 })
     await recordObservation(studentStore, {
       id: 'kangbi-observation-1', student: student.publicKey, teacher: teacher.publicKey, at: old.toISOString(),
-      practiceDays: 3, teacherMinutes: 0, consultations: 0, effects: { teacher: null, self: 4, measurement: null },
+      periodStart: old.toISOString(), periodEnd: old.toISOString(),
+      practiceDays: 3, teacherMinutes: 0, consultations: 0, teacherNote: null, agentNote: null,
+      effects: { teacher: null, measurement: null },
     })
 
     // 保留期限随调养方案发给学生（这里直接投递设置信封）。

@@ -24,3 +24,11 @@
 .sign-foot { margin-top: 16px; }
 .sign-foot p { font-size: 13px; color: #444; }
 .sign-error { color: #b91c1c !important; font-weight: 600; }
+
+/* V2-10：签字前老师自己选的一句；不选也能签（未评价）。 */
+.sign-compare { border: 1px solid var(--sign-line); border-radius: 12px; padding: 12px; margin: 12px 0; background: #fff; }
+.sign-compare > p { margin: 0 0 8px; font-size: 14px; }
+.sign-compare-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.sign-compare-options button { min-height: 36px; padding: 0 14px; font-size: 14px; border-radius: 999px; border: 1px solid #d0d0d0; background: #fff; color: #111; }
+.sign-compare-options button[aria-pressed='true'] { border-color: #15803d; background: #15803d; color: #fff; }
+.sign-compare-note { margin: 8px 0 0; font-size: 13px; color: #555; }

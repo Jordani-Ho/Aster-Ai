@@ -23,6 +23,7 @@ import { RedFlagAlert } from './RedFlagAlert'
 import { uiError } from './core/onboarding/ui'
 import { TongueCapture } from './TongueCapture'
 import { TonguePair } from './TonguePair'
+import { buildPeriodObservation } from './core/kangbi'
 
 const FIELD_LABELS: Record<IntakeKey, string> = {
   chiefComplaint: '最不舒服的地方（主诉）',
@@ -150,7 +151,10 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
         ...(managerIdentity ? { manager: managerIdentity.publicKey, managerProof: createFamilyProof(managerIdentity, identity.publicKey) } : {}),
         heaven,
       }
-      await confirmAndSend(store, session, currentProfile, history, attachments, sendFn, trend, options)
+      // V2-10：随问诊包带“这段周期的计数 + 学生智能体那句”；本人感受永远不在这里。
+      let observation: ConsultPackage['observation']
+      try { observation = await buildPeriodObservation(store, { teacher: session.teacher }) } catch { observation = undefined }
+      await confirmAndSend(store, session, currentProfile, history, attachments, sendFn, trend, observation ? { ...options, observation } : options)
       setSent(true)
       setSession({ ...session, phase: 'sent' })
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }

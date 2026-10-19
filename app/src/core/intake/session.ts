@@ -1,5 +1,6 @@
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
 import { parseTongueAbstract, type TongueAbstract } from '../../../../domain/tcm/tongue'
+import { parsePeriodObservation } from '../../../../domain/tcm/observation'
 import type { LlmClient } from '../llm'
 import { isHeavenStamp } from '../heaven/stamp'
 import { check, type RedFlagResult } from '../redflags'
@@ -264,7 +265,7 @@ export function buildConsultPackage(
   history: readonly HistoryCandidate[],
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
   trend?: ConsultPackage['trend'],
-  options: { manager?: string; managerProof?: ConsultPackage['managerProof']; heaven?: ConsultPackage['heaven'] } = {},
+  options: { manager?: string; managerProof?: ConsultPackage['managerProof']; heaven?: ConsultPackage['heaven']; observation?: ConsultPackage['observation'] } = {},
 ): ConsultPackage {
   const checkResult = canConfirm(state)
   if (!checkResult.ok) throw new Error(checkResult.reason)
@@ -337,6 +338,12 @@ export function buildConsultPackage(
     pkg.manager = options.manager
     pkg.managerProof = structuredClone(options.managerProof)
   }
+  // V2-10：只带计数与智能体那一句；本人感受不进问诊包。
+  if (options.observation !== undefined) {
+    const observation = parsePeriodObservation(options.observation)
+    if (!observation) throw new Error('观察周期数据无效')
+    pkg.observation = observation
+  }
   return pkg
 }
 
@@ -361,7 +368,7 @@ export async function confirmAndSend(
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
   send: SendConsultPackage,
   trend?: ConsultPackage['trend'],
-  options: { manager?: string; managerProof?: ConsultPackage['managerProof']; heaven?: ConsultPackage['heaven'] } = {},
+  options: { manager?: string; managerProof?: ConsultPackage['managerProof']; heaven?: ConsultPackage['heaven']; observation?: ConsultPackage['observation'] } = {},
 ): Promise<ConsultPackage> {
   const pkg = buildConsultPackage(state, profile, history, attachments, trend, options)
   // 只有学生明确点“确认发送”才走到这里；之前任何一步都不调用 send。

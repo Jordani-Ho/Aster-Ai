@@ -72,7 +72,11 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
         const today=effectiveDay(new Date())
         if(checkins.some(c=>checkinDay(new Date(c.at))===today)) {
           const id=await observationId(['practice',pagesIdentity.publicKey,teacher,today])
-          if(!await pagesStore.get('kangbi-observations',id))await recordObservation(pagesStore,{id,student:pagesIdentity.publicKey,teacher,at:new Date().toISOString(),practiceDays:1,teacherMinutes:0,consultations:0,effects:{teacher:null,self:null,measurement:null}})
+          if(!await pagesStore.get('kangbi-observations',id)){
+            // V2-10：单日打卡也算一条极短周期观察；两句话都不填（未评价），本人感受不在这里。
+            const at=new Date().toISOString()
+            await recordObservation(pagesStore,{id,student:pagesIdentity.publicKey,teacher,at,periodStart:at,periodEnd:at,practiceDays:1,teacherMinutes:0,consultations:0,teacherNote:null,agentNote:null,effects:{teacher:null,measurement:null}})
+          }
         }
         await sendEnvelope(teacher, adherenceEnvelope(adherenceReport(assignments, checkins, effectiveDay(new Date()))))
       } catch { /* 上报不是打卡成功条件。 */ }
@@ -88,7 +92,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
       <p role="status" className="relay-status">中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : stackStatus === 'rejected' ? '连接未成功，请联系老师' : '尚未连接'}</p>
       {venue.active && <p className="teacher-venue">{venueHeading(venue)}</p>}
       {modelNotice}
-      {tab === 'mirror' && <MirrorPage key={active} store={pagesStore} modelStore={store} settingsStore={store} llm={llm} family={family} active={active} onSwitch={onSwitch} member={activeMember} onCheckedIn={reportAdherence} teacher={venue.active} />}
+      {tab === 'mirror' && <MirrorPage key={active} store={pagesStore} modelStore={store} settingsStore={store} llm={llm} family={family} active={active} onSwitch={onSwitch} member={activeMember} onCheckedIn={reportAdherence} teacher={venue.active} identity={pagesIdentity} />}
       {tab === 'consult' && <ConsultPage key={active} store={pagesStore} modelStore={store} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} teacher={venue.active} teacherName={venue.call} />}
       {tab === 'other' && <main className="other-page">
         <header><p className="eyebrow">知衡 · 学生</p><h1>其他</h1></header>
