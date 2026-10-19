@@ -11,4 +11,4 @@ CSV固定六列（`record_id_prefix,draft_to_sign_ms,modification_rate,missing_r
 无AI字段记0；缺失率按4个intake Field加4个四诊Field计，unknown或null均为缺失，不计附件列表。
 评分跳过以空CSV单元格表示。仅保存数值；重载不重复弹评分，已保存的指标仍可导出。
 
-中继备份明确排除此集合，本机加密文件备份可包含；恢复全库可能替换指标，CSV由本人本机保留。指标保存不触发网络请求。
+V2 起没有中继备份与整库导出；指标只留本机，CSV 由本人本机保留。指标保存不触发网络请求。

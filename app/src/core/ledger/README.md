@@ -11,3 +11,7 @@
 钱不经系统支付，老师在社区外收款后确认记账。每条签名绑定师生、币种、金额、家人、prev 与可选确认编号。具体格式见 docs/schemas/money-ledger.md；异议与对账延续原协议和 7 天边界，未重定义退款/欠费政策。多标签/多设备同时写同一本账仍不支持，冲突时不自动选赢家。
 
 新币种、金额语义及 confirmationId 是 B 类格式变更，交 Claude 审核。生产康币规则全 null，健康观察在独立 kangbi/，两本账没有互相换算或外部支付实现。
+
+中继地址只用构建时的 VITE_COMMUNITY_RELAYS（V2 已删除备份设置里的 backup-config，不再可改）。
+扣费事件的 `recordHash`（钱账里同时作为 `confirmationId`）是签名病历的事件 id，与老师端 `teacher-records` 里的完整医案对得上（V2-05）。
+V2-05 的保留期限只清医案、问诊包与照片，**不碰钱账与康币账的任何数据**（钱账、`kangbi-observations` 长期保留）。

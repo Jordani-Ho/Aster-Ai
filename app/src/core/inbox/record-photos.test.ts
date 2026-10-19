@@ -18,12 +18,13 @@ async function setup() {
 it('面诊照片与签名病历加密发出后老师原件仍在本机；照片先到也能验签入学生本机',async()=>{
  const f=await setup(),packets:any[]=[]
  try{
-  await signAndHandoverInPerson({encounter:f.encounter,privateKey:f.teacher.privateKey,send:async(_type,event)=>sendInPersonRecord(f.source,async(_to,envelope)=>{packets.push(envelope)},f.student.publicKey,event)})
+  await signAndHandoverInPerson({encounter:f.encounter,privateKey:f.teacher.privateKey,store:f.source,send:async(_type,event)=>sendInPersonRecord(f.source,async(_to,envelope)=>{packets.push(envelope)},f.student.publicKey,event)})
   expect(packets.map(p=>p.type)).toEqual(['record.signed','record.attachment'])
   for(const packet of [...packets].reverse())await f.deliver(packet)
-  // V2-01：签字发送成功后不再删除老师原件，删除交给 V2-05 的保留期限。
+  // V2-05：签字发送成功后不删除老师原件；完整签名病历进 teacher-records，删除交给保留期限。
   expect(await f.source.get('attachments',f.ref.id)).toEqual(f.data)
   expect(await f.source.list('in-person-draft')).toHaveLength(1)
+  expect(await f.source.list('teacher-records')).toHaveLength(1)
   expect(await f.target.list('student-records')).toHaveLength(1)
   const index=(await f.target.list('record-photo-index'))[0]
   expect(index.key).toMatch(/^[0-9a-f-]{36}$/)
@@ -35,14 +36,16 @@ it('照片传输失败保留老师原件；再试一次发送成功后原件仍�
  const f=await setup();let fail=true;const ids:string[]=[]
  const send=async(_type:'record.signed',event:any)=>sendInPersonRecord(f.source,async(_to,envelope)=>{if(envelope.type==='record.attachment'&&fail)throw Error('offline');if(envelope.type==='record.signed')ids.push((envelope.payload as any).id);await f.deliver(envelope)},f.student.publicKey,event)
  try{
-  await expect(signAndHandoverInPerson({encounter:f.encounter,privateKey:f.teacher.privateKey,send})).rejects.toThrow('offline')
+  await expect(signAndHandoverInPerson({encounter:f.encounter,privateKey:f.teacher.privateKey,store:f.source,send})).rejects.toThrow('offline')
   expect(await f.source.get('attachments',f.ref.id)).toEqual(f.data)
+  expect(await f.source.list('teacher-records')).toHaveLength(0)
   expect(await f.target.list('record-photos')).toEqual([])
-  // 老师再试一次：重新签出同一事件，发送成功后照片与草稿都还在（V2-05 再管保留）。
-  fail=false;await signAndHandoverInPerson({encounter:f.encounter,privateKey:f.teacher.privateKey,send})
+  // 老师再试一次：重新签出同一事件，发送成功后照片与草稿都还在（V2-05 保留期限再管删除）。
+  fail=false;await signAndHandoverInPerson({encounter:f.encounter,privateKey:f.teacher.privateKey,store:f.source,send})
   expect(ids).toHaveLength(2);expect(new Set(ids).size).toBe(1)
   expect(await f.source.get('attachments',f.ref.id)).toEqual(f.data)
   expect(await f.source.list('in-person-draft')).toHaveLength(1)
+  expect(await f.source.list('teacher-records')).toHaveLength(1)
   expect(await f.target.list('record-photos')).toHaveLength(1)
  }finally{f.close()}
 })

@@ -1,11 +1,13 @@
 import { check, type RedFlagResult } from '../redflags'
 import type { AttachmentRef, ConsultPackage, Encounter, Field } from './types'
 import { signEncounter, type SignedEncounterEvent } from './sign'
+import { saveTeacherRecord, teacherStudents, type RecordStoreLike } from '../records/teacher'
+import { updateFingerprint } from '../records/fingerprint'
 
 // M1-12 面诊记录：老师当面看诊时，在自己手机上新建 kind: 'in_person' 的病历。
 // 主诉等 intake 由老师代录，这是病历格式第 3 节第 2 条的唯一例外（来源 teacher、note 为 in_person）；
 // 起草、签字复用 M1-10 的 drafting 与 M1-11 的 sign.ts，不另写一套。
-// V2-01：签字后只发送，不再删除本机资料；删除交给 V2-05 的保留期限统一处理。
+// V2-05：签字发送成功后把完整签名病历存进 teacher-records；问诊包、照片与面诊草稿按保留期限删除。
 export const IN_PERSON_COLLECTIONS = {
   draft: 'in-person-draft',
   attachments: 'attachments',
@@ -176,29 +178,28 @@ export async function deleteInPersonDraft(store: RecordStore, encounterId: strin
   await store.delete(IN_PERSON_COLLECTIONS.draft, encounterId)
 }
 
-// 老师已有的学生（本机面诊草稿与收到的问诊包），供新建面诊时选择。
+// 老师已有的学生：只从 teacher-records（完整医案）按学生公钥去重，供新建面诊时选择。
 export async function knownStudents(store: RecordStore): Promise<string[]> {
-  const rows = [...await store.list(IN_PERSON_COLLECTIONS.draft), ...await store.list(IN_PERSON_COLLECTIONS.consultPackage)]
-  const students = new Set<string>()
-  for (const row of rows) {
-    const value = row.value as { student?: unknown; encounter?: {student?:unknown} } | undefined
-    const student = value?.student ?? value?.encounter?.student
-    if (typeof student === 'string' && HEX64.test(student)) students.add(student)
-  }
-  return [...students].sort()
+  return teacherStudents(store)
 }
 
 export interface SignInPersonOptions {
   encounter: Encounter
   privateKey: Uint8Array
   send: SendSignedRecord
+  /** 老师本机存储：签字发送成功后把完整签名病历存进 teacher-records。 */
+  store: RecordStoreLike
+  /** AI 草稿（有的话）：用于记“草案 → 定稿”的思想指纹摘要。 */
+  draft?: Encounter
 }
 
-// 签字并交还：signEncounter 后立即把 record.signed 发给学生。
-// V2-01：成功后不再删除照片、草稿或写本地索引/日志；失败只把错误交给界面提示，资料原样保留，老师可再试。
+// 签字并交还：signEncounter 后把 record.signed（面诊还有每张照片的 record.attachment）发给学生。
+// 发送成功后存完整医案；失败只把错误交给界面提示，资料原样保留，老师可再试。
 export async function signAndHandoverInPerson(options: SignInPersonOptions): Promise<SignedEncounterEvent> {
   assertInPerson(options.encounter)
   const signed = signEncounter(options.encounter, options.privateKey)
   await options.send('record.signed', signed)
+  await saveTeacherRecord(options.store, signed)
+  if (options.draft) await updateFingerprint(options.store, options.encounter.teacher, options.draft, options.encounter)
   return signed
 }

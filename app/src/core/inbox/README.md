@@ -5,6 +5,8 @@
 - `consult.package` → 老师端问诊箱（`consult-package`），只存 `AttachmentRef`，不存照片字节。
 - `consult.attachment` → 老师端附件（payload `{ encounterId, ref, data: base64 }`）。照片按 `id` + `sha256` 匹配问诊包里的引用，**现场重算 sha256**，字节长度或哈希不符就丢弃；到齐前 `assertConsultReady` 抛“照片还在路上”。
 - `record.signed` → 学生端先查“我的老师”白名单（本机 `settings` 的 `teachers`）：发件人不在名单里直接丢弃（验签、写库之前就拦住）；在名单里才 `verifySignedEncounter`（签名人必须是这位老师），通过后写入 `student-records`，并把 `plan.homework` 写进 M1-13 的 `homework` 集合（`startsOn` 取收到当天；同一 `encounter.id` 的新版本替换旧作业，迟到的旧版本不覆盖新版本）。
+- `retention.setting`（V2-05）→ 学生端按老师公钥保存保留期限（`teacher-retention`），用于滚动删除自己的记录；发件人必须与载荷里的老师公钥一致。
+- `records.request` / `records.pull` / `records.backup`（V2-05 互为备份）→ 见 `core/records/README.md`：学生请老师回发记录、老师请学生回发自己签的病历、以及两个方向的回包。
 - `ledger.*` → `createLedgerSync().receive`；不认识的类型丢弃。
 
 ## 我的老师白名单
@@ -19,7 +21,7 @@
 
 - `sendConsultPackage(send, pkg)`：先发问诊包（只带引用），再每张照片单独一条 `consult.attachment`（base64），避开中继单条 2 MB 上限。
 - `flushIntakeOutbox(store, send)`：M1-05 接通后把 `intake-outbox` 里的替身待发件真实发出，成功后才删除。
-- `completeConsultSigning`：V2 简化为“签字 → 发送 → 成功提示”：`signEncounter(final)` 后把 `record.signed` 发给问诊包发件人，送达后按需记一笔 `charge`（`recordHash` 为签名事件 id）；**不再**暂存/重发、不删问诊包或照片、不写索引/日志/医案（删除由 V2-05 保留期限统一处理）。
+- `completeConsultSigning`：签字 → 发送 → 成功提示：`signEncounter(final)` 后把 `record.signed` 发给问诊包发件人；发送成功后把**完整签名病历**存进 `teacher-records`（起草检索、previousOf、recordHash 都从它读），有 AI 草稿时顺带更新老师的改稿习惯摘要；再按需记一笔 `charge`（`recordHash` 为签名事件 id）。问诊包与照片仍保留，按老师设定的保留期限删除。
 - `restartIntakeAfterEmergency(store, state)`：急症中断后学生点“我已知晓并重新开始”时，先删掉含急症原文的旧草稿，再开新的一次采集。
 
 ## 学生病历页
@@ -28,13 +30,13 @@
 
 ## 本地集合
 
-`consult-package`（老师端收到的问诊包，交还后删除）、`attachments`（照片字节，交还后删除）、`student-records`（学生收到的签名病历）、`homework`（M1-13 作业集合），登记在 `app/src/core/store/README.md`。
+`consult-package`（老师端收到的问诊包，按保留期限删除）、`attachments`（照片字节，同上）、`student-records`（学生收到的签名病历）、`homework`（M1-13 作业集合）、`teacher-records`/`teacher-students`（老师端完整医案与认定的学生名单），登记在 `app/src/core/store/README.md`。
 
 ## 验证
 
 `app/src/core/inbox/inbox.test.ts`：两个 `createTransport` + 内存中继，覆盖 6 条验收（问诊包与照片到齐、签字扣费与双端对账码、照片缺失不能起草、篡改病历不显示、每条消息通知收件人且通知失败不影响发送、375px 截图），另加 1 条加固用例（急症重启删旧草稿、intake-outbox 真实发送并删除）。全部使用合成身份、合成病历与假 LLM。
 
-M1-15b：收到问诊包时先检查同一病历id/版本的已交还索引；存在则丢弃，避免重连时中继重放复活已删除原文。附件只接受仍有活跃问诊包的引用。新增回归测试验证交还后重放不恢复问诊包或照片；e2e进一步在真实中继重连后解密扫描全库。
+M1-15b：收到问诊包时先检查同一病历id/版本的已交还索引；存在则丢弃，避免重连时中继重放复活已删除原文。附件只接受仍有活跃问诊包的引用。新增回归测试验证交还后重放不恢复问诊包或照片；e2e进一步在真实中继重连后解密扫描全库。V2-05 起老师端保留完整医案，问诊包与照片按保留期限删除，“交还后立即删除”的规则不再适用。
 
 M1-17：签字交还后的首次扣费会先对老师侧调用原有open，建立与该学生的空账本；然后仍按原record路径扣费，不产生充值或赠送、不改变允许欠费等规则。覆盖学生只登记本人一侧、老师首次签字后双方-3并同码的回归。
 

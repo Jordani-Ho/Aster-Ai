@@ -25,6 +25,7 @@ import {
   type SendSignedRecord,
 } from './core/record/in-person'
 import { sendInPersonRecord, type SendEnvelope } from './core/inbox'
+import { teacherCases } from './core/records/teacher'
 import type { Encounter } from './core/record/types'
 import type { LocalStore } from './core/store'
 import { SignEncounterPage } from './SignEncounterPage'
@@ -120,7 +121,7 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
       if (llm) {
         setStatus('正在整理草稿，老师看过整张卡片后签字发出。')
         let draftError = ''
-        drafted = await draftWithModel(inPersonConsultPackage(encounter), await loadTeacherTemplate(store), [], llm, {level:'prescription',onError:message=>{draftError=message}})
+        drafted = await draftWithModel(inPersonConsultPackage(encounter), await loadTeacherTemplate(store), await teacherCases(store), llm, {level:'prescription',onError:message=>{draftError=message}})
         if(draftError)throw Error(draftError)
       } else {
         setStatus('未配置模型：本次没有 AI 草稿，判断与处理为空，核对主诉与照片后即可签字。')
@@ -167,6 +168,8 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
         encounter: finalEncounter,
         privateKey: identity.privateKey,
         send,
+        store,
+        ...(draftEncounter ? { draft: draftEncounter } : {}),
       })
       setPhase('sent')
     } catch (cause) {
