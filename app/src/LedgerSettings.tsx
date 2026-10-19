@@ -36,6 +36,8 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
   const [links, setLinks] = useState<IdentityLink[]>([])
   /** V2-12：老师名下学生（teacher-students），没有账本的也要列出来，第一次记账时再建账。 */
   const [students, setStudents] = useState<string[]>([])
+  /** 账本读完一次之前不渲染“还没记过账”的学生，避免同一学生的输入框先出现又被换掉。 */
+  const [booksReady, setBooksReady] = useState(false)
   const [revision, setRevision] = useState(0)
   const [memberFilter, setMemberFilter] = useState<string | null>(null)
   const [status, setStatus] = useState<LinkStatus>(sharedStatus ?? 'offline')
@@ -50,7 +52,7 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
       if (!runtime || disposed || pausing) return
       // V2-07b：按 identity-links 归并旧/新公钥的钱账，每个学生只显示一条合并后的余额与流水。
       const views = await runtime.mergedViews()
-      if (!disposed) setBooks(views)
+      if (!disposed) { setBooks(views); setBooksReady(true) }
     }
     const fail = () => { if (!disposed) setError('账本同步暂未成功，请检查中继设置或稍后重试。') }
     void (async () => {
@@ -123,7 +125,7 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
     {error && <p role="alert">{error}</p>}
     <p>{teacher ? '老师记过账后这里会显示余额。' : '学生连上社区后就会出现在这里；第一次记账时自动建账。'}</p><button type="button" onClick={()=>void run(runtime=>runtime.requestSync())}>立即对账</button>
     {teacher && teacherName && <p className="ledger-venue">在{teacherName}这里的余额</p>}
-    {!visibleBooks.length && pendingStudents.length === 0 && <p>{teacher ? '老师还没记过账。' : '还没有学生；先在管理页邀请学生。'}</p>}
+    {booksReady && !visibleBooks.length && pendingStudents.length === 0 && <p>{teacher ? '老师还没记过账。' : '还没有学生；先在管理页邀请学生。'}</p>}
     {visibleBooks.map(book => <section key={book.ledger.teacher + book.ledger.student}>
       <p style={{ overflowWrap: 'anywhere' }}>对方：{identity.publicKey === book.ledger.teacher ? '学生' : '老师'}</p>
       {book.code !== null && <p>钱账余额：{book.ledger.events.length?formatMoney(book.balance!,parseChainFields(book.ledger.events[0]).currency):'尚未记账'} · 对账码：{book.code}</p>}
@@ -159,7 +161,7 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
       })}
       {book.pendingDisputes.length > 0 && <p>有 {book.pendingDisputes.length} 条异议等待老师接收。</p>}
     </section>)}
-    {pendingStudents.map(student => <section key={'first-' + student} aria-label={'还没记过账的学生 ' + student.slice(0, 8)}>
+    {booksReady && pendingStudents.map(student => <section key={'first-' + student} aria-label={'还没记过账的学生 ' + student.slice(0, 8)}>
       <p style={{ overflowWrap: 'anywhere' }}>学生 {student.slice(0, 8)}…</p>
       <p>还没记过账</p>
       {runtimeRef.current && <MoneyEntry store={store} book={createLedger(identity.publicKey, student)} writer={runtimeRef.current} llm={llm} onConfirmed={()=>setRevision(v=>v+1)} />}
