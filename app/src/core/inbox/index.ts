@@ -15,6 +15,12 @@ import type { HeavenStamp } from '../heaven/stamp'
 import { saveTeacherRecord, rememberTeacherStudent } from '../records/teacher'
 import { updateFingerprint } from '../records/fingerprint'
 import { receiveRetentionSetting, RETENTION_TYPE } from '../records/retention'
+import { listIdentityLinks, saveIdentityLink } from '../identity/links'
+import {
+  loadTeacherConfirm, markReidentifyRejected, parseReidentifyConfirm, parseReidentifyReject, parseReidentifyRequest,
+  REIDENTIFY_CONFIRM, REIDENTIFY_REJECT, REIDENTIFY_REQUEST, saveReidentifyRequest, saveTeacherConfirm,
+  teacherReidentifyOpenAt, teacherReidentifyWindowOpen,
+} from '../reidentify/messages'
 import {
   backupEnvelope, backupForTeacher, loadRole, MAX_BACKUP_RECORDS, recordsForBackup,
   RECORDS_BACKUP, RECORDS_PULL, RECORDS_REQUEST,
@@ -195,6 +201,28 @@ export async function addTeacher(store: LocalStore, teacher: string): Promise<st
   const teachers = await loadTeachers(store)
   if (teachers.includes(teacher)) return teachers
   return saveTeachers(store, [...teachers, teacher])
+}
+
+// V2-07：换手机后，“我的老师”名单换成新公钥，但旧公钥签的历史病历仍按换机关系认。
+// 这个函数返回“当前白名单 + 由学生确认过的旧老师公钥”，用于收件过滤与病历验签。
+async function historyTeachers(store: LocalStore): Promise<string[]> {
+  const teachers = await loadTeachers(store)
+  const links = await listIdentityLinks(store)
+  const old = links.filter(link => link.kind === 'teacher' && teachers.includes(link.newKey)).map(link => link.oldKey)
+  return [...new Set([...teachers, ...old])]
+}
+
+// 学生换机后，本机新公钥加上“老师确认过的旧学生公钥”，旧病历按它们验签。
+async function studentKeys(store: LocalStore, identity: Identity): Promise<string[]> {
+  const links = await listIdentityLinks(store)
+  const old = links.filter(link => link.kind === 'student' && link.newKey === identity.publicKey).map(link => link.oldKey)
+  return [...new Set([identity.publicKey, ...old])]
+}
+
+// 老师换手机后，学生手里由旧老师公钥签的病历按换机关系算作这位新老师名下。
+function teacherLinkMatches(links: Awaited<ReturnType<typeof listIdentityLinks>>, teacher: string, sender: string): boolean {
+  if (teacher === sender) return true
+  return links.some(link => link.kind === 'teacher' && link.oldKey === teacher && link.newKey === sender)
 }
 
 export async function removeTeacher(store: LocalStore, teacher: string): Promise<string[]> {
@@ -504,14 +532,18 @@ async function receiveAttachment(store: LocalStore, message: Message, payload: R
 
 async function receiveSignedRecord(identity: Identity, store: LocalStore, message: Message, payload: unknown, now: () => Date): Promise<void> {
   // 学生端只认“我的老师”名单：陌生成员发来的签名病历直接丢弃，验签和写库之前就拦住。
-  const teachers = await loadTeachers(store)
-  if (!teachers.includes(message.sender)) return
+  // V2-07：名单换成新公钥后，旧公钥仍按换机关系收历史病历；旧学生公钥名下的病历也按老师确认过的关系验签。
+  if (!(await historyTeachers(store)).includes(message.sender)) return
   const event = parseSignedEvent(payload)
   if (!event) return
-  let encounter: Encounter
-  try {
-    encounter = verifySignedEncounter(event, { student: identity.publicKey, teacher: message.sender })
-  } catch { return }
+  let encounter: Encounter | null = null
+  for (const student of await studentKeys(store, identity)) {
+    try {
+      encounter = verifySignedEncounter(event, { student, teacher: message.sender })
+      break
+    } catch { /* 试下一个换机前的旧学生公钥 */ }
+  }
+  if (!encounter) return
   const existing = await store.get(INBOX_COLLECTIONS.records, event.id)
   if (existing === undefined) {
     await store.put(INBOX_COLLECTIONS.records, event.id, {
@@ -527,8 +559,7 @@ async function receiveSignedRecord(identity: Identity, store: LocalStore, messag
 
 // 学生端收调养方案：只认“我的老师”名单里的签名，验签通过后按版本替换旧版。
 async function receiveCarePlan(identity: Identity, store: LocalStore, message: Message, payload: unknown): Promise<void> {
-  const teachers = await loadTeachers(store)
-  if (!teachers.includes(message.sender)) return
+  if (!(await historyTeachers(store)).includes(message.sender)) return
   const event = parseSignedCarePlanEvent(payload)
   if (!event) return
   try {
@@ -600,6 +631,45 @@ async function receiveRecordPhoto(identity: Identity, store: LocalStore, message
   }
 }
 
+// V2-07：换手机认回。请求只落到老师端待确认区，绝不自动改名单或发记录；
+// 确认只写“旧公钥 → 新公钥”关系，之后的记录仍按 V2-05 的 records.backup 发送。
+async function receiveReidentifyRequest(store: LocalStore, message: Message, payload: Record<string, unknown>): Promise<void> {
+  if (await loadRole(store) !== 'teacher') return
+  const parsed = parseReidentifyRequest(payload)
+  if (!parsed) return
+  await saveReidentifyRequest(store, message.sender, parsed.alias)
+}
+
+async function receiveReidentifyConfirm(identity: Identity, store: LocalStore, message: Message, payload: Record<string, unknown>): Promise<void> {
+  const parsed = parseReidentifyConfirm(payload)
+  if (!parsed || parsed.newKey !== identity.publicKey) return
+  const role = await loadRole(store)
+  if (parsed.purpose === 'student') {
+    // 老师确认“旧学生 → 这位新学生”：只认“我的老师”名单里的发件人。
+    if (role !== 'student') return
+    if (!(await historyTeachers(store)).includes(message.sender)) return
+    await saveIdentityLink(store, 'student', parsed.oldKey, parsed.newKey)
+    return
+  }
+  // 学生确认“旧老师 → 这位新老师”：只有老师自己刚换手机（生成过找回链接、30 天内）才认；
+  // 同一发件人第二次带不同旧公钥一律不认，防止反复改映射。
+  if (role !== 'teacher') return
+  if (!teacherReidentifyWindowOpen(await teacherReidentifyOpenAt(store))) return
+  const previous = await loadTeacherConfirm(store, message.sender)
+  if (previous && previous.oldKey !== parsed.oldKey) return
+  await saveIdentityLink(store, 'teacher', parsed.oldKey, parsed.newKey)
+  await saveTeacherConfirm(store, message.sender, parsed.oldKey)
+  await rememberTeacherStudent(store, message.sender)
+}
+
+async function receiveReidentifyReject(store: LocalStore, payload: Record<string, unknown>): Promise<void> {
+  const parsed = parseReidentifyReject(payload)
+  if (!parsed || parsed.purpose !== 'student') return
+  if (await loadRole(store) !== 'student') return
+  // 只记一条“老师没确认”的提示；名单、记录、映射都不改。
+  await markReidentifyRejected(store)
+}
+
 export function createInbox(options: InboxOptions) {
   const { identity, store } = options
   const now = options.now ?? (() => new Date())
@@ -648,6 +718,18 @@ export function createInbox(options: InboxOptions) {
         await receiveRecordsBackup(identity, store, message, payload, now)
         return
       }
+      if (type === REIDENTIFY_REQUEST) {
+        if (object(payload)) await receiveReidentifyRequest(store, message, payload)
+        return
+      }
+      if (type === REIDENTIFY_CONFIRM) {
+        if (object(payload)) await receiveReidentifyConfirm(identity, store, message, payload)
+        return
+      }
+      if (type === REIDENTIFY_REJECT) {
+        if (object(payload)) await receiveReidentifyReject(store, payload)
+        return
+      }
       if (type.startsWith('ledger.') && options.ledger) await options.ledger.receive(message)
       // 不认识的类型丢弃。
     },
@@ -667,20 +749,27 @@ async function replyOwnRecords(store: LocalStore, message: Message, send: InboxO
 async function replySavedRecords(identity: Identity, store: LocalStore, message: Message, send: InboxOptions['send']): Promise<void> {
   if (!send) return
   if (await loadRole(store) !== 'student') return
-  if (!(await loadTeachers(store)).includes(message.sender)) return
-  const records = (await listReceivedRecords(store, identity)).filter(record => record.teacher === message.sender).slice(0, MAX_BACKUP_RECORDS)
+  if (!(await historyTeachers(store)).includes(message.sender)) return
+  const links = await listIdentityLinks(store)
+  // 老师换手机后学生回发：旧老师公钥签的历史病历也属于这位新老师。
+  const records = (await listReceivedRecords(store, identity))
+    .filter(record => teacherLinkMatches(links, record.teacher, message.sender))
+    .slice(0, MAX_BACKUP_RECORDS)
   for (const record of records) await send(message.sender, backupEnvelope(record.event))
 }
 
 // records.backup：学生端按老师名单收病历（与 record.signed 同一入库路径）；
 // 老师端只收自己签的、p 标签就是发件人的那份（学生回发备份）。
+// V2-07：老师换机后，旧老师公钥签的历史病历也按学生确认过的换机关系收下。
 async function receiveRecordsBackup(identity: Identity, store: LocalStore, message: Message, payload: unknown, now: () => Date): Promise<void> {
-  if ((await loadTeachers(store)).includes(message.sender)) {
+  if ((await historyTeachers(store)).includes(message.sender)) {
     await receiveSignedRecord(identity, store, message, payload, now)
     return
   }
   if (await loadRole(store) !== 'teacher') return
-  const event = backupForTeacher(payload, identity.publicKey, message.sender)
+  const links = await listIdentityLinks(store)
+  const oldTeachers = links.filter(link => link.kind === 'teacher' && link.newKey === identity.publicKey).map(link => link.oldKey)
+  const event = backupForTeacher(payload, identity.publicKey, message.sender, oldTeachers)
   if (!event) return
   await saveTeacherRecord(store, event)
 }
@@ -688,7 +777,8 @@ async function receiveRecordsBackup(identity: Identity, store: LocalStore, messa
 // 学生端病历页：只显示验签通过、且签名人在“我的老师”名单里的病历（旧数据也按名单过滤）；
 // 按同一 encounter.id 归组版本。
 export async function listReceivedRecords(store: LocalStore, identity: Identity): Promise<ReceivedRecord[]> {
-  const teachers = await loadTeachers(store)
+  const teachers = await historyTeachers(store)
+  const students = await studentKeys(store, identity)
   const rows = await store.list(INBOX_COLLECTIONS.records)
   const records: ReceivedRecord[] = []
   for (const row of rows) {
@@ -698,10 +788,13 @@ export async function listReceivedRecords(store: LocalStore, identity: Identity)
     try { parsed = JSON.parse(value.eventJson) } catch { continue }
     const event = parseSignedEvent(parsed)
     if (!event) continue
-    try {
-      const encounter = verifySignedEncounter(event, { student: identity.publicKey, teacher: value.teacher })
-      records.push({ event, encounter, teacher: value.teacher })
-    } catch { /* 篡改或签名人不对的病历不显示。 */ }
+    for (const student of students) {
+      try {
+        const encounter = verifySignedEncounter(event, { student, teacher: value.teacher })
+        records.push({ event, encounter, teacher: value.teacher })
+        break
+      } catch { /* 换机前的旧学生公钥逐一尝试 */ }
+    }
   }
   return records.sort((left, right) => Date.parse(right.encounter.createdAt) - Date.parse(left.encounter.createdAt)
     || (right.encounter.version - left.encounter.version))

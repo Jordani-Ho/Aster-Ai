@@ -8,7 +8,10 @@ import { lazy, Suspense, useEffect, useRef, useState, useMemo } from 'react'
 import { PushSettings } from './PushSettings'
 
 import type { Identity } from './core/identity'
-import { bootstrapIdentity, readInviteLink, acceptInvite, gatewayBase, INVITE_ERROR } from './core/onboarding'
+import { bootstrapIdentity, readInviteLink, acceptInvite, gatewayBase, INVITE_ERROR, validateInvite } from './core/onboarding'
+import { loadTeachers } from './core/inbox'
+import { readReidentifyLink } from './core/reidentify'
+import { StudentReidentifyRequestPage, TeacherReidentifyPrompt } from './ReidentifyPages'
 import type { LocalStore } from './core/store'
 import { createWiring, type Wiring } from './core/wiring'
 import { createPushClient } from './core/push'
@@ -22,6 +25,9 @@ const TeacherWorkspace = lazy(() => import('./TeacherWorkspace').then(module => 
 
 type Role = 'student' | 'teacher'
 type LinkStatus = 'offline' | 'connecting' | 'ready' | 'rejected' | 'invalid-message'
+type RecoveryFlow =
+  | { kind: 'student'; teacher: string; name: string }
+  | { kind: 'teacher'; newTeacher: string; name: string; oldTeachers: string[] }
 const env = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env
 const defaultRelays = (env.VITE_COMMUNITY_RELAYS ?? '').split(',').map(value => value.trim()).filter(Boolean)
 // 部署时配置这两个变量，发送成功后才会调用 M1-08 的 notifyRecipient；没配置就不提醒，不影响发送。
@@ -41,6 +47,7 @@ export function App() {
   const [memberStatus, setMemberStatus] = useState<Record<number, LinkStatus>>({})
   const [stackStatus, setStackStatus] = useState<LinkStatus>('offline')
   const [identity, setIdentity] = useState<Identity | null>(null)
+  const [recovery, setRecovery] = useState<RecoveryFlow | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const storeRef = useRef<LocalStore | null>(null)
@@ -54,11 +61,29 @@ export function App() {
       const {store,identity: person}=session
       storeRef.current=store;identityRef.current=person
       try {
-        const invitation=readInviteLink(location.href)
-        if(invitation){
-          await acceptInvite(person,store,invitation,gateway+'/invite/redeem');history.replaceState(null,'',location.pathname+location.search)
-          // V2-05：重新进入社区后，连上中继时自动向老师要回保留期内的记录。
-          await markRestoreNeeded(store)
+        // V2-07：带 reidentify 标记的是换机找回链接（学生换手机 / 老师换手机），与普通邀请分开处理。
+        const recoveryLink=readReidentifyLink(location.href)
+        if(recoveryLink){
+          history.replaceState(null,'',location.pathname+location.search)
+          if(recoveryLink.kind==='student'){
+            // 学生换手机：老师身份没变。先照常加入社区，再填称呼发认回请求。
+            await acceptInvite(person,store,recoveryLink.event,gateway+'/invite/redeem')
+            await markRestoreNeeded(store)
+            if(!cancelled)setRecovery({kind:'student',teacher:recoveryLink.event.pubkey,name:recoveryLink.name})
+          }else if(validateInvite(recoveryLink.event,gateway+'/invite/redeem')){
+            // 老师换手机：学生点“是”之前不改名单、不接受新公钥，所以这里只先亮出提示。
+            const oldTeachers=await loadTeachers(store)
+            if(!cancelled)setRecovery({kind:'teacher',newTeacher:recoveryLink.event.pubkey,name:recoveryLink.name,oldTeachers})
+          }else{
+            setError(INVITE_ERROR)
+          }
+        }else{
+          const invitation=readInviteLink(location.href)
+          if(invitation){
+            await acceptInvite(person,store,invitation,gateway+'/invite/redeem');history.replaceState(null,'',location.pathname+location.search)
+            // V2-05：重新进入社区后，连上中继时自动向老师要回保留期内的记录。
+            await markRestoreNeeded(store)
+          }
         }
       } catch (cause) {setError(cause instanceof Error&&cause.message===INVITE_ERROR?INVITE_ERROR:'暂时未能加入社区，请稍后重新打开邀请。')}
       if(cancelled){store.close();person.privateKey.fill(0);return}
@@ -158,6 +183,12 @@ export function App() {
   const llm=useMemo(()=>modelConfig?createPersonalClient(modelConfig,modelGateway,setBackupModel):null,[modelConfig,modelGateway])
   const modelNotice=<>{backupModel&&<p role="status" style={{fontSize:12}}>今天用的是备用模型，请检查您的模型账户</p>}</>
   const modelSettings=store?<details><summary>我的大模型</summary><ModelSettings key={modelConfig?.testedAt??'new'} store={store} gateway={modelGateway} current={modelConfig??null} onSaved={config=>setModelConfig(config)}/></details>:null
+  // V2-07：换机找回链接先走认回页；学生没点“是”之前不改名单、不接受新老师公钥。
+  if (store && identity && recovery) {
+    return recovery.kind === 'student'
+      ? <StudentReidentifyRequestPage store={store} teacher={recovery.teacher} name={recovery.name} send={stack?.send} connected={stackStatus === 'ready'} onDone={() => setRecovery(null)} />
+      : <TeacherReidentifyPrompt store={store} newTeacher={recovery.newTeacher} name={recovery.name} oldTeachers={recovery.oldTeachers} send={stack?.send} connected={stackStatus === 'ready'} onDone={() => setRecovery(null)} />
+  }
   if(identity&&role&&store&&!modelConfig)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1>{modelNotice}{modelConfig===undefined?<p>正在读取接入设置…</p>:<><ModelSettings initial store={store} gateway={modelGateway} current={null} onSaved={setModelConfig}/>{role==='teacher'&&<details><summary>社区首次登记</summary><InviteSettings identity={identity} gateway={gateway}/></details>}</>}</main>
   // 学生端三个底部标签（镜子/问诊/其他）；老师端走 TeacherWorkspace 四页。模型由 M1-21 的 personal client 提供。
   // M1-22：学生壳用“当前家人”的分片存储与身份，设置区仍用根身份；家人切换在镜子页/问诊页顶部。
