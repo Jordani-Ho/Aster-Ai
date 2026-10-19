@@ -28,6 +28,17 @@ export function checkinDay(at: Date): string {
   if (at.getHours() !== 0) return localDay(at)
   return localDay(addDays(new Date(at.getFullYear(), at.getMonth(), at.getDate()), -1))
 }
+// 页面上“今天”的唯一口径：与打卡同一个 checkinDay。界面判断“今日是否已完成”、
+// 今日作业、镜子页打卡与坚持率都用它，不再按日历日另算一套。
+export function effectiveDay(now = new Date()): string {
+  return checkinDay(now)
+}
+// 把“现在”落到有效日的正午，供按天计算的窗口（近 7 天等）使用，避免 0 点边界再分叉。
+export function effectiveNoon(now = new Date()): Date {
+  const day = parseDay(effectiveDay(now))
+  day.setHours(12, 0, 0, 0)
+  return day
+}
 function dayNumber(date: Date): number { return Date.UTC(date.getFullYear(),date.getMonth(),date.getDate())/86400000 }
 function timeParts(value: string): [number,number] {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw new Error('时间须为HH:MM')
