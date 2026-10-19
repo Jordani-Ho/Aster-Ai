@@ -5,7 +5,7 @@ import type {LocalStore} from '../store'
 import {nip98Authorization} from '../llm/nip98'
 import {addTeacher} from '../inbox'
 import {createLedgerSync} from '../ledger/sync'
-export const INVITE_ERROR='邀请已失效，请向老师要一个新链接'
+export const INVITE_ERROR='邀请暂不可用，请向老师要一个新链接'
 export function makeInvite(identity:Identity,url:string,now=Math.floor(Date.now()/1000)):Event{
  return JSON.parse(JSON.stringify(finalizeEvent({kind:27235,created_at:now,tags:[['u',url],['method','POST'],['expiration',String(now+7*86400)],['nonce',crypto.randomUUID()]],content:'{"type":"aster.invite","version":1}'},identity.privateKey)))
 }

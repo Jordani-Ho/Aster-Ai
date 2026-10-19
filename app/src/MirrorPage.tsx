@@ -16,7 +16,7 @@ import type { FamilyMember } from './core/family'
 
 const DAY_NAMES: Record<number, string> = { 1: '差', 2: '一般', 3: '还行', 4: '不错', 5: '很好' }
 
-export function MirrorPage({ store, modelStore, settingsStore, llm, family = [], active = 0, onSwitch, member, onCheckedIn }: {
+export function MirrorPage({ store, modelStore, settingsStore, llm, family = [], active = 0, onSwitch, member, onCheckedIn, teacher }: {
   store: LocalStore
   modelStore?: LocalStore
   /** V2-06：时间显示方式与照镜子时辰沿用管理人的设置（家人不单独设）。 */
@@ -28,6 +28,8 @@ export function MirrorPage({ store, modelStore, settingsStore, llm, family = [],
   member?: Pick<FamilyMember, 'account' | 'alias'> | null
   /** M1-23a：打卡后把本周坚持率小结发给老师（失败不影响打卡）。 */
   onCheckedIn?: () => void
+  /** V2-09：当前在用的馆；每日建议取这位老师的调养方案。 */
+  teacher?: string | null
 }) {
   const [checkins, setCheckins] = useState<Checkin[]>([])
   const [ratings, setRatings] = useState<SelfRating[]>([])
@@ -138,7 +140,7 @@ export function MirrorPage({ store, modelStore, settingsStore, llm, family = [],
     {error && <p role="alert">{error}</p>}
     {status && <p role="status">{status}</p>}
     {shichenNotice && <p role="status">{shichenNotice}</p>}
-    <section className="mirror-card"><DailyMirrorCard store={store} llm={llm} /></section>
+    <section className="mirror-card"><DailyMirrorCard store={store} llm={llm} teacher={teacher ?? undefined} /></section>
 
     <section className="mirror-card">
       <h2>今天的作业</h2>

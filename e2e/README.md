@@ -4,6 +4,8 @@ V2-04：`node e2e/money.browser.mjs` 使用真实 Chromium、LedgerSettings/Mone
 
 V2-08：`node e2e/abstractor.browser.mjs` 独立启动本机 Vite + Chromium，不需中继/Rust；使用实际镜子与问诊组件、普通 IndexedDB、真实 inbox 收件，视觉模型为合成替身（返回舌头框 box 与偏色标记），覆盖裁剪后重拍失败、重载、家人隔离、草稿与发送、文件输入清空及所有业务记录无原图。CI 也运行。完整 `flow.spec.ts` 已改成发送裁剪图 + 候选特征；面诊测试断言不再有原图拍摄入口，签字/作业/账本/CSV 路径保留。
 
+V2-09：`node e2e/storefront.browser.mjs` 同样独立启动 Vite + Chromium，不需中继/Rust；用两份合成门面（阿慈养生馆/小黄运动馆）出两张邀请首屏、断言首屏无免责句，再用真实 `StorefrontSettings` 走“直接改 → 学生视角预览 → 用这个样子 → 恢复上次样子”，重开页面仍用已生效版本。非 CI 时写 `docs/screenshots/storefront-{aci,huang,teacher}-375.png`（375px）。`fixtures.ts` 已改为新学生先看到邀请首屏、点“开始使用”后再接入；过期/非成员邀请的报错文案改为卡里的“邀请暂不可用，请向老师要一个新链接”。CI 运行本文件。
+
 这里只运行合成身份和资料。M1-15a 合并后接入完整九步问诊与四条硬性验收，使用真实编译中继、真实网关和 Chromium；模型与推送为本地替身，不需要 API Key。
 
 ## 一条命令

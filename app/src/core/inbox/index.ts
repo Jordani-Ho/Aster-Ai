@@ -28,6 +28,7 @@ import {
   backupEnvelope, backupForTeacher, loadRole, MAX_BACKUP_RECORDS, recordsForBackup,
   RECORDS_BACKUP, RECORDS_PULL, RECORDS_REQUEST,
 } from '../records/backup'
+import { saveReceivedStorefront, STOREFRONT_TYPE, verifyStorefrontEvent } from '../storefront'
 
 // M1-15a 串联：一个 createTransport 实例收到的信封按 type 分发给各模块。
 // - consult.package / consult.attachment：老师端问诊箱与附件（照片单独一条，避免 2 MB 单条上限）。
@@ -754,6 +755,22 @@ async function receiveReidentifyReject(store: LocalStore, payload: Record<string
   await markReidentifyRejected(store)
 }
 
+// storefront.update：学生端只缓存“我的老师”里某位老师本人签名的最新一版门面。
+// 馆名相同不代表同一老师：签名人不是名单里的老师（或换机后的新公钥）就丢弃。
+async function receiveStorefront(store: LocalStore, message: Message, payload: Record<string, unknown>): Promise<void> {
+  if (await loadRole(store) !== 'student') return
+  const verified = verifyStorefrontEvent(payload.event)
+  if (!verified) return
+  // 必须由签名本人直接发来，别人转发的不收。
+  if (message.sender !== verified.event.pubkey) return
+  const teachers = await loadTeachers(store)
+  const links = await listIdentityLinks(store)
+  const known = teachers.includes(verified.event.pubkey)
+    || links.some(link => link.kind === 'teacher' && teachers.includes(link.newKey) && link.oldKey === verified.event.pubkey)
+  if (!known) return
+  await saveReceivedStorefront(store, verified.event, verified.event.pubkey)
+}
+
 export function createInbox(options: InboxOptions) {
   const { identity, store } = options
   const now = options.now ?? (() => new Date())
@@ -816,6 +833,10 @@ export function createInbox(options: InboxOptions) {
       }
       if (type === REIDENTIFY_FAMILY) {
         if (object(payload)) await receiveReidentifyFamily(identity, store, message, payload, options)
+        return
+      }
+      if (type === STOREFRONT_TYPE) {
+        if (object(payload)) await receiveStorefront(store, message, payload)
         return
       }
       if (type.startsWith('ledger.') && options.ledger) await options.ledger.receive(message)

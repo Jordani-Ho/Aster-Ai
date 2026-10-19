@@ -47,11 +47,14 @@ export interface ConsultPageProps {
   active?: number
   onSwitch?: (account: number) => void
   managerIdentity?: Identity
+  /** V2-09：当前在用的馆，问诊发给这位老师。 */
+  teacher?: string | null
+  teacherName?: string
 }
 
 // 学生问诊页（对话式）：一个输入框 + 相机；AI 追问以气泡出现，最多 3 轮；
 // 整理好的卡片可点开改，一个大按钮“发给老师”。急症只内联提示、不拦截、不给号码。
-export function ConsultPage({ store, modelStore, identity, llm, sendConsult, member, family = [], active = 0, onSwitch, managerIdentity }: ConsultPageProps) {
+export function ConsultPage({ store, modelStore, identity, llm, sendConsult, member, family = [], active = 0, onSwitch, managerIdentity, teacher: venueTeacher, teacherName }: ConsultPageProps) {
   const [session, setSession] = useState<IntakeSession | null>(null)
   const [teachers, setTeachers] = useState<string[]>([])
   const [draftText, setDraftText] = useState('')
@@ -78,7 +81,7 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
     if (next.phase !== 'sent') void saveDraft(store, next).catch(() => setError('草稿没有保存成功。'))
   }
 
-  const teacher = teachers[0] ?? ''
+  const teacher = venueTeacher ?? teachers[0] ?? ''
 
   const send = async () => {
     if (busy) return
@@ -163,7 +166,7 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
   const pendingQuestion = session?.questions[0]
   return <main className="consult-page">
     {family.length > 0 && <MemberSwitcher members={family} active={active} onChange={account => onSwitch?.(account)} />}
-    <header><p className="eyebrow">知衡 · 学生</p><h1>问诊</h1><p>哪里不舒服，说出来就行。</p>{member && <p role="status">替 {member.alias} 问诊</p>}<p className="consult-note">急症筛查在本机完成；所需原话交给您接入的模型整理，确认发送后交给老师。</p></header>
+    <header><p className="eyebrow">知衡 · 学生</p><h1>问诊</h1><p>哪里不舒服，说出来就行。</p>{teacherName && <p className="consult-venue">发给{teacherName}</p>}{member && <p role="status">替 {member.alias} 问诊</p>}<p className="consult-note">急症筛查在本机完成；所需原话交给您接入的模型整理，确认发送后交给老师。</p></header>
     {error && <p role="alert" className="consult-error">{error}</p>}
     {status && <p role="status" className="consult-status">{status}</p>}
 
