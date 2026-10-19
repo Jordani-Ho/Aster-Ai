@@ -5,8 +5,11 @@ import { append, balance, createLedger, signDispute } from './chain'
 import { isHex64, parseChainFields, parseDisputeFields } from './types'
 import type { ChainEventDraft, DisputeDraft, Ledger, SignedLedgerEvent } from './types'
 import { verify } from './verify'
+import { listIdentityLinks, mappedNewKey } from '../identity/links'
 
 const DAY = 86_400_000
+/** V2-07b：老师换机时携带过来的旧钱账（只读，不改签）；键为随机 id，值带师生公钥。 */
+export const LEDGER_CARRIED = 'ledger-carried'
 interface BookRef { teacher: string; student: string; collection: string; key: string }
 export interface DisputeReceipt {
   id: string
@@ -29,6 +32,9 @@ export interface LedgerView extends BookState {
   balance: number | null
   code: string | null
 }
+/** V2-07b：按 identity-links 归并后的视图；writeStudent 是老师继续记账时写入的新公钥那本账。 */
+export interface MergedLedgerView extends LedgerView { writeStudent: string }
+interface CarriedBook { teacher: string; student: string; events: SignedLedgerEvent[]; receivedAt: number }
 interface Options {
   identity: Identity
   store: LocalStore
@@ -106,6 +112,139 @@ export function createLedgerSync(options: Options) {
     if (!ref) throw Error('请先登记这本师生账本')
     return action(await read(ref), ref)
   }
+  // ---- V2-07b：换机时携带旧钱账 + 读取时按 identity-links 归并 ----
+  async function carriedBooks(): Promise<CarriedBook[]> {
+    const rows: CarriedBook[] = []
+    for (const row of await store.list(LEDGER_CARRIED)) {
+      const value = row.value as Partial<CarriedBook> | undefined
+      if (!value || typeof value !== 'object') continue
+      if (typeof value.teacher !== 'string' || !isHex64(value.teacher)) continue
+      if (typeof value.student !== 'string' || !isHex64(value.student)) continue
+      if (!Array.isArray(value.events) || !value.events.every(eventShape)) continue
+      rows.push({ teacher: value.teacher, student: value.student, events: value.events as SignedLedgerEvent[], receivedAt: Number.isSafeInteger(value.receivedAt) ? value.receivedAt as number : 0 })
+    }
+    return rows
+  }
+  // 按 prev 链把事件排回顺序；有分叉/缺环返回 null（不覆盖本机已有）。
+  function orderByChain(events: readonly SignedLedgerEvent[]): SignedLedgerEvent[] | null {
+    const byId = new Map(events.map(event => [event.id, event]))
+    const ordered: SignedLedgerEvent[] = []
+    let prev: string | null = null
+    while (ordered.length < events.length) {
+      let next: SignedLedgerEvent | null = null
+      for (const event of byId.values()) {
+        let fields
+        try { fields = parseChainFields(event) } catch { return null }
+        if (fields.prev !== prev) continue
+        if (next) return null
+        next = event
+      }
+      if (!next) return null
+      ordered.push(next); byId.delete(next.id); prev = next.id
+    }
+    return ordered
+  }
+  // 只读保存老师携带来的旧账；按事件 id 幂等去重，重复 carry 不产生重复记录。
+  async function receiveCarry(payload: Record<string, unknown>, sender: string): Promise<void> {
+    const teacher = payload.teacher, student = payload.student, events = payload.events
+    if (typeof teacher !== 'string' || !isHex64(teacher) || sender !== teacher) return
+    if (typeof student !== 'string' || !isHex64(student) || student === teacher) return
+    if (!Array.isArray(events) || events.length === 0 || events.length > 5000 || !events.every(eventShape)) return
+    const links = await listIdentityLinks(store)
+    // 只收“映射到本机的旧公钥”名下的钱账；没确认过换机关系的一律不收。
+    if (!links.some(link => link.kind === 'student' && link.oldKey === student && link.newKey === owner)) return
+    const incoming = events as SignedLedgerEvent[]
+    if (verify({ teacher, student, events: incoming, disputes: [] }).length) return
+    const rows = await store.list(LEDGER_CARRIED)
+    const found = rows.find(row => {
+      const value = row.value as Partial<CarriedBook> | undefined
+      return value?.teacher === teacher && value?.student === student
+    })
+    const existing = found ? orderByChain(((found.value as unknown as CarriedBook).events ?? []).filter(eventShape)) : null
+    let merged = orderByChain([...(existing ?? []), ...incoming])
+    if (!merged) return
+    if (existing) merged = orderByChain([...existing, ...incoming]) ?? existing
+    if (verify({ teacher, student, events: merged, disputes: [] }).length) return
+    await store.put(LEDGER_CARRIED, found?.key ?? crypto.randomUUID(), {
+      teacher, student, events: merged, receivedAt: now(),
+    } as never)
+    options.onChange?.()
+  }
+  // 老师显式把一本旧钱账携带到映射后的新身份；不群发、不按保留期限裁剪。
+  async function carryTo(teacher: string, student: string, recipient: string): Promise<number> {
+    if (!isHex64(teacher) || !isHex64(student) || !isHex64(recipient)) throw Error('账本携带公钥无效')
+    return serial(async () => {
+      const ref = await find(teacher, student)
+      if (!ref) return 0
+      const state = await read(ref)
+      if (verify(state.ledger).length) throw Error('账本校验失败，不能携带')
+      if (state.ledger.events.length === 0) return 0
+      await options.send(recipient, envelope('ledger.carry', {
+        teacher, student, events: state.ledger.events,
+      }))
+      return state.ledger.events.length
+    })
+  }
+  async function mergedViews(): Promise<MergedLedgerView[]> {
+    return serial(async () => {
+      const links = await listIdentityLinks(store)
+      const groups = new Map<string, {
+        teacher: string; student: string
+        events: SignedLedgerEvent[]; disputes: SignedLedgerEvent[]
+        notices: string[]; receipts: DisputeReceipt[]; pendingDisputes: SignedLedgerEvent[]
+        conflict: boolean; balance: number | null
+      }>()
+      const group = (teacher: string, student: string) => {
+        const canonical = mappedNewKey(links, 'student', student) ?? student
+        const key = teacher + ':' + canonical
+        let value = groups.get(key)
+        if (!value) {
+          value = { teacher, student: canonical, events: [], disputes: [], notices: [], receipts: [], pendingDisputes: [], conflict: false, balance: 0 }
+          groups.set(key, value)
+        }
+        return value
+      }
+      for (const ref of await refs()) {
+        const state = await read(ref)
+        const entry = group(ref.teacher, ref.student)
+        for (const notice of state.notices) if (!entry.notices.includes(notice)) entry.notices.push(notice)
+        if (state.conflicts.length) entry.conflict = true
+        for (const receipt of state.receipts) if (!entry.receipts.some(item => item.id === receipt.id)) entry.receipts.push(receipt)
+        for (const event of state.pendingDisputes) if (!entry.pendingDisputes.some(item => item.id === event.id)) entry.pendingDisputes.push(event)
+        for (const dispute of state.ledger.disputes) if (!entry.disputes.some(item => item.id === dispute.id)) entry.disputes.push(dispute)
+        if (verify(state.ledger).length) { entry.conflict = true; entry.balance = null }
+        for (const event of state.ledger.events) if (!entry.events.some(item => item.id === event.id)) entry.events.push(event)
+        if (entry.balance !== null && !state.conflicts.length) {
+          try { entry.balance += balance(state.ledger) } catch { entry.balance = null }
+          if (!Number.isSafeInteger(entry.balance)) entry.balance = null
+        }
+      }
+      for (const carried of await carriedBooks()) {
+        const entry = group(carried.teacher, carried.student)
+        if (verify({ teacher: carried.teacher, student: carried.student, events: carried.events, disputes: [] }).length) { entry.conflict = true; entry.balance = null }
+        for (const event of carried.events) if (!entry.events.some(item => item.id === event.id)) entry.events.push(event)
+        if (entry.balance !== null) {
+          try { entry.balance += balance({ teacher: carried.teacher, student: carried.student, events: carried.events, disputes: [] }) } catch { entry.balance = null }
+          if (!Number.isSafeInteger(entry.balance)) entry.balance = null
+        }
+      }
+      const result: MergedLedgerView[] = []
+      for (const entry of groups.values()) {
+        entry.events.sort((left, right) => left.created_at - right.created_at || left.id.localeCompare(right.id))
+        entry.disputes.sort((left, right) => left.created_at - right.created_at || left.id.localeCompare(right.id))
+        const conflict = entry.conflict || entry.balance === null
+        const amount = conflict ? null : entry.balance
+        const head = entry.events.at(-1)?.id.slice(0, 6) ?? '------'
+        result.push({
+          ledger: { teacher: entry.teacher, student: entry.student, events: entry.events, disputes: entry.disputes },
+          notices: entry.notices, conflicts: [], receipts: entry.receipts, pendingDisputes: entry.pendingDisputes, outbox: [],
+          conflict, balance: amount, code: amount === null ? null : `${amount} · ${head}`,
+          writeStudent: entry.student,
+        })
+      }
+      return result.sort((left, right) => left.ledger.teacher.localeCompare(right.ledger.teacher) || left.ledger.student.localeCompare(right.ledger.student))
+    })
+  }
   async function flush() {
     if (stopped) return
     const tasks = await serial(async () => {
@@ -180,6 +319,8 @@ export function createLedgerSync(options: Options) {
     return serial(async () => {
       const { type, version, payload } = message.envelope
       if (version !== 1) return
+      // V2-07b：老师换机时携带过来的旧钱账；只读保存，按事件 id 幂等。
+      if (type === 'ledger.carry' && object(payload)) { await receiveCarry(payload, message.sender); return }
       const pair = type === 'ledger.sync' && object(payload) ? payload : eventShape(payload) ? pairOf(payload) : null
       if (!pair || !isHex64(pair.teacher) || !isHex64(pair.student)) return
       const ref = await find(pair.teacher, pair.student)
@@ -253,6 +394,10 @@ export function createLedgerSync(options: Options) {
       })
     },
     books() { return serial(refs) },
+    /** V2-07b：按 identity-links 归并后的视图；老师端钱账页与“再记一笔”都用它。 */
+    mergedViews,
+    /** V2-07b：把这本旧钱账携带到映射后的新身份（幂等由接收方按事件 id 保证）。 */
+    carryTo,
     view(teacher: string, student: string): Promise<LedgerView> {
       return serial(() => book(teacher, student, async state => {
         const conflict = state.conflicts.length > 0, invalid = verify(state.ledger).length > 0

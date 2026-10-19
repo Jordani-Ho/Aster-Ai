@@ -29,12 +29,13 @@ export function formatMoney(minor:number,currency:string):string {
  return new Intl.NumberFormat('zh-CN',{style:'currency',currency:currencyCode(currency),currencyDisplay:'code'}).formatToParts(value).map(part=>part.type==='fraction'?String(absolute%factor).padStart(digits,'0'):part.value).join('')
 }
 export interface MoneyDraft {id:string;teacher:string;student:string;currency:string;events:ChainEventDraft[]}
-export interface MoneyWriter {recordBatch(teacher:string,student:string,drafts:ChainEventDraft[],confirmationId:string):Promise<unknown>}
+export interface MoneyWriter {recordBatch(teacher:string,student:string,drafts:ChainEventDraft[],confirmationId:string):Promise<unknown>; /** V2-07b：换机后新公钥那本账还没登记时自动建账。 */ open?(teacher:string,student:string):Promise<unknown>}
 // 真人确认入口，只使用已解析的草稿；本文件不导入模型。
 export async function confirmMoney(writer:MoneyWriter,draft:MoneyDraft):Promise<void> {
  if(!draft||!/^[a-f0-9]{64}$/.test(draft.teacher)||!/^[a-f0-9]{64}$/.test(draft.student)||!Array.isArray(draft.events)||!draft.events.length||draft.events.length>8)throw Error('记账草稿无效')
  currencyCode(draft.currency)
  if(draft.events.some(e=>e.currency!==draft.currency))throw Error('草稿币种不一致')
+ await writer.open?.(draft.teacher,draft.student)
  await writer.recordBatch(draft.teacher,draft.student,structuredClone(draft.events),draft.id)
 }
 export function moneySummary(books:readonly Ledger[]) {

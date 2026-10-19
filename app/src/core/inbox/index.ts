@@ -17,9 +17,12 @@ import { updateFingerprint } from '../records/fingerprint'
 import { receiveRetentionSetting, RETENTION_TYPE } from '../records/retention'
 import { listIdentityLinks, saveIdentityLink } from '../identity/links'
 import {
-  loadTeacherConfirm, markReidentifyRejected, parseReidentifyConfirm, parseReidentifyReject, parseReidentifyRequest,
-  REIDENTIFY_CONFIRM, REIDENTIFY_REJECT, REIDENTIFY_REQUEST, saveReidentifyRequest, saveTeacherConfirm,
+  confirmEnvelope, familyResultEnvelope, loadTeacherConfirm, markReidentifyRejected, parseFamilyClaim, parseFamilyResult,
+  parseReidentifyConfirm, parseReidentifyReject, parseReidentifyRequest,
+  REIDENTIFY_CONFIRM, REIDENTIFY_FAMILY, REIDENTIFY_REJECT, REIDENTIFY_REQUEST,
+  saveFamilyResult, saveReidentifyRequest, saveTeacherConfirm, validReidentifyAlias,
   teacherReidentifyOpenAt, teacherReidentifyWindowOpen,
+  type FamilyCandidate, type FamilyMatched, type FamilyUnresolved,
 } from '../reidentify/messages'
 import {
   backupEnvelope, backupForTeacher, loadRole, MAX_BACKUP_RECORDS, recordsForBackup,
@@ -121,10 +124,17 @@ export interface LedgerRecorder {
   record(teacher: string, student: string, draft: ChainEventDraft): Promise<unknown>
 }
 
+export interface InboxLedger {
+  receive(message: Message): Promise<void>
+  /** V2-07b：家人认回后自动携带旧钱账到新身份。 */
+  open?(teacher: string, student: string): Promise<unknown>
+  carryTo?(teacher: string, student: string, recipient: string): Promise<number>
+}
+
 export interface InboxOptions {
   identity: Identity
   store: LocalStore
-  ledger?: { receive(message: Message): Promise<void> }
+  ledger?: InboxLedger
   send?: SendEnvelope
   now?: () => Date
 }
@@ -646,7 +656,7 @@ async function receiveReidentifyConfirm(identity: Identity, store: LocalStore, m
   const role = await loadRole(store)
   if (parsed.purpose === 'student') {
     // 老师确认“旧学生 → 这位新学生”：只认“我的老师”名单里的发件人。
-    if (role !== 'student') return
+    // 家人分片没有单独设置角色，但同样有“我的老师”名单，所以这里不要求 role。
     if (!(await historyTeachers(store)).includes(message.sender)) return
     await saveIdentityLink(store, 'student', parsed.oldKey, parsed.newKey)
     return
@@ -660,6 +670,80 @@ async function receiveReidentifyConfirm(identity: Identity, store: LocalStore, m
   await saveIdentityLink(store, 'teacher', parsed.oldKey, parsed.newKey)
   await saveTeacherConfirm(store, message.sender, parsed.oldKey)
   await rememberTeacherStudent(store, message.sender)
+}
+
+// V2-07b：家长/家人认回。老师只在这位发送者已被确认为某个旧管理人的新身份时处理，
+// 并且只在“该旧管理人的旧家人集合”（consult-package.manager + 家人称呼）内按称呼匹配；
+// 匹配上就自动写映射、发确认、回发保留期内记录并携带旧钱账，不再让老师逐个点“是”。
+async function familyCandidatesFor(store: LocalStore, oldRoot: string): Promise<FamilyCandidate[]> {
+  const byKey = new Map<string, string>()
+  for (const row of await store.list('consult-package')) {
+    const value = row.value as {
+      manager?: unknown
+      encounter?: { student?: unknown; profile?: { alias?: { value?: unknown } } }
+    } | undefined
+    if (!value || value.manager !== oldRoot) continue
+    const student = value.encounter?.student
+    const alias = value.encounter?.profile?.alias?.value
+    if (typeof student !== 'string' || !HEX64.test(student)) continue
+    if (typeof alias !== 'string' || !validReidentifyAlias(alias)) continue
+    if (!byKey.has(student)) byKey.set(student, alias.trim())
+  }
+  return [...byKey.entries()].map(([oldKey, alias]) => ({ oldKey, alias }))
+}
+
+async function receiveReidentifyFamily(identity: Identity, store: LocalStore, message: Message, payload: Record<string, unknown>, options: InboxOptions): Promise<void> {
+  const action = payload.action
+  if (action === 'result') {
+    // 老师 → 管理人：只记匹配结果与候选，供管理人界面显示与手动选旧家人。
+    if (!(await historyTeachers(store)).includes(message.sender)) return
+    const parsed = parseFamilyResult(payload)
+    if (!parsed) return
+    for (const item of parsed.matched) {
+      await saveFamilyResult(store, { newKey: item.newKey, alias: item.alias, status: 'matched', oldKey: item.oldKey, candidates: [] })
+    }
+    for (const item of parsed.unresolved) {
+      await saveFamilyResult(store, { newKey: item.newKey, alias: item.alias, status: 'unresolved', candidates: item.candidates })
+    }
+    return
+  }
+  if (action !== 'claim') return
+  if (await loadRole(store) !== 'teacher') return
+  const parsed = parseFamilyClaim(payload)
+  if (!parsed) return
+  const links = await listIdentityLinks(store)
+  const manager = links.find(link => link.kind === 'student' && link.newKey === message.sender)
+  // 发送者必须是老师已确认过换机关系的“新管理人”；否则不参与任何家人匹配。
+  if (!manager) return
+  const candidates = await familyCandidatesFor(store, manager.oldKey)
+  const mapped = new Map(links.filter(link => link.kind === 'student').map(link => [link.newKey, link.oldKey] as const))
+  const matched: FamilyMatched[] = []
+  const unresolved: FamilyUnresolved[] = []
+  for (const family of parsed.families) {
+    if (family.newKey === message.sender) { unresolved.push({ newKey: family.newKey, alias: family.alias, candidates }); continue }
+    const existing = mapped.get(family.newKey)
+    if (existing) { matched.push({ newKey: family.newKey, oldKey: existing, alias: family.alias }); continue }
+    let oldKey: string | null = null
+    if (family.oldKey !== undefined) {
+      if (candidates.some(candidate => candidate.oldKey === family.oldKey)) oldKey = family.oldKey
+    } else {
+      const matches = candidates.filter(candidate => candidate.alias === family.alias)
+      if (matches.length === 1) oldKey = matches[0].oldKey
+    }
+    // 旧家人公钥只能映射一次：已经对上别人时不再改。
+    if (!oldKey || [...mapped.values()].includes(oldKey)) { unresolved.push({ newKey: family.newKey, alias: family.alias, candidates }); continue }
+    await saveIdentityLink(store, 'student', oldKey, family.newKey)
+    mapped.set(family.newKey, oldKey)
+    await options.send?.(family.newKey, confirmEnvelope('student', oldKey, family.newKey))
+    for (const record of await recordsForBackup(store, oldKey)) await options.send?.(family.newKey, backupEnvelope(record.event))
+    // 钱账是长期数据：携带不按保留期限裁剪；失败不阻断记录回发，下次 claim 可再试。
+    try {
+      await options.ledger?.open?.(identity.publicKey, family.newKey)
+      await options.ledger?.carryTo?.(identity.publicKey, oldKey, family.newKey)
+    } catch { /* 记录与映射已落地 */ }
+    matched.push({ newKey: family.newKey, oldKey, alias: family.alias })
+  }
+  await options.send?.(message.sender, familyResultEnvelope(matched, unresolved))
 }
 
 async function receiveReidentifyReject(store: LocalStore, payload: Record<string, unknown>): Promise<void> {
@@ -728,6 +812,10 @@ export function createInbox(options: InboxOptions) {
       }
       if (type === REIDENTIFY_REJECT) {
         if (object(payload)) await receiveReidentifyReject(store, payload)
+        return
+      }
+      if (type === REIDENTIFY_FAMILY) {
+        if (object(payload)) await receiveReidentifyFamily(identity, store, message, payload, options)
         return
       }
       if (type.startsWith('ledger.') && options.ledger) await options.ledger.receive(message)

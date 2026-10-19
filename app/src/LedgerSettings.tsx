@@ -39,8 +39,8 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
     let started: ReturnType<typeof startLedgerSync> | undefined
     const refresh = async () => {
       if (!runtime || disposed || pausing) return
-      const refs = await runtime.books()
-      const views = await Promise.all(refs.map(ref => runtime!.view(ref.teacher, ref.student)))
+      // V2-07b：按 identity-links 归并旧/新公钥的钱账，每个学生只显示一条合并后的余额与流水。
+      const views = await runtime.mergedViews()
       if (!disposed) setBooks(views)
     }
     const fail = () => { if (!disposed) setError('账本同步暂未成功，请检查中继设置或稍后重试。') }

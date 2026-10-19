@@ -26,7 +26,7 @@ export function TeacherWorkspace({identity,store,stack,llm,gateway,settings,stat
   return <div className="teacher-shell"><header className="teacher-top"><strong>知衡 · 老师</strong>{status}</header>
     <div className="teacher-content">
       {tab==='今天'&&<main><h1>今天</h1><p className="teacher-count">{consults.length} <span>份待处理问诊</span></p>{loadError&&<p role="alert">{loadError}</p>}
-        <TeacherReidentifyInbox store={store} send={stack?.send}/>
+        <TeacherReidentifyInbox store={store} teacher={identity.publicKey} ledger={stack?.ledger} send={stack?.send}/>
         {consults.length===0?<section className="teacher-card"><h2>现在没有待处理问诊</h2><p>有学生留言时，会出现在这里。</p></section>:consults.map(c=><article className={'teacher-card'+(urgentConsult(c)?' urgent':'')} key={c.encounter.id}>{urgentConsult(c)&&<strong>急症提醒 · 请优先查看</strong>}<h2>{c.encounter.intake.chiefComplaint.value??'问诊留言'}</h2><button onClick={()=>setTab('远程')}>去处理问诊</button></article>)}
         <section className="teacher-card"><h2>学生本周坚持</h2>
           {ranked.length===0&&<p>还没有学生发来本周练习小结；学生在本机打卡后会自动同步数值。</p>}

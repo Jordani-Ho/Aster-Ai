@@ -92,7 +92,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
           <button onClick={() => setOther('homework')}>今日作业</button>
         </nav>
         <p role="status" className="other-relay">中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : '尚未连接'}</p>
-        <FamilySettings store={store} identity={identity} onChanged={onFamilyChanged} />
+        <FamilySettings store={store} identity={identity} send={sendEnvelope} onChanged={onFamilyChanged} />
         <details><summary>设置</summary>
           {modelSettings}
           <LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} members={family} />
