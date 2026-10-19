@@ -39,7 +39,7 @@ V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`
 | `intake-attachments` | 采集照片处理后的 JPEG 字节（长边 ≤1600、≤500 KB）与问诊舌象的舌头裁剪图（长边 ≤512，V2-08） | 键为附件 id |
 | `profile` | 学生本机档案：称呼、性别、年龄、八字、城市（键 `self`） | 城市用于天气与真太阳时/时区 |
 | `student-records` | 学生收到的签名病历索引 `{id,teacher,createdAt,eventJson,version}` | 显示前重新验签；按老师设定的保留期限删除（V2-05） |
-| `settings` | 键 `role`、`teachers`（老师公钥数组）、`time-display`、`mirror-shichen`、`tongue-level`（舌象抽象级别，V2-08 只开放第一级，默认 1）、`retention-days`（老师设定的保留天数）、`last-retention-day`（上次清理日）、`last-backup-request`（上次备份请求日）、`restore-needed`（新进社区后待恢复） | 家人分片内复制同一“我的老师”名单 |
+| `settings` | 键 `role`、`teachers`（老师公钥数组）、`time-display`、`mirror-shichen`、`tongue-level`（舌象抽象级别，V2-08 只开放第一级，默认 1）、`retention-days`（老师设定的保留天数）、`last-retention-day`（上次清理日）、`last-backup-request`（上次备份请求日）、`restore-needed`（新进社区后待恢复）、`reidentify-request-at`（最近一次换机请求时间）、`reidentify-rejected`（收到作废通知的时间） | 家人分片内复制同一“我的老师”名单 |
 | `homework` | 作业 `{homework, startsOn}` | M1-13；保留期限不删作业规则 |
 | `checkins` | 打卡 `{homeworkId, at, note?, shichen?, jieqi?, city?}` | 当日 00:00–00:59 的打卡算前一天（M1-23a 子时归日）；后三项为 V2-02 天时 |
 | `consult-package` | 老师端收到的问诊包（临时资料） | 按老师设定的保留期限删除 |
@@ -49,6 +49,8 @@ V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`
 | `teacher-students` | 老师认得的学生的公钥名单 `{student}` | V2-05；换手机后逐个要回病历用，不含病历内容 |
 | `teacher-retention` | 学生端记下的每位老师的保留期限 `{teacher, days, updatedAt}`（键为老师公钥） | V2-05；多位老师取最短 |
 | `teacher-fingerprint` | 老师改稿习惯摘要 `{records, paths: {字段:{drafts,changed}}, tongueDiffs: {"齿痕：模型不确定→老师有": 次数}, updatedAt}`（键为老师公钥） | V2-05/V2-08；只留计数，不受保留期限影响 |
+| `identity-links` | 换手机认回关系 `{kind:'student'|'teacher', oldKey, newKey, at}`（键为旧公钥） | V2-07；只存公钥对应关系，用于名单替换与旧签名病历验签 |
+| `reidentify-requests` | 老师端待确认的“学生换手机”请求 `{student, alias, receivedAt}`（键为新学生公钥） | V2-07；确认/作废后删除 |
 | `record-photo-index` / `record-photos` | 面诊照片索引与字节 | 学生核对签名引用后保存 |
 | `care-plans` | 调养方案（键为老师公钥） | 学生端只存名单内老师签发的最新版 |
 | `care-plan-pending` / `care-plan-issued` | 老师签发未送达的待发方案 / 版本索引 | |

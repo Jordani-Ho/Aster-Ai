@@ -1,6 +1,7 @@
 import type { LocalStore, StoreValue } from '../store'
 import type { Envelope } from '../transport'
-import { listTeacherRecords, parseRecordEvent, teacherContactStudents, teacherRecordsOf, type LoadedTeacherRecord } from './teacher'
+import { listTeacherRecords, parseRecordEvent, teacherContactStudents, type LoadedTeacherRecord } from './teacher'
+import { listIdentityLinks } from '../identity/links'
 import { loadRetentionDays, type RetentionRole } from './retention'
 
 // V2-05 第 3 步：师生互为备份。仍走现有的传递层（NIP-17/44/59 信封），只加三种消息：
@@ -65,11 +66,20 @@ export async function requestStudentsRecords(store: LocalStore, send: SendEnvelo
   return students
 }
 
-/** 老师端回给学生的备份：只发这一位学生在保留期内的记录。 */
+/** 学生端：旧学生公钥 → 新学生公钥的换机关系（老师确认后才有）。 */
+export async function studentLookupKeys(store: Pick<LocalStore, 'list'>, student: string): Promise<string[]> {
+  const links = await listIdentityLinks(store)
+  const old = links.filter(link => link.kind === 'student' && link.newKey === student).map(link => link.oldKey)
+  return [...new Set([student, ...old])]
+}
+
+/** 老师端回给学生的备份：只发这一位学生（含换机前的旧公钥）在保留期内的记录。 */
 export async function recordsForBackup(store: LocalStore, student: string, now = new Date()): Promise<LoadedTeacherRecord[]> {
   const days = await loadRetentionDays(store)
   const cutoff = now.getTime() - days * DAY
-  return (await teacherRecordsOf(store, student))
+  const keys = new Set(await studentLookupKeys(store, student))
+  return (await listTeacherRecords(store))
+    .filter(record => keys.has(record.student))
     .filter(record => Date.parse(record.createdAt) >= cutoff)
     .slice(0, MAX_BACKUP_RECORDS)
 }
@@ -85,9 +95,10 @@ export function ownBackupsForTeacher(events: readonly unknown[], teacher: string
 }
 
 // 老师端收到学生回发的备份：事件必须由本机老师签名、p 标签就是发件人（学生）。
-export function backupForTeacher(event: unknown, teacher: string, sender: string): ReturnType<typeof parseRecordEvent> {
+// V2-07：老师换手机后，旧老师公钥签的历史病历也认（旧公钥来自学生确认过的换机关系）。
+export function backupForTeacher(event: unknown, teacher: string, sender: string, oldTeachers: readonly string[] = []): ReturnType<typeof parseRecordEvent> {
   const parsed = parseRecordEvent(event)
-  if (!parsed || parsed.pubkey !== teacher) return null
+  if (!parsed || (parsed.pubkey !== teacher && !oldTeachers.includes(parsed.pubkey))) return null
   const pTag = parsed.tags.find(tag => tag[0] === 'p')?.[1]
   if (pTag !== sender || !HEX64.test(sender)) return null
   return parsed

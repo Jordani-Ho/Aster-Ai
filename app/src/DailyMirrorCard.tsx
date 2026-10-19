@@ -3,6 +3,7 @@ import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
 import { currentCarePlan } from './core/careplan'
 import { loadTeachers } from './core/inbox'
+import { listIdentityLinks, oldKeysFor } from './core/identity/links'
 import { loadProfile } from './core/intake/session'
 import { listCheckins, type Assignment } from './core/homework'
 import { needsNudge } from './core/adherence'
@@ -40,9 +41,25 @@ export function DailyMirrorCard({ store, llm, teacher }: { store: LocalStore; ll
   useEffect(() => {
     let active = true
     const run = async () => {
-      const at = new Date(), source = teacher ?? (await loadTeachers(store))[0]
-      const [plan, profile, checkins, ratings, stress, assignments] = await Promise.all([
-        source ? currentCarePlan(store, source) : Promise.resolve(null), loadProfile(store), listCheckins(store), listSelfRatings(store), listStressRatings(store),
+      // V2-07：老师换手机后新公钥下还没有方案，先按学生确认过的换机关系找旧老师公钥那份。
+      const at = new Date()
+      const teachers = teacher ? [teacher] : await loadTeachers(store)
+      const source = teachers[0]
+      let plan = null
+      if (source) {
+        const links = await listIdentityLinks(store)
+        for (const candidate of teachers) {
+          plan = await currentCarePlan(store, candidate)
+          if (plan) break
+          for (const old of oldKeysFor(links, 'teacher', candidate)) {
+            plan = await currentCarePlan(store, old)
+            if (plan) break
+          }
+          if (plan) break
+        }
+      }
+      const [profile, checkins, ratings, stress, assignments] = await Promise.all([
+        loadProfile(store), listCheckins(store), listSelfRatings(store), listStressRatings(store),
         store.list('homework').then(rows => rows.map(row => row.value as unknown as Assignment)),
       ])
       const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 3000)

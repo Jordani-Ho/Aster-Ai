@@ -3,6 +3,7 @@ import type { StoreValue } from '../store'
 import type { DraftCase } from '../drafting/cases'
 import { nextVersion, SIGNED_ENCOUNTER_KIND, type SignedEncounterEvent } from '../record/sign'
 import type { Encounter } from '../record/types'
+import { listIdentityLinks } from '../identity/links'
 
 // V2-05 第 0 步：老师端签字发送成功后，把完整签名病历存进 teacher-records。
 // 学生索引、起草时的医案检索、改方的 previousOf、康币扣费的 recordHash 都从这一个集合读。
@@ -141,6 +142,18 @@ export async function teacherRecordsOf(store: RecordReader, student: string): Pr
   return (await listTeacherRecords(store)).filter(record => record.student === student)
 }
 
+// V2-07：换机关系把旧学生公钥显示成新公钥，名单里不重复出现同一个人。
+async function canonicalStudents(store: RecordReader, students: Iterable<string>): Promise<string[]> {
+  const links = await listIdentityLinks(store)
+  const mapped = new Map(links.filter(link => link.kind === 'student').map(link => [link.oldKey, link.newKey]))
+  const result = new Set<string>()
+  for (const student of students) {
+    if (typeof student !== 'string' || !HEX64.test(student)) continue
+    result.add(mapped.get(student) ?? student)
+  }
+  return [...result].sort()
+}
+
 // 面诊“已有学生”索引：从 teacher-records 读（按学生公钥去重），名单集合只作补充（医案丢失后仍认得学生）。
 export async function teacherStudents(store: RecordReader): Promise<string[]> {
   const students = new Set((await listTeacherRecords(store)).map(record => record.student))
@@ -149,7 +162,7 @@ export async function teacherStudents(store: RecordReader): Promise<string[]> {
     const student = typeof value?.student === 'string' ? value.student : row.key
     if (typeof student === 'string' && HEX64.test(student)) students.add(student)
   }
-  return [...students].sort()
+  return canonicalStudents(store, students)
 }
 
 // 起草时的医案检索：把老师本机完整病历投影成只读 DraftCase（不含学生身份），id 用签名事件 id。
@@ -203,5 +216,5 @@ export async function teacherContactStudents(store: RecordReader): Promise<strin
     const value = row.value as { teacher?: unknown; student?: unknown } | undefined
     if (typeof value?.student === 'string' && HEX64.test(value.student)) students.add(value.student)
   }
-  return [...students].sort()
+  return canonicalStudents(store, students)
 }

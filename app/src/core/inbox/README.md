@@ -7,13 +7,14 @@
 - `record.signed` → 学生端先查“我的老师”白名单（本机 `settings` 的 `teachers`）：发件人不在名单里直接丢弃（验签、写库之前就拦住）；在名单里才 `verifySignedEncounter`（签名人必须是这位老师），通过后写入 `student-records`，并把 `plan.homework` 写进 M1-13 的 `homework` 集合（`startsOn` 取收到当天；同一 `encounter.id` 的新版本替换旧作业，迟到的旧版本不覆盖新版本）。
 - `retention.setting`（V2-05）→ 学生端按老师公钥保存保留期限（`teacher-retention`），用于滚动删除自己的记录；发件人必须与载荷里的老师公钥一致。
 - `records.request` / `records.pull` / `records.backup`（V2-05 互为备份）→ 见 `core/records/README.md`：学生请老师回发记录、老师请学生回发自己签的病历、以及两个方向的回包。
+- `reidentify.request` / `reidentify.confirm` / `reidentify.reject`（V2-07 换手机认回）→ 见 `core/reidentify/README.md`：请求只进老师端待确认区；确认只写“旧公钥 → 新公钥”关系，不改其它；拒绝只发作废通知、不发记录。
 - `ledger.*` → `createLedgerSync().receive`；不认识的类型丢弃。
 
 ## 我的老师白名单
 
 - 存储：`settings` 集合，键 `teachers`，值为 64 位十六进制公钥数组（校验 + 去重）。`loadTeachers` / `saveTeachers` / `addTeacher` / `removeTeacher` 是唯一读写入口。
 - 收件：`receiveSignedRecord` 只在发件人属于名单时才验签入库，陌生成员签发的病历与作业都不会落库。
-- 展示：`listReceivedRecords` 显示前再按名单过滤，白名单之前写进本机的旧数据同样不显示；重新登记老师后会恢复显示。
+- 展示：`listReceivedRecords` 显示前再按名单过滤，白名单之前写进本机的旧数据同样不显示；重新登记老师后会恢复显示。V2-07 起，学生确认过的旧老师公钥（`identity-links` 的 teacher 关系）也算名单内，旧签名病历照常显示；老师确认过的旧学生公钥用来验旧学生名下的病历。
 - 自动加入：`sendConsultPackage` 全部消息发送成功后把 `pkg.encounter.teacher` 加入名单（发送失败不加入）；`flushIntakeOutbox` 同样。
 - 手动登记：App“设置 → 我的老师”里添加/移除（`TeacherListSettings`）。
 
