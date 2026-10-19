@@ -20,6 +20,7 @@
 | [V2-05](V2-05-retention-mutual-backup.md) | 保留期限由老师定；师生互为备份 | DeepSeek | V2-01 |
 | [V2-06](V2-06-heaven-on-records.md) | 天地人进问诊包和病历；家人的城市 | DeepSeek | V2-02 |
 | [V2-07](V2-07-reidentify.md) | 换手机：靠师生互认找回身份 | DeepSeek | V2-05 |
+| [V2-07b](V2-07b-reidentify-family.md) | 换手机：家人随管理人一起认回 | DeepSeek | V2-07 |
 | [V2-08](V2-08-tongue-ladder.md) | 舌象抽象一步步来：第一级（舌头裁剪图 + 候选特征，老师说了算） | DeepSeek | V2-03、V2-05 |
 | [V2-09](V2-09-storefront.md) | 老师门面第一步：门牌、主题、短介绍、预览 | DeepSeek | V2-05、V2-07 |
 | [V2-10](V2-10-three-way-observation.md) | 观察：三方各说一句“这段时间怎么样” | DeepSeek | V2-04、V2-05 |
