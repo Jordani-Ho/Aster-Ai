@@ -371,6 +371,8 @@ async function receiveAdherence(store: LocalStore, message: Message, payload: Re
   if (existing && existing.weekStart > report.weekStart) return
   const stored: StudentAdherence = { student: message.sender, ...report, receivedAt: new Date().toISOString() }
   await store.put(ADHERENCE_COLLECTION, message.sender, stored as unknown as StoreValue)
+  // V2-12：学生连上社区就会发这条数值小结；老师因此认得这位学生，钱账页才能列出来首次记账。
+  if (await loadRole(store) === 'teacher') await rememberTeacherStudent(store, message.sender)
 }
 
 export async function listStudentAdherence(store: LocalStore): Promise<StudentAdherence[]> {

@@ -11,6 +11,12 @@ export function currencyCode(currency:string):string {
  if(!Intl.supportedValuesOf('currency').includes(currency))throw Error('请选择有效币种（如 CNY、USD）')
  return currency
 }
+// V2-12：老师第一次记账时选的币种记在本机，下一本新账默认沿用（一本账建好后币种不再改）。
+export async function saveMoneyCurrency(store:LocalStore,currency:string):Promise<string> {
+ const code=currencyCode(currency)
+ await store.put('settings','money-currency',code)
+ return code
+}
 export function currencyDigits(currency:string):number {
  return new Intl.NumberFormat('en',{style:'currency',currency:currencyCode(currency)}).resolvedOptions().maximumFractionDigits!
 }
