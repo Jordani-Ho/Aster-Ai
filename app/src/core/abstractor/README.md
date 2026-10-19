@@ -1,15 +1,16 @@
-# V2-03 抽象器
+# V2-08 舌象读图（原 V2-03 抽象器）
 
-照片只进入一次视觉请求，返回严格特征后立即释放；输出为 {kind:'tongue', features, svg, shichen, jieqi, city}。时辰、节气和城市由调用者提供，不发给视觉模型。当前不导入 store、消息收发或旧照片处理函数，签字路径无改动。
+只做“读图 → 特征 + 舌头框 + 偏色标记”，不保存、不裁剪、不清原图；统一入口是 `core/tongue` 的 `captureTongue`。时辰、节气和城市由调用者提供，不发给视觉模型。模块本身不导入 store、消息收发或照片处理函数。
 
-- 调用 abstractTongue 前把字节的所有权交给 TransientPhoto；调用方必须清空 file input、释放 File/Blob/预览引用，不能保留副本。finally 会清零传入的 Uint8Array、置 photo.bytes=null、清空消息中的 data URL，成功/失败/超时/不支持看图全部相同处理。当前没有全局图片缓存。
-- 只接受 PNG/JPEG/WebP，头部及 10 MiB 上限是输入格式检查，不能代替模型实际解码；失败请重拍。
-- 领域取值、调色板和位置在 domain/tcm/tongue-features.json；校验和固定路径 SVG 在 domain/tcm/tongue.ts。未知用 unknown/null，未见标记用 []；模型自由文本、额外字段、SVG、照片回显一律拒绝。固定几何示意不构成诊断，置信度也不是临床可信度。
+- 调用 `readTongue` 前把字节的所有权交给 `TransientPhoto`；调用方必须清空 file input、释放 File/Blob/预览引用，不能保留副本。原图在 `captureTongue` 裁剪完成后当场清零，成功/失败/超时/不支持看图全部相同处理。当前没有全局图片缓存。
+- 模型必须返回 `color,coatingColor,coatingThickness,shape,teeth,cracks,confidence,box,lightingNote`：`box` 是舌头外接框（相对坐标 0–1），`lightingNote` 只在光线/白平衡明显偏色时为 true。找不到舌头、框占画面不到 5% 或回复不合格时提示“没拍清舌头，请靠近一点重拍。”；网络/格式失败提示重新拍一张。
+- 只接受 PNG/JPEG/WebP，头部及 10 MiB 上限是输入格式检查，不能代替模型实际解码。
+- 领域取值、调色板和位置在 domain/tcm/tongue-features.json；校验、框校验和固定路径 SVG 在 domain/tcm/tongue.ts。看不清用 uncertain（旧记录里的 unknown 只读兼容并按不确定显示），未见用 []，有但位置不确定用 null。模型自由文本、额外字段、SVG、照片回显一律拒绝。固定几何示意不构成诊断，置信度也不是临床可信度。
 - 默认调用本人已经配置的模型，不替换模型名，不借家里账户降级，不把图片送到网关代理。CORS/网络错误请重拍或更换可直连的视觉接口。HTTP 400/415/422 给“请换用支持看图的模型”，包括参数不兼容的情况；这不是能力检测结论。
-- JavaScript 字符串不可变，无法强制擦除已经形成的 base64/JSON 和浏览器网络栈的内部副本。这里只能清除应用可控引用和原字节，不声称完成浏览器堆取证级擦除，服务商的数据保留政策也不由本应用控制。
+- JavaScript 字符串不可变，无法强制擦除已经形成的 base64/JSON 和浏览器网络栈的内部副本。这里只能清除应用可控引用和原字节，不声称完成浏览器堆栈取证级擦除，服务商的数据保留政策也不由本应用控制。
 
-已接入 V2-01 普通存储、MirrorPage、ConsultPage：共用 `TongueCapture` 立即清空文件输入，读取后释放 File 引用，不创建原图预览；失败/卸载后不保存结果。家人数据用分片，模型配置读取代管人根存储。面诊页已移除原图拍摄落盘入口。
+已接入 V2-01 普通存储、MirrorPage、ConsultPage：共用 `TongueCapture` 先给一句拍前提示，读取后只留舌头裁剪图（长边 ≤512），不创建原图预览；失败/卸载后不保存结果。家人数据用分片，模型配置读取代管人根存储。面诊页仍没有原图拍摄落盘入口。
 
-问诊 `intake.tongues` 随草稿、待发包、老师收件、签字病历保存，仅发送抽象记录。接收、签字与显示均校验白名单特征及固定 SVG，拒绝额外字段和任意 SVG。时辰与节气直接使用已合并 V2-02 的 `core/heaven`，没有另建历法或时间配置。本人缺城市时提供选择，不猜测。保留期限交 V2-05，无迁移。
+问诊 `intake.tongues` 随草稿、待发包、老师收件、签字病历保存；裁剪图走既有附件通道，学生端与老师端都按保留期限删。接收、签字与显示均校验特征及固定 SVG，拒绝额外字段和任意 SVG。老师端起草页并排显示裁剪图与候选示意图，可逐项改值；模型原值与老师定值的差异只记计数进思想指纹。
 
-测试：合成 PNG + 模拟视觉响应；真实 LocalStore/fake-indexeddb 的镜子、家人隔离、草稿恢复、待发与老师收件、签字往返；`node e2e/abstractor.browser.mjs` 使用真实 Chromium 和真实页面组件检查成功/失败/重拍/重载/家人/发送以及所有业务 IndexedDB 记录，视觉请求用合成替身，收件使用真实 inbox、未启动中继。完整中继流程在 `e2e/flow.spec.ts` 同步更新。面部标记可选项未实现，真实手机和真实模型未验。
+测试：合成 PNG + 模拟视觉响应 + 可注入裁剪编解码（验收 1–2、6）；`app/src/core/tongue/tongue.test.ts` 覆盖不确定、偏色提示、指纹计数、镜子只留最新裁剪图与保留期限、级别设置；`e2e/abstractor.browser.mjs` 使用真实 Chromium 和真实页面组件。

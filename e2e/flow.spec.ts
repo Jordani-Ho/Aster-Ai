@@ -61,7 +61,7 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   const png=await readFile('app/src/core/abstractor/fixtures/tongue.png')
   await student.route('https://model.synthetic.example/v1/chat/completions',async route=>{
     if(!route.request().postData()?.includes('image_url'))return route.fallback()
-    await route.fulfill({contentType:'application/json',body:JSON.stringify({choices:[{message:{content:JSON.stringify({color:'pale',coatingColor:'white',coatingThickness:'thin',shape:'wide',teeth:[],cracks:[],confidence:0.7})}}]})})
+    await route.fulfill({contentType:'application/json',body:JSON.stringify({choices:[{message:{content:JSON.stringify({color:'pale',coatingColor:'white',coatingThickness:'thin',shape:'wide',teeth:[],cracks:[],confidence:0.7,box:{x:0.2,y:0.2,width:0.6,height:0.6},lightingNote:false})}}]})})
   })
   await student.getByLabel('舌象记录的居住城市').selectOption('北京市')
   await expect(student.getByRole('button',{name:'拍舌象 / 重拍',exact:true})).toBeEnabled()
@@ -71,9 +71,12 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   await student.getByRole('button',{name:'发给老师',exact:true}).click()
   await expect(student.getByRole('heading',{name:'已发给老师',exact:true})).toBeVisible()
   await expect(teacher.getByRole('heading',{name:quote,exact:true})).toBeVisible()
-  expect(await stored(teacher,'attachments')).toEqual([])
+  expect(await stored(teacher,'attachments')).toHaveLength(1)
   const received=JSON.stringify(await stored(teacher,'consult-package'))
   expect(received).not.toContain(png.toString('base64'));expect(received).toContain('tongues')
+  // V2-08：附件通道里只有舌头裁剪图，原图字节没有离开学生本机。
+  const crop=await stored(teacher,'attachments')
+  expect(JSON.stringify(crop)).not.toContain(png.toString('base64'))
   await teacher.getByRole('button',{name:'打开问诊',exact:true}).click()
   await expect(teacher.locator('figure svg')).toHaveCount(1)
   await expect(teacher.getByText('SYNTHETIC_SUMMARY',{exact:true})).toBeVisible()

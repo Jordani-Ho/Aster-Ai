@@ -125,10 +125,13 @@ async function cleanTeacher(store: LocalStore, cutoff: number): Promise<Record<s
   }
   for (const record of await listTeacherRecords(store)) {
     for (const ref of record.encounter.intake.attachments) referenced.add(ref.id)
+    // V2-08：签字病历里引用的舌头裁剪图（只含裁剪图，不含原图）。
+    for (const tongue of record.encounter.intake.tongues ?? []) if (tongue.crop) referenced.add(tongue.crop.id)
   }
   for (const row of await store.list('in-person-draft')) {
-    const draft = row.value as { intake?: { attachments?: { id?: unknown }[] } }
+    const draft = row.value as { intake?: { attachments?: { id?: unknown }[]; tongues?: { crop?: { id?: unknown } }[] } }
     for (const ref of draft?.intake?.attachments ?? []) if (typeof ref?.id === 'string') referenced.add(ref.id)
+    for (const tongue of draft?.intake?.tongues ?? []) if (typeof tongue?.crop?.id === 'string') referenced.add(tongue.crop.id)
   }
   deleted.attachments = await dropRows(store, 'attachments', key => referenced.has(key))
   return deleted
@@ -166,6 +169,11 @@ async function cleanStudent(store: LocalStore, cutoff: number): Promise<Record<s
     }
   }
   deleted['intake-attachments'] = await dropRows(store, 'intake-attachments', key => referenced.has(key))
+  // V2-08：镜子只留最新一张舌头裁剪图；超期后随记录一起删（裁剪图认不出是谁，按保留期限处理）。
+  deleted['tongue-crops'] = await dropRows(store, 'tongue-crops', (_key, value) => {
+    const crop = value as { at?: unknown }
+    return !olderThan(crop?.at, cutoff)
+  })
   // 学生端收到的签名病历也按保留期限删；长期只留调养方案、作业规则与老师的改稿摘要。
   deleted['student-records'] = await dropRows(store, 'student-records', (_key, value) => {
     const record = value as { createdAt?: unknown }

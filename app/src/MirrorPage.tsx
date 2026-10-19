@@ -6,10 +6,10 @@ import { listSelfRatings, recordSelfRating, listStressRatings, recordStressRatin
 import { listCheckins, checkIn, dueReminders, habitHomework, type Assignment, type Checkin, type HabitItem } from './core/homework'
 import { checkinDay, effectiveDay, localDay } from './core/homework/schedule'
 import { adherenceReport, type AdherenceReport } from './core/adherence'
-import { listTongueDays, saveTongue, loadTongue } from './core/tongue'
+import { listTongueDays, latestTongueCrop, saveTongue, loadTongue, type TongueCropRow } from './core/tongue'
 import type { TongueAbstract } from '../../domain/tcm/tongue'
 import { TongueCapture } from './TongueCapture'
-import { TongueFigure } from './TongueFigure'
+import { TonguePair } from './TonguePair'
 import { CITY_UNKNOWN_HINT, DEFAULT_MIRROR_SHICHEN, DEFAULT_TIME_DISPLAY, formatHeavenTime, heavenNow, heavenStampOf, loadMirrorShichen, loadTimeDisplay, type HeavenTime, type TimeDisplay } from './core/heaven'
 import { MemberSwitcher } from './MemberSwitcher'
 import type { FamilyMember } from './core/family'
@@ -37,6 +37,7 @@ export function MirrorPage({ store, modelStore, settingsStore, llm, family = [],
   const [adherence, setAdherence] = useState<AdherenceReport | null>(null)
   const [tongueDays, setTongueDays] = useState<string[]>([])
   const [todayTongue, setTodayTongue] = useState<TongueAbstract | null>(null)
+  const [latestCrop, setLatestCrop] = useState<TongueCropRow | null>(null)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [heaven, setHeaven] = useState<HeavenTime | null>(null)
@@ -85,6 +86,7 @@ export function MirrorPage({ store, modelStore, settingsStore, llm, family = [],
         setAdherence(adherenceReport(assignments, checkinList, today))
         setTongueDays(await listTongueDays(store))
         setTodayTongue(await loadTongue(store, calendarToday))
+        setLatestCrop(await latestTongueCrop(store))
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : '镜子页读取失败')
       }
@@ -162,8 +164,16 @@ export function MirrorPage({ store, modelStore, settingsStore, llm, family = [],
 
     <section className="mirror-card">
       <h2>拍今天的舌象</h2>
-      {todayTongue ? <TongueFigure record={todayTongue}/> : <p>照片交给你接入的视觉模型读取，只留下舌象示意与特征，应用不保留原图。</p>}
-      <TongueCapture store={store} modelStore={modelStore} onCaptured={async(record,at)=>{await saveTongue(store,record,at);setTodayTongue(record);setTongueDays(await listTongueDays(store));setStatus('已保存舌象示意，原图已从应用内清除')}}/>
+      {todayTongue
+        ? <TonguePair
+            record={todayTongue}
+            crop={latestCrop && todayTongue.crop && latestCrop.id === todayTongue.crop.id ? latestCrop.data : null}
+            cropState={!todayTongue.crop ? 'missing' : latestCrop?.id === todayTongue.crop.id ? 'ok' : 'replaced'}
+            studentNote
+            title={`${member ? member.alias : '本人'} · 今天 · ${todayTongue.shichen}时`}
+          />
+        : <p>照片交给你接入的视觉模型读取，只留下舌头裁剪图和候选特征，应用不保留原图。</p>}
+      <TongueCapture store={store} modelStore={modelStore} onCaptured={async(record,at,crop)=>{await saveTongue(store,record,at,crop);setTodayTongue(record);setLatestCrop(await latestTongueCrop(store));setTongueDays(await listTongueDays(store));setStatus('已保存舌象裁剪图与候选特征，原图已从应用内清除')}}/>
       {tongueDays.length > 0 && <p className="mirror-meta">已记录 {tongueDays.length} 天。</p>}
     </section>
 

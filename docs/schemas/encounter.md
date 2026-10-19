@@ -9,6 +9,8 @@
 
 V2-03（B 类，随 #34 交 Claude 审核）：`Encounter.intake` 新增可选 `tongues: TongueAbstract[]`（最多四份）。每份为 `{kind:'tongue',features,svg,shichen,jieqi,city}`；类型与严格校验在 `domain/tcm/tongue.ts`。照片不进草稿、附件存储或待发包。特征来自模型外观读取，界面明确标为模型读取、非诊断；未知不补正常。SVG 必须与本地模板重建结果一致，签字覆盖整个抽象结果。没有旧用户迁移。
 
+V2-08（B 类）：每份 `TongueAbstract` 增加两个可选字段——`lightingNote?: true`（拍摄光线偏色，界面显示“颜色仅供参考”）与 `crop?: {id,type:'photo',sha256,bytes}`（舌头裁剪图引用，走既有附件通道，不含原图）。特征每项新增 `uncertain`（不确定）；`teeth`/`cracks` 的取值扩展为 `[]`（未见）、`null`（有、位置不确定）、`'uncertain'`（不确定）或位置名数组。V2-03 旧记录里的 `unknown` 仍可读、按不确定显示，新记录不再写。仍无数据迁移。
+
 下面的定义已经放在 `app/src/core/record/types.ts`（由技术合伙人建立，与本文逐字一致）。各任务卡直接引用，不要重复定义；发现问题在合并请求里提出。
 
 ```ts

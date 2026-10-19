@@ -1,7 +1,8 @@
-import { TongueFigure } from './TongueFigure'
+import { TonguePair } from './TonguePair'
 import { RecordPhotos } from './RecordPhotos'
 import { useEffect, useState } from 'react'
 import type { Identity } from './core/identity'
+import { INTAKE_COLLECTIONS } from './core/intake'
 import { groupReceivedRecords, listReceivedRecords, type GroupedRecord, type ReceivedRecord } from './core/inbox'
 import { intakeDisplayLabel } from './core/record/in-person'
 import type { Encounter } from './core/record/types'
@@ -33,7 +34,7 @@ function RecordBody({ record, store }: { record: ReceivedRecord; store: LocalSto
       {encounter.intake.presentIllness.value !== null && <p className="record-detail">现病史：{textField(encounter.intake.presentIllness)}</p>}
       {encounter.intake.history.value !== null && <p className="record-detail">既往史：{textField(encounter.intake.history)}</p>}
       {encounter.intake.medsAllergies.value !== null && <p className="record-detail">在吃的药、过敏：{textField(encounter.intake.medsAllergies)}</p>}
-      {encounter.intake.tongues?.map((record,index)=><TongueFigure key={index} record={record}/>)}
+      {encounter.intake.tongues?.map((record,index)=><TonguePair key={index} record={record} title={`舌象 ${index+1} · ${record.shichen}时`} loadCrop={async()=>{const id=record.crop?.id;if(!id)return null;const data=await store.get(INTAKE_COLLECTIONS.attachmentData,id);return data instanceof Uint8Array?data:null}} missingCropState="expired"/>)}
       {encounter.intake.attachments.length > 0 && <RecordPhotos record={record} store={store}/>}
     </section>
     <section className="record-section">

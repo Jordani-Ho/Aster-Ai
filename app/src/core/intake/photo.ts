@@ -75,12 +75,73 @@ function browserCodec(): PhotoCodec | null {
   }
 }
 
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
+// V2-08 舌头裁剪：只画原图里的一个矩形区域，输出尺寸由调用方定（长边 ≤512）。
+// 与拍照压缩共用浏览器 canvas 能力，不新增依赖，也不保留原图。
+export interface CropRect { x: number; y: number; width: number; height: number }
+export interface TongueCropCodec {
+  decode(bytes: Uint8Array, type: string): Promise<{ source: unknown; width: number; height: number }>
+  crop(source: unknown, rect: CropRect, out: { width: number; height: number }): PhotoCanvas
+}
+
+function browserCanvasSurface() {
+  if (typeof createImageBitmap !== 'function') return null
+  const hasOffscreenCanvas = typeof OffscreenCanvas === 'function'
+  if (!hasOffscreenCanvas && typeof document === 'undefined') return null
+  return { hasOffscreenCanvas }
+}
+
+function paint(source: unknown, hasOffscreenCanvas: boolean, rect: CropRect, out: { width: number; height: number }): PhotoCanvas {
+  if (hasOffscreenCanvas) {
+    const canvas = new OffscreenCanvas(out.width, out.height)
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('浏览器无法绘制图片')
+    context.drawImage(source as ImageBitmap, rect.x, rect.y, rect.width, rect.height, 0, 0, out.width, out.height)
+    return {
+      async toJpeg(quality) {
+        const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality })
+        return new Uint8Array(await blob.arrayBuffer())
+      },
+    }
+  }
+  const canvas = document.createElement('canvas')
+  canvas.width = out.width
+  canvas.height = out.height
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('浏览器无法绘制图片')
+  context.drawImage(source as ImageBitmap, rect.x, rect.y, rect.width, rect.height, 0, 0, out.width, out.height)
+  return {
+    toJpeg(quality) {
+      return new Promise<Uint8Array>((resolve, reject) => {
+        canvas.toBlob(blob => {
+          if (!blob) { reject(new Error('浏览器无法编码图片')); return }
+          void blob.arrayBuffer().then(buffer => resolve(new Uint8Array(buffer))).catch(reject)
+        }, 'image/jpeg', quality)
+      })
+    },
+  }
+}
+
+export function browserTongueCropCodec(): TongueCropCodec | null {
+  const surface = browserCanvasSurface()
+  if (!surface) return null
+  return {
+    async decode(bytes, type) {
+      const buffer = bytes.slice().buffer as ArrayBuffer
+      const bitmap = await createImageBitmap(new Blob([buffer], { type }))
+      return { source: bitmap, width: bitmap.width, height: bitmap.height }
+    },
+    crop(source, rect, out) {
+      return paint(source, surface.hasOffscreenCanvas, rect, out)
+    },
+  }
+}
+
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes.slice().buffer as ArrayBuffer)
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-function randomId(bytes: number): string {
+export function randomId(bytes: number): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
