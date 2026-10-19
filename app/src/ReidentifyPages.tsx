@@ -8,7 +8,7 @@ import {
   confirmStudentReidentify, confirmTeacherReidentify, listReidentifyRequests, matchCandidate,
   openTeacherReidentify, reidentifyLink, rejectStudentReidentify, sendStudentReidentifyRequest,
   teacherChoices, teacherStudentCandidates,
-  type PendingReidentifyRequest, type SendEnvelope, type StudentCandidate,
+  type PendingReidentifyRequest, type ReidentifyLedger, type SendEnvelope, type StudentCandidate,
 } from './core/reidentify'
 import './inbox.css'
 
@@ -127,7 +127,7 @@ export function TeacherReidentifyPrompt({ store, newTeacher, name, oldTeachers, 
 }
 
 /** 老师端：待确认的“学生换手机”请求；称呼唯一匹配时预选旧学生，重名/没有匹配由老师自己选。 */
-export function TeacherReidentifyInbox({ store, send }: { store: LocalStore; send?: SendEnvelope }) {
+export function TeacherReidentifyInbox({ store, teacher, ledger, send }: { store: LocalStore; teacher: string; ledger?: ReidentifyLedger; send?: SendEnvelope }) {
   const [requests, setRequests] = useState<PendingReidentifyRequest[]>([])
   const [candidates, setCandidates] = useState<StudentCandidate[]>([])
   const [chosen, setChosen] = useState<Record<string, string>>({})
@@ -161,8 +161,8 @@ export function TeacherReidentifyInbox({ store, send }: { store: LocalStore; sen
       if (yes) {
         const oldStudent = chosen[request.student]
         if (!oldStudent) { setError('请先选择这孩子换机前是哪位学生。'); return }
-        const result = await confirmStudentReidentify({ store, request, oldStudent, newStudent: request.student, send })
-        setStatus(`已确认，已回发 ${result.records} 份保留期内的记录。`)
+        const result = await confirmStudentReidentify({ store, teacher, request, oldStudent, newStudent: request.student, send, ...(ledger ? { ledger } : {}) })
+        setStatus(`已确认，已回发 ${result.records} 份保留期内的记录${result.carried ? '，旧钱账也带过去了' : ''}。`)
       } else {
         await rejectStudentReidentify({ store, request, send })
         setStatus('已作废，名单和记录都没有改动。')

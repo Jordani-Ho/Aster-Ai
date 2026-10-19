@@ -3,11 +3,13 @@ import type { Envelope } from '../transport'
 import { backupEnvelope, ownBackupsForTeacher, recordsForBackup } from '../records/backup'
 import { listTeacherRecords, rememberTeacherStudent, TEACHER_STUDENTS } from '../records/teacher'
 import { loadTeachers, saveTeachers } from '../inbox'
-import { saveIdentityLink } from '../identity/links'
+import { listIdentityLinks, saveIdentityLink } from '../identity/links'
+import { loadFamilyMembers } from '../family'
 import { teacherLabel, type TeacherLabels } from '../identity/teacher-labels'
 import {
-  confirmEnvelope, dropReidentifyRequest, requestEnvelope, rejectEnvelope,
-  validReidentifyAlias, type PendingReidentifyRequest,
+  chooseFamilyOldKey, confirmEnvelope, dropReidentifyRequest, familyClaimEnvelope,
+  listFamilyResults, requestEnvelope, rejectEnvelope, validReidentifyAlias,
+  type FamilyClaim, type PendingReidentifyRequest,
 } from './messages'
 
 export * from './messages'
@@ -15,6 +17,12 @@ export * from './messages'
 // V2-07 换手机认回的流程层：只做本机状态 + 现有传递层发送，不新增传输方式。
 // 老师换手机的通知由“换机找回链接”承担（老师手动发一次），不再单独加一种广播消息。
 export type SendEnvelope = (recipient: string, envelope: Envelope) => Promise<unknown>
+
+/** V2-07b：老师钱账控制器里换机要用到的两个动作（不把整个账本控制器传进来）。 */
+export interface ReidentifyLedger {
+  open?(teacher: string, student: string): Promise<unknown>
+  carryTo?(teacher: string, student: string, recipient: string): Promise<number>
+}
 
 const HEX64 = /^[0-9a-f]{64}$/
 const REIDENTIFY_REQUEST_AT = 'reidentify-request-at'
@@ -81,12 +89,15 @@ export function matchCandidate(candidates: readonly StudentCandidate[], alias: s
 /** 老师点“是”：确认旧学生 → 新学生，再把保留期内的记录回发给新学生。 */
 export async function confirmStudentReidentify(options: {
   store: LocalStore
+  /** 老师自己的公钥（钱账一本账的 teacher 一侧）。 */
+  teacher: string
   request: PendingReidentifyRequest
   oldStudent: string
   newStudent: string
   send: SendEnvelope
-}): Promise<{ records: number }> {
-  const { store, request, oldStudent, newStudent, send } = options
+  ledger?: ReidentifyLedger
+}): Promise<{ records: number; carried: boolean }> {
+  const { store, teacher, request, oldStudent, newStudent, send, ledger } = options
   if (!HEX64.test(oldStudent) || !HEX64.test(newStudent) || oldStudent === newStudent) throw new Error('换机关系公钥无效')
   if (request.student !== newStudent) throw new Error('请求不是这位新学生')
   if (!validReidentifyAlias(request.alias)) throw new Error('请求里的称呼无效')
@@ -98,7 +109,13 @@ export async function confirmStudentReidentify(options: {
   await store.delete(TEACHER_STUDENTS, oldStudent)
   await rememberTeacherStudent(store, newStudent)
   await dropReidentifyRequest(store, newStudent)
-  return { records: records.length }
+  // V2-07b：钱账接得上——旧公钥那本账原样携带到新身份；新账本先登记，之后记账接着旧余额累加。
+  let carried = false
+  try {
+    await ledger?.open?.(teacher, newStudent)
+    carried = (await ledger?.carryTo?.(teacher, oldStudent, newStudent) ?? 0) > 0
+  } catch { /* 病历已回发；钱账可下次再携带 */ }
+  return { records: records.length, carried }
 }
 
 /** 老师点“不是”：请求作废，只回一条作废通知，名单和记录都不改、不发。 */
@@ -134,4 +151,50 @@ export async function confirmTeacherReidentify(options: {
   const backups = ownBackupsForTeacher(events, oldTeacher)
   for (const event of backups) await send(newTeacher, backupEnvelope(event))
   return { records: backups.length, teachers: next }
+}
+
+/** V2-07b：管理人（已被老师认回）把新添加的家人清单发给老师，老师自动按旧代管关系匹配并回发记录/携带钱账。 */
+export async function sendFamilyReidentify(options: {
+  store: LocalStore
+  /** 管理人自己的新身份公钥。 */
+  identity: string
+  send: SendEnvelope
+}): Promise<FamilyClaim[]> {
+  const { store, identity, send } = options
+  if (!HEX64.test(identity)) throw new Error('管理人公钥无效')
+  const teachers = await loadTeachers(store)
+  const teacher = teachers[0]
+  if (typeof teacher !== 'string' || !HEX64.test(teacher)) return []
+  // 只有管理人已经被老师确认过换机关系，家人才跟着走。
+  const links = await listIdentityLinks(store)
+  if (!links.some(link => link.kind === 'student' && link.newKey === identity)) return []
+  const results = await listFamilyResults(store)
+  const byNew = new Map(results.map(row => [row.newKey, row]))
+  const members = await loadFamilyMembers(store)
+  const claims: FamilyClaim[] = []
+  for (const member of members) {
+    const result = byNew.get(member.publicKey)
+    if (result?.status === 'matched') continue
+    const claim: FamilyClaim = { alias: member.alias, newKey: member.publicKey }
+    if (result?.chosenOldKey) claim.oldKey = result.chosenOldKey
+    claims.push(claim)
+  }
+  if (claims.length === 0) return []
+  await send(teacher, familyClaimEnvelope(claims))
+  return claims
+}
+
+/** 称呼对不上时，管理人手动选一位旧家人对上，再发一次家人认回清单。 */
+export async function chooseFamilyLink(options: {
+  store: LocalStore
+  identity: string
+  newKey: string
+  oldKey: string
+  send: SendEnvelope
+}): Promise<FamilyClaim[]> {
+  if (!HEX64.test(options.identity) || !HEX64.test(options.newKey) || !HEX64.test(options.oldKey)) throw new Error('家人公钥无效')
+  const links = await listIdentityLinks(options.store)
+  if (!links.some(link => link.kind === 'student' && link.newKey === options.identity)) throw new Error('管理人还没被老师认回')
+  await chooseFamilyOldKey(options.store, options.newKey, options.oldKey)
+  return sendFamilyReidentify(options)
 }

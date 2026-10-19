@@ -11,6 +11,11 @@ import { inviteLink, readInviteLink } from '../onboarding'
 export const REIDENTIFY_REQUEST = 'reidentify.request'
 export const REIDENTIFY_CONFIRM = 'reidentify.confirm'
 export const REIDENTIFY_REJECT = 'reidentify.reject'
+/** V2-07b：管理人新身份 → 老师（家人认回清单）；老师 → 管理人（匹配结果/候选）。 */
+export const REIDENTIFY_FAMILY = 'reidentify.family'
+export const MAX_FAMILY_CLAIMS = 8
+/** 管理人本机记的家人认回结果，键为新家人公钥。 */
+export const FAMILY_REIDENTIFY_RESULTS = 'family-reidentify'
 /** 老师端待确认的换机请求，键为新学生公钥。 */
 export const REIDENTIFY_REQUESTS = 'reidentify-requests'
 /** 学生端收到的“老师没确认”通知时间；只做提示，不改名单与记录。 */
@@ -167,3 +172,120 @@ export function readReidentifyLink(link: string): { event: Event; kind: Reidenti
   const name = validReidentifyAlias(rawName) ? rawName.trim() : ''
   return { event, kind, name }
 }
+
+// ---- V2-07b：家人随管理人一起认回 ----
+// reidentify.family 双向：管理人发 claim（重新添加的家人 alias + 新公钥，可带手动选择的旧公钥）；
+// 老师回 result（已匹配 / 未匹配 + 该旧管理人名下的旧家人候选）。老师端不逐个点“是”。
+export interface FamilyClaim { alias: string; newKey: string; oldKey?: string }
+export interface FamilyCandidate { oldKey: string; alias: string }
+export interface FamilyMatched { newKey: string; oldKey: string; alias: string }
+export interface FamilyUnresolved { newKey: string; alias: string; candidates: FamilyCandidate[] }
+
+export function familyClaimEnvelope(families: readonly FamilyClaim[]): Envelope {
+  if (!Array.isArray(families) || families.length === 0 || families.length > MAX_FAMILY_CLAIMS) throw new Error('家人认回清单无效')
+  const clean = families.map(family => {
+    if (!family || !validReidentifyAlias(family.alias) || !HEX64.test(family.newKey)) throw new Error('家人认回清单无效')
+    const item: FamilyClaim = { alias: family.alias.trim(), newKey: family.newKey }
+    if (family.oldKey !== undefined) {
+      if (!HEX64.test(family.oldKey) || family.oldKey === family.newKey) throw new Error('家人认回清单无效')
+      item.oldKey = family.oldKey
+    }
+    return item
+  })
+  return { type: REIDENTIFY_FAMILY, version: 1, payload: { action: 'claim', families: clean } }
+}
+
+export function parseFamilyClaim(payload: unknown): { families: FamilyClaim[] } | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const v = payload as { action?: unknown; families?: unknown }
+  if (v.action !== 'claim' || !Array.isArray(v.families) || v.families.length === 0 || v.families.length > MAX_FAMILY_CLAIMS) return null
+  const families: FamilyClaim[] = []
+  for (const raw of v.families) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+    const item = raw as { alias?: unknown; newKey?: unknown; oldKey?: unknown }
+    if (!validReidentifyAlias(item.alias) || typeof item.newKey !== 'string' || !HEX64.test(item.newKey)) return null
+    if (item.oldKey !== undefined && (typeof item.oldKey !== 'string' || !HEX64.test(item.oldKey) || item.oldKey === item.newKey)) return null
+    families.push({ alias: item.alias.trim(), newKey: item.newKey, ...(item.oldKey === undefined ? {} : { oldKey: item.oldKey }) })
+  }
+  return { families }
+}
+
+export function familyResultEnvelope(matched: readonly FamilyMatched[], unresolved: readonly FamilyUnresolved[]): Envelope {
+  return { type: REIDENTIFY_FAMILY, version: 1, payload: { action: 'result', matched: [...matched], unresolved: [...unresolved] } }
+}
+
+export function parseFamilyResult(payload: unknown): { matched: FamilyMatched[]; unresolved: FamilyUnresolved[] } | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const v = payload as { action?: unknown; matched?: unknown; unresolved?: unknown }
+  if (v.action !== 'result' || !Array.isArray(v.matched) || !Array.isArray(v.unresolved)) return null
+  const matched: FamilyMatched[] = []
+  for (const raw of v.matched) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+    const item = raw as { newKey?: unknown; oldKey?: unknown; alias?: unknown }
+    if (typeof item.newKey !== 'string' || !HEX64.test(item.newKey) || typeof item.oldKey !== 'string' || !HEX64.test(item.oldKey) || !validReidentifyAlias(item.alias)) return null
+    matched.push({ newKey: item.newKey, oldKey: item.oldKey, alias: item.alias.trim() })
+  }
+  const unresolved: FamilyUnresolved[] = []
+  for (const raw of v.unresolved) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+    const item = raw as { newKey?: unknown; alias?: unknown; candidates?: unknown }
+    if (typeof item.newKey !== 'string' || !HEX64.test(item.newKey) || !validReidentifyAlias(item.alias) || !Array.isArray(item.candidates)) return null
+    const candidates: FamilyCandidate[] = []
+    for (const candidate of item.candidates) {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null
+      const value = candidate as { oldKey?: unknown; alias?: unknown }
+      if (typeof value.oldKey !== 'string' || !HEX64.test(value.oldKey) || !validReidentifyAlias(value.alias)) return null
+      candidates.push({ oldKey: value.oldKey, alias: value.alias.trim() })
+    }
+    unresolved.push({ newKey: item.newKey, alias: item.alias.trim(), candidates })
+  }
+  return { matched, unresolved }
+}
+
+export interface FamilyResultRow {
+  newKey: string
+  alias: string
+  status: 'matched' | 'unresolved'
+  oldKey?: string
+  chosenOldKey?: string
+  candidates: FamilyCandidate[]
+  updatedAt: string
+}
+
+export async function saveFamilyResult(store: Pick<LocalStore, 'put'>, row: Omit<FamilyResultRow, 'updatedAt'>, at = new Date()): Promise<void> {
+  if (!HEX64.test(row.newKey)) throw new Error('家人公钥无效')
+  const value: FamilyResultRow = { ...row, candidates: row.candidates.slice(0, MAX_FAMILY_CLAIMS), updatedAt: at.toISOString() }
+  await store.put(FAMILY_REIDENTIFY_RESULTS, row.newKey, value as unknown as StoreValue)
+}
+
+export async function listFamilyResults(store: Pick<LocalStore, 'list'>): Promise<FamilyResultRow[]> {
+  const result: FamilyResultRow[] = []
+  for (const row of await store.list(FAMILY_REIDENTIFY_RESULTS)) {
+    const value = row.value as Partial<FamilyResultRow> | undefined
+    if (!value || typeof value !== 'object' || value.newKey !== row.key) continue
+    if (!HEX64.test(value.newKey) || !validReidentifyAlias(value.alias)) continue
+    if (value.status !== 'matched' && value.status !== 'unresolved') continue
+    const candidates: FamilyCandidate[] = []
+    if (Array.isArray(value.candidates)) for (const item of value.candidates) {
+      if (item && typeof item === 'object' && typeof item.oldKey === 'string' && HEX64.test(item.oldKey) && validReidentifyAlias(item.alias)) candidates.push({ oldKey: item.oldKey, alias: item.alias.trim() })
+    }
+    result.push({
+      newKey: value.newKey, alias: value.alias.trim(), status: value.status,
+      ...(typeof value.oldKey === 'string' && HEX64.test(value.oldKey) ? { oldKey: value.oldKey } : {}),
+      ...(typeof value.chosenOldKey === 'string' && HEX64.test(value.chosenOldKey) ? { chosenOldKey: value.chosenOldKey } : {}),
+      candidates,
+      updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : '',
+    })
+  }
+  return result
+}
+
+/** 管理人手动选一位旧家人对上；下次 claim 会带上这个 oldKey。 */
+export async function chooseFamilyOldKey(store: Pick<LocalStore, 'list' | 'put'>, newKey: string, oldKey: string): Promise<void> {
+  const rows = await listFamilyResults(store)
+  const row = rows.find(item => item.newKey === newKey)
+  if (!row || !HEX64.test(oldKey)) throw new Error('没有这条家人认回记录')
+  if (!row.candidates.some(candidate => candidate.oldKey === oldKey)) throw new Error('请从候选里选择一位旧家人')
+  await saveFamilyResult(store, { ...row, chosenOldKey: oldKey } as Omit<FamilyResultRow, 'updatedAt'>)
+}
+

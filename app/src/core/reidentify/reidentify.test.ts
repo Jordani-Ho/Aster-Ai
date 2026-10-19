@@ -100,6 +100,7 @@ describe('V2-07 验收 1：学生换手机，老师点“是”后收回保留�
 
     const result = await confirmStudentReidentify({
       store: teacher.store,
+      teacher: teacher.identity.publicKey,
       request: pending[0],
       oldStudent: oldStudent.publicKey,
       newStudent: fresh.identity.publicKey,

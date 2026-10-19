@@ -52,6 +52,8 @@ V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`
 | `identity-links` | 换手机认回关系 `{kind:'student'|'teacher', oldKey, newKey, at}`（键为旧公钥） | V2-07；只存公钥对应关系，用于名单替换与旧签名病历验签 |
 | `reidentify-requests` | 老师端待确认的“学生换手机”请求 `{student, alias, receivedAt}`（键为新学生公钥） | V2-07；确认/作废后删除 |
 | `reidentify-teacher-confirms` | 老师端按发件人记录的已接受 teacher 类确认 `{student, oldKey, at}`（键为学生公钥） | V2-07；同一人第二次不同旧公钥一律不认 |
+| `family-reidentify` | 管理人本机记的家人认回结果 `{newKey, alias, status, oldKey?, chosenOldKey?, candidates, updatedAt}`（键为新家人公钥） | V2-07b；老师回 matched/unresolved，管理人据此显示“没找到原来的记录”并手动选旧家人 |
+| `ledger-carried` | 老师换机携带过来的旧钱账 `{teacher, student, events, receivedAt}`（键为随机 id） | V2-07b；只读、按事件 id 幂等；读取时与新账归并，不按保留期限删 |
 | `record-photo-index` / `record-photos` | 面诊照片索引与字节 | 学生核对签名引用后保存 |
 | `care-plans` | 调养方案（键为老师公钥） | 学生端只存名单内老师签发的最新版 |
 | `care-plan-pending` / `care-plan-issued` | 老师签发未送达的待发方案 / 版本索引 | |

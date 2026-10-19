@@ -15,3 +15,5 @@
 中继地址只用构建时的 VITE_COMMUNITY_RELAYS（V2 已删除备份设置里的 backup-config，不再可改）。
 扣费事件的 `recordHash`（钱账里同时作为 `confirmationId`）是签名病历的事件 id，与老师端 `teacher-records` 里的完整医案对得上（V2-05）。
 V2-05 的保留期限只清医案、问诊包与照片，**不碰钱账与康币账的任何数据**（钱账、`kangbi-observations` 长期保留）。
+
+V2-07b 换手机：老师确认本人/家人换机后，把旧公钥名下**已签名**的事件原样携带给新身份（`ledger.carry`，老师 → 新身份），不重签、不搬走老师端原件、不加补差记录；携带不按保留期限裁剪。新身份按 `identity-links` 校验“旧公钥 → 我”并验整条链后只读存在 `ledger-carried`，按事件 id 幂等。读取时 `createLedgerSync.mergedViews()` 按映射把旧账与新账归并（老师端每个学生只显示一条合并余额与流水，学生端余额与换机前相同）；老师再记账写进新公钥那本账（没有就先 `open`），余额接着旧账累加。`ledger.carry` 只是传输层消息，不改已签事件格式。
