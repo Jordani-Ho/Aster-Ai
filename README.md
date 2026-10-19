@@ -8,7 +8,8 @@
 
 | 文件 | 内容 | 读者 |
 | :-- | :-- | :-- |
-| [`docs/charter.md`](docs/charter.md) | 《知衡治未病社区宪章》：我们信什么、守什么 | 所有人 |
+| [`docs/依据/总纲.md`](docs/依据/总纲.md) | 总纲（总架构，只读副本） | 所有人 |
+| [`docs/医纲.md`](docs/医纲.md) | 医纲：知衡自己的纲、律和数 | 所有人 |
 | [`docs/tech-whitepaper.md`](docs/tech-whitepaper.md) | 技术白皮书：怎么建，施工依据 | 开发者 |
 
 ## 当前状态

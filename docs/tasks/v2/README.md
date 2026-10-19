@@ -23,6 +23,6 @@
 | [V2-07b](V2-07b-reidentify-family.md) | 换手机：家人随管理人一起认回 | DeepSeek | V2-07 |
 | [V2-08](V2-08-tongue-ladder.md) | 舌象抽象一步步来：第一级（舌头裁剪图 + 候选特征，老师说了算） | DeepSeek | V2-03、V2-05 |
 | [V2-09](V2-09-storefront.md) | 老师门面第一步：门牌、主题、短介绍、预览 | DeepSeek | V2-05、V2-07 |
-| [V2-10](V2-10-three-way-observation.md) | 观察：三方各说一句“这段时间怎么样” | DeepSeek | V2-04、V2-05 |
+| [V2-10](V2-10-three-way-observation.md) | 观察：老师和智能体各说一句“这段时间怎么样” | DeepSeek | V2-04、V2-05 |
 
 第二批（地基合并后再展开）：自我调整（表层配置化）、门面、物流（本地资源）、观察。
