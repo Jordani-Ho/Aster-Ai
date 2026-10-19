@@ -4,7 +4,7 @@ import type { LlmClient } from './core/llm'
 import { DailyMirrorCard } from './DailyMirrorCard'
 import { listSelfRatings, recordSelfRating, listStressRatings, recordStressRating, last14DayTrend, mirrorShichenNotice, mirrorTrendNote, type SelfRating, type StressRating } from './core/mirror/trend'
 import { listCheckins, checkIn, dueReminders, habitHomework, type Assignment, type Checkin, type HabitItem } from './core/homework'
-import { checkinDay, localDay } from './core/homework/schedule'
+import { checkinDay, effectiveDay, localDay } from './core/homework/schedule'
 import { adherenceReport, type AdherenceReport } from './core/adherence'
 import { listTongueDays, saveTongue, loadTongue } from './core/tongue'
 import type { TongueAbstract } from '../../domain/tcm/tongue'
@@ -42,7 +42,9 @@ export function MirrorPage({ store, modelStore, llm, family = [], active = 0, on
   const [mirrorShichen, setMirrorShichen] = useState(DEFAULT_MIRROR_SHICHEN)
   const assignmentsRef = useRef<Assignment[]>([])
   const [now] = useState(() => new Date())
-  const today = localDay(now)
+  // 打卡相关一律用 effectiveDay（与 checkinDay 同一口径）；舌象按自然日存档，用 calendarToday。
+  const today = effectiveDay(now)
+  const calendarToday = localDay(now)
 
   // 天时每分钟刷新：时辰按当地真太阳时、节气按天文时刻换算到当地日期。
   useEffect(() => {
@@ -78,7 +80,7 @@ export function MirrorPage({ store, modelStore, llm, family = [], active = 0, on
         setHabits(habitHomework(assignments, checkinList, now))
         setAdherence(adherenceReport(assignments, checkinList, today))
         setTongueDays(await listTongueDays(store))
-        setTodayTongue(await loadTongue(store, today))
+        setTodayTongue(await loadTongue(store, calendarToday))
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : '镜子页读取失败')
       }

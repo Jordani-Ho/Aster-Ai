@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { LocalStore } from './core/store'
 import type { Homework } from './core/record/types'
-import { checkIn, dueReminders, listCheckins, sevenDayProgress, type Assignment, type Checkin } from './core/homework'
-import { localDay, checkinDay, schedule } from './core/homework/schedule'
+import { checkIn, completedToday, dueReminders, listCheckins, sevenDayProgress, type Assignment, type Checkin } from './core/homework'
+import { effectiveDay, localDay, schedule } from './core/homework/schedule'
 import { formatHeavenTime, heavenNow, heavenStampOf, type HeavenTime } from './core/heaven'
 
 export function HomeworkPage({store,onBack,onCheckedIn}:{store:LocalStore;onBack:()=>void;onCheckedIn?:()=>void}) {
@@ -38,6 +38,8 @@ export function HomeworkPage({store,onBack,onCheckedIn}:{store:LocalStore;onBack
     return()=>{cancelled=true;clearInterval(timer);window.removeEventListener('focus',update)}
   },[store])
   const due=dueReminders(assignments,checkins,now)
+  // 页面上的“今天”统一走 effectiveDay（与打卡同一个 checkinDay）。
+  const today=effectiveDay(now)
   useEffect(()=>{
     if(!('Notification' in window)||Notification.permission!=='granted'||!due.length)return
     // 每个挂载会话中，每个作业每日只弹一次；不含作业名称或内容。
@@ -66,18 +68,18 @@ export function HomeworkPage({store,onBack,onCheckedIn}:{store:LocalStore;onBack
     catch{setError('打卡未能保存，请重试')}finally{setBusy(false)}
   }
   return <main className="homework-page">
-    <header><button onClick={onBack}>返回</button><p className="eyebrow">知衡 · 学生</p><h1>今日作业</h1><p>{localDay(now)} · {heaven ? formatHeavenTime(heaven) : '—'}</p></header>
+    <header><button onClick={onBack}>返回</button><p className="eyebrow">知衡 · 学生</p><h1>今日作业</h1><p>{today} · {heaven ? formatHeavenTime(heaven) : '—'}</p></header>
     {due.length>0&&<aside role="status" className="due-banner">有 {due.length} 项作业到时间了，方便时记得完成。</aside>}
     <p className="privacy-note">打卡只保存在你的手机上。</p>
     <details><summary>提醒设置</summary><p>应用打开时显示到点提醒；关闭后暂时无法定时提醒。</p><button onClick={()=>{if('Notification' in window)void Notification.requestPermission().then(permission=>{setNotificationsAllowed(permission==='granted');setStatus(permission==='granted'?'已允许通知':'保留页面内提醒');setNow(new Date())});else setStatus('当前浏览器使用页面内提醒')}}>允许系统通知</button></details>
     {error&&<p role="alert">{error}</p>}{status&&<p role="status">{status}</p>}
     {!assignments.length&&<section className="homework-card"><h2>还没有作业</h2><p>老师布置的作业会出现在这里。</p><button disabled={busy} onClick={()=>void demo()}>加载示例作业（仅本机演示）</button></section>}
     {assignments.map(({homework,startsOn})=>{
-      const reminders=schedule([homework],startsOn,1,localDay(now))
+      const reminders=schedule([homework],startsOn,1,today)
       const habitAnchorText=homework.schedule.kind==='habit'?homework.schedule.anchor:null
       const habitual=habitAnchorText!==null
       const progress=sevenDayProgress(homework,checkins,startsOn,now)
-      const completed=checkins.some(item=>item.homeworkId===homework.id&&checkinDay(new Date(item.at))===localDay(now))
+      const completed=completedToday(checkins,homework.id,now)
       return <section className="homework-card" key={homework.id}>
         <div className="card-heading"><h2>{homework.title}</h2><span className="time-pill">{habitAnchorText!==null?'随习惯：'+habitAnchorText:reminders.length?reminders[0].at.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',hour12:false}):'今日无安排'}</span></div>
         <p>{homework.detail}</p>

@@ -6,6 +6,7 @@ daily按HH:MM、shichen按领域表的开始时刻、jieqi按领域历法的节�
 省略durationDays则在查询窗口内持续，直到后续复诊更新；查询窗口上限3660天用于避免误输入。日期采用本地日历逐日递增，避免夏令时造成日漂移；不存在的本地时间按JS Date规则向后调整，重复时刻取较早一次。子时提醒归23:00所在的公历日。
 
 checkIn(store,id,note?,at?,heaven?)只向本机 checkins 集合写{homeworkId,at,note?,shichen?,jieqi?,city?}，键 crypto.randomUUID；V2 起本机存储不加密。传了 heaven（天时，见 `core/heaven`）就一并记下当时的时辰、节气、城市；不传不写空字段。不发fetch、WebSocket或其他网络。
+**“今天”只有一个口径**：`effectiveDay(now)` = `checkinDay(now)`。本地 00:00–00:59 的打卡算前一天，页面上“今日是否已完成”、今日作业、镜子页打卡与坚持率都用同一个有效日；`completedToday(checkins, homeworkId, now)` 是按钮判断的唯一入口，`habitHomework`、`dueReminders`、`sevenDayProgress` 也用它，不要另按日历日算一套。
 sevenDayProgress按截至今天近7个本地日期内实际安排的天数计算分母，同一天重复打卡只算一次，尚未生效和已过期日不计入。未安排当天的历史记录不算完成。
 
 今日作业页从本机 homework 集合读取{homework,startsOn}，提供备注/打卡/7天状态格；无数据时可由用户主动载入合成示例，并明确标注示例。真实签字病历中的作业由收件逻辑写入这个集合。

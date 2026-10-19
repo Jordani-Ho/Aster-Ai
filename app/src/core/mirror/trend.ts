@@ -1,5 +1,5 @@
 import type { LocalStore, StoreValue } from '../store'
-import { addDays, localDay } from '../homework/schedule'
+import { addDays, checkinDay, localDay } from '../homework/schedule'
 import type { Checkin } from '../homework'
 import type { HeavenStamp } from '../heaven'
 
@@ -107,7 +107,8 @@ export function last14DayTrend(
   const checkinCount = new Map<string, number>()
   for (const checkin of checkins) {
     if (!checkin || typeof checkin.at !== 'string' || !Number.isFinite(Date.parse(checkin.at))) continue
-    const day = localDay(new Date(checkin.at))
+    // 与打卡同一个日子口径（本地 00:00–00:59 算前一天）。
+    const day = checkinDay(new Date(checkin.at))
     checkinCount.set(day, (checkinCount.get(day) ?? 0) + 1)
   }
 
