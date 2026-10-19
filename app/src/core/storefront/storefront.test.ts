@@ -43,6 +43,7 @@ describe('V2-09 门面配置与签名', () => {
     expect(themeOf(right).background).toBe('#f2f4f7')
     // 没有显示称呼时也给出可读门牌，不露公钥。
     expect(displayTeacherName('', aci.publicKey)).toBe('老师 ' + aci.publicKey.slice(-6))
+    expect(inviteTitle(null, aci.publicKey)).toBe('老师邀请你')
   })
 
   it('门面事件署名归老师本人；改内容或冒充都验不过', () => {

@@ -105,9 +105,11 @@ export function displayTeacherName(displayName: string, key?: string): string {
   return key && HEX64.test(key) ? '老师 ' + key.slice(-6) : '老师'
 }
 
-/** 邀请首屏标题：“阿慈老师邀请你”。 */
+/** 邀请首屏标题：“阿慈老师邀请你”；老师还没配门面时用不带公钥的“老师邀请你”。 */
 export function inviteTitle(storefront: Storefront | null | undefined, key?: string): string {
-  return displayTeacherName(storefront?.displayName ?? '', key) + '邀请你'
+  const displayName = typeof storefront?.displayName === 'string' ? storefront.displayName.trim() : ''
+  if (displayName === '') return '老师邀请你'
+  return displayTeacherName(displayName, key) + '邀请你'
 }
 
 function contentOf(storefront: Storefront): string {
