@@ -25,3 +25,9 @@
 1. 全新环境 `./quick-start.sh` 一条命令起来，手机能打开打印出来的网址。
 2. 《内测怎么开始》里每一步都真走过，PR 里贴出走查记录。
 3. `deploy/home/` 和 README 里搜不到第一版已删功能的字样。
+
+
+## 完成记录
+
+- 合并请求：https://github.com/Jordani-Ho/Aster-Ai/pull/49
+- 结果：deploy/home 已对齐第二版（无成员白名单/旧备份功能残留，quick-start 最后一行打印手机网址，verify 六项 PASS）；docs/内测怎么开始.md 与 team/selftest-notes.md 已建；在新建的独立 WSL2 发行版 Ubuntu-22.04 上干净环境走查 16 步通过、截图 selftest-01..20；发现“首次记账入口被卡”一项目前未修，已记录并建议另开卡。
