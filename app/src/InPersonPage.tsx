@@ -29,6 +29,7 @@ import { teacherCases } from './core/records/teacher'
 import type { Encounter } from './core/record/types'
 import type { LocalStore } from './core/store'
 import { SignEncounterPage } from './SignEncounterPage'
+import { heavenLine, heavenNow, heavenStampOf, loadTimeDisplay, type TimeDisplay } from './core/heaven'
 import './in-person.css'
 
 const INTAKE_LABELS: Record<InPersonIntakeKey, string> = {
@@ -68,11 +69,13 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
   const [utterance,setUtterance]=useState('')
   const [questionIndex,setQuestionIndex]=useState(0)
   const [template,setTemplate]=useState<TeacherTemplate>(defaultTemplate)
+  const [timeDisplay,setTimeDisplay]=useState<TimeDisplay>('both')
 
 
   useEffect(() => {
     let cancelled = false
     void loadTeacherTemplate(store).then(value=>{if(!cancelled)setTemplate(value)}).catch(()=>{})
+    void loadTimeDisplay(store).then(value=>{if(!cancelled)setTimeDisplay(value)}).catch(()=>{})
     void knownStudents(store).then(rows => { if (!cancelled) setKnown(rows) }).catch(() => {})
     void loadInPersonDraft(store).then(saved => {
       if (cancelled || !saved) return
@@ -102,12 +105,14 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
     void saveInPersonDraft(store, next).catch(() => setError('草稿没有保存成功，请检查本机存储。'))
   }
 
-  const begin = () => {
+  const begin = async () => {
     setError('')
     const student = studentInput.trim().toLowerCase()
     if (!/^[0-9a-f]{64}$/.test(student)) { setError('请填写学生的 身份编号。'); return }
     try {
-      const next = startInPersonEncounter({ teacher: identity.publicKey, student })
+      // V2-06：面诊在老师开始面诊时取一次天地人（用老师所在城市）；之后改学生要重新新建病历。
+      const heaven = heavenStampOf(await heavenNow(store))
+      const next = startInPersonEncounter({ teacher: identity.publicKey, student, heaven })
       apply(next, '已新建面诊病历：签字之前，所有内容只在本机。')
       setPhase('intake')
     } catch (cause) { setError(message(cause)) }
@@ -192,7 +197,7 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
         <h2>选定学生</h2>
         {known.length===0?<p>还没有可选学生，请先在管理页邀请学生，让学生发送一次问诊。</p>:<label>选择学生<select value={studentInput} onChange={e=>setStudentInput(e.target.value)}><option value="">请选择</option>{known.map((person,i)=><option key={person} value={person}>学生 {i+1}</option>)}</select></label>}
         <div className="in-person-actions">
-          <button className="in-person-primary" disabled={busy || !studentInput} onClick={begin}>新建面诊病历</button>
+          <button className="in-person-primary" disabled={busy || !studentInput} onClick={()=>void begin()}>新建面诊病历</button>
         </div>
       </section>
     </main>
@@ -210,8 +215,10 @@ export function InPersonPage({ store, identity, onBack, send: sendEnvelope, llm 
   }
 
   if (phase === 'review' && draftEncounter) {
+    const heavenLineText = heavenLine(draftEncounter.heaven, timeDisplay)
     return <>
       {error && <p role="alert" className="in-person-error">{error}</p>}
+      {heavenLineText && <p className="in-person-note" role="status">{heavenLineText}</p>}
       <SignEncounterPage
         onRevise={llm ? (current,instruction)=>reviseEncounter(current,instruction,llm) : undefined}
         initial={draftEncounter}

@@ -7,18 +7,14 @@ import { meridians } from '../../../../domain/tcm/calendar'
 import { JIEQI_CHRONO } from '../../../../domain/tcm/seasonal'
 import { loadProfile } from '../intake/session'
 import type { LocalStore } from '../store'
+import { SHICHEN, type HeavenStamp } from './stamp'
+export { isHeavenStamp, SHICHEN } from './stamp'
+export type { HeavenStamp } from './stamp'
 
 export interface HeavenCity {
   nameZh: string
   longitude: number
   timeZone: string
-}
-
-/** 每条新记录带的三项：时辰、节气、城市（城市未知为 null）。 */
-export interface HeavenStamp {
-  shichen: string
-  jieqi: string
-  city: string | null
 }
 
 export interface HeavenTime extends HeavenStamp {
@@ -41,8 +37,6 @@ export const CITY_UNKNOWN_HINT = '补上居住城市，才能按当地的太阳�
 const TIME_DISPLAY_KEY = 'time-display'
 const MIRROR_SHICHEN_KEY = 'mirror-shichen'
 const DAY_MS = 86400000
-
-export const SHICHEN: readonly string[] = meridians.map(item => item.name)
 
 const cities = cityData
 
@@ -153,6 +147,37 @@ export function formatHeavenTime(time: Pick<HeavenTime, 'shichen' | 'clock'>, di
 
 export function heavenStampOf(time: HeavenTime): HeavenStamp {
   return { shichen: time.shichen, jieqi: time.jieqi, city: time.city }
+}
+
+/** 时辰对应的钟点区间（如 戌时 19:00–21:00，子时 23:00–01:00）。 */
+export function shichenClockRange(name: string): string {
+  const row = meridians.find(item => item.name === name)
+  if (!row) return ''
+  const clock = (hour: number) => `${String(hour).padStart(2, '0')}:00`
+  return `${clock(row.startHour)}–${clock(row.endHour)}`
+}
+
+/**
+ * 只带时辰/节气/城市的记录怎么显示：按 timeDisplay 显示时辰、钟点区间或两者。
+ * 记录里没有钟点，钟点用该时辰的区间表示；缺 heaven 返回 null（界面不显示那一行）。
+ */
+export function formatHeavenStamp(stamp: HeavenStamp | null | undefined, display: TimeDisplay = DEFAULT_TIME_DISPLAY): string | null {
+  if (!stamp || typeof stamp.shichen !== 'string' || stamp.shichen.trim() === '') return null
+  const name = stamp.shichen.endsWith('时') ? stamp.shichen : `${stamp.shichen}时`
+  const range = shichenClockRange(stamp.shichen)
+  if (display === 'clock') return range || name
+  if (display === 'both') return range ? `${name}（${range}）` : name
+  return name
+}
+
+/** 老师起草页顶部的“学生那边”一行；没有 heaven 就不显示。 */
+export function heavenLine(stamp: HeavenStamp | null | undefined, display: TimeDisplay = DEFAULT_TIME_DISPLAY, who = '学生那边'): string | null {
+  const head = formatHeavenStamp(stamp, display)
+  if (!head || !stamp) return null
+  const parts = [head]
+  if (typeof stamp.jieqi === 'string' && stamp.jieqi.trim() !== '') parts.push(stamp.jieqi)
+  if (typeof stamp.city === 'string' && stamp.city.trim() !== '') parts.push(stamp.city)
+  return `${who}：${parts.join(' · ')}`
 }
 
 // 表层配置：智能体以后按主人习惯改这两个值，界面只读不写死。

@@ -1,4 +1,5 @@
 import { check, type RedFlagResult } from '../redflags'
+import { isHeavenStamp } from '../heaven/stamp'
 import type { AttachmentRef, ConsultPackage, Encounter, Field } from './types'
 import { signEncounter, type SignedEncounterEvent } from './sign'
 import { saveTeacherRecord, teacherStudents, type RecordStoreLike } from '../records/teacher'
@@ -46,6 +47,8 @@ export interface StartInPersonOptions {
   student: string
   now?: Date
   id?: string
+  /** V2-06：老师开始面诊时取一次的天地人；之后改学生要重新新建病历。 */
+  heaven?: Encounter['heaven']
 }
 
 // 新建面诊病历：老师与学学生公钥都必须是 64 位十六进制；其余字段先留未知，由老师现场代录。
@@ -54,6 +57,7 @@ export function startInPersonEncounter(options: StartInPersonOptions): Encounter
   if (!HEX64.test(teacher) || !HEX64.test(student)) throw new Error('公钥格式无效')
   const id = options.id ?? randomHex(16)
   if (!HEX32.test(id)) throw new Error('病历 id 格式无效')
+  if (options.heaven !== undefined && !isHeavenStamp(options.heaven)) throw new Error('天时格式无效')
   return {
     id,
     version: 1,
@@ -61,6 +65,7 @@ export function startInPersonEncounter(options: StartInPersonOptions): Encounter
     student,
     teacher,
     createdAt: (options.now ?? new Date()).toISOString(),
+    ...(options.heaven ? { heaven: { ...options.heaven } } : {}),
     profile: {
       alias: unknown(),
       gender: unknown(),

@@ -2,7 +2,7 @@
 
 `createInbox({identity, store, ledger})` 把同一个 `createTransport` 收到的信封按 `type` 分发：
 
-- `consult.package` → 老师端问诊箱（`consult-package`），只存 `AttachmentRef`，不存照片字节。
+- `consult.package` → 老师端问诊箱（`consult-package`），只存 `AttachmentRef`，不存照片字节。V2-06 起信封里还带 `heaven`（学生发送那一刻的时辰/节气/城市）：收件时严格校验，格式不对整包丢弃；缺了照常收（旧格式），存进 `StoredConsult.heaven` 供起草页显示。
 - `consult.attachment` → 老师端附件（payload `{ encounterId, ref, data: base64 }`）。照片按 `id` + `sha256` 匹配问诊包里的引用，**现场重算 sha256**，字节长度或哈希不符就丢弃；到齐前 `assertConsultReady` 抛“照片还在路上”。
 - `record.signed` → 学生端先查“我的老师”白名单（本机 `settings` 的 `teachers`）：发件人不在名单里直接丢弃（验签、写库之前就拦住）；在名单里才 `verifySignedEncounter`（签名人必须是这位老师），通过后写入 `student-records`，并把 `plan.homework` 写进 M1-13 的 `homework` 集合（`startsOn` 取收到当天；同一 `encounter.id` 的新版本替换旧作业，迟到的旧版本不覆盖新版本）。
 - `retention.setting`（V2-05）→ 学生端按老师公钥保存保留期限（`teacher-retention`），用于滚动删除自己的记录；发件人必须与载荷里的老师公钥一致。

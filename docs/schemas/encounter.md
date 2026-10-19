@@ -26,6 +26,7 @@ export interface Encounter {
   student: string            // 学生公钥（64 位十六进制）
   teacher: string            // 老师公钥
   createdAt: string          // ISO 8601
+  heaven?: HeavenStamp       // V2-06：问诊时的天地人（时辰、节气、城市），可选
   profile: {                 // 宪章第十四条：老师端只留这些
     alias: Field<string>
     gender: Field<'male' | 'female' | 'other'>
@@ -85,6 +86,7 @@ export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: st
 
 > 修订记录：2026-10-16 给 `Homework` 补上 `source` 和 `note`（M1-10 审核时发现遗漏）。
 > 修订记录：2026-10-18（M1-23a）`Homework.schedule` 新增 `{ kind: 'habit'; anchor }`：`anchor` 是学生已有的日常习惯（如“起床后”“刷牙时”“拖地时”“通勤路上”“睡前”），1～12 个字、去掉首尾空白、不含控制字符；这类作业**不产生钟点提醒**，只出现在学生镜子页“今天做这些事的时候，记得……”一栏，打卡仍写进 M1-13 的 `checkins`（homeworkId + at）计入坚持率。老师端起草/改稿只接受上述锚点写法，不接受把 habit 改写成 daily/shichen；视频相关字段不在本卡（M1-23b）。
+> 修订记录：2026-10-19（V2-06）`Encounter` 与 `ConsultPackage` 新增可选 `heaven: HeavenStamp`（`{ shichen, jieqi, city }`，见 `app/src/core/heaven/stamp.ts`）。学生点“确认发送”时取发送那一刻的天地人放进问诊包；老师签字时**原样沿用包里的那份，不重新取**，写进签名病历。面诊在老师开始面诊时取一次。没有 `heaven` 的旧病历照常验签、照常打开，只是起草页不显示“学生那边”那一行；不做数据迁移。`heaven` 可选、不参与签字硬规则。
 
 ## 2. 签名后的病历
 
@@ -104,8 +106,12 @@ export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: st
 ## 4. 问诊包（学生发给老师）
 
 ```ts
+// app/src/core/heaven/stamp.ts
+export interface HeavenStamp { shichen: string; jieqi: string; city: string | null }
+
 export interface ConsultPackage {
   encounter: Encounter          // 只填了 profile 和 intake，来源都是 'student'
+  heaven?: HeavenStamp          // 见上：发送那一刻学生那边的天地人，签字病历原样沿用
   manager?: string              // M1-22 传输元数据：家人代管问诊时为代管人（根身份）公钥，不进病历、不参与签字
   managerProof?: FamilyProof    // M1-22 代管证明：代管人私钥签的 kind 2732，content 'aster.family.v1'，tags [['p', 家人公钥]]；老师端验过才认 manager
   history: string[]             // 学生授权附带的历史病历（签名事件 JSON 字符串），默认同一位老师的近 3 次
