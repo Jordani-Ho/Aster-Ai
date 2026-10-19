@@ -26,7 +26,9 @@ function count(value:unknown): boolean {return Number.isInteger(value)&&(value a
 export function validateObservation(value:HealthObservation):void {
  if(!value||!/^[A-Za-z0-9_-]{1,64}$/.test(value.id)||!iso(value.at)||![value.student,value.teacher].every(v=>/^[a-f0-9]{64}$/.test(v)))throw Error('观察记录无效')
  if(!iso(value.periodStart)||!iso(value.periodEnd)||Date.parse(value.periodStart)>Date.parse(value.periodEnd))throw Error('观察周期无效')
- for(const n of [value.practiceDays,value.teacherMinutes,value.consultations])if(!count(n))throw Error('观察时长无效')
+ for(const n of [value.practiceDays,value.consultations])if(!count(n))throw Error('观察天数或次数无效')
+ // 老师分钟是设备计时，允许小数；不能当整数截断。
+ if(!Number.isFinite(value.teacherMinutes)||value.teacherMinutes<0)throw Error('观察时长无效')
  if(!choiceOrNull(value.teacherNote)||!choiceOrNull(value.agentNote))throw Error('观察评语无效，未评价留空')
  if(!value.effects||Object.keys(value.effects).sort().join(',')!=='measurement,teacher')throw Error('客观量表无效')
  for(const n of Object.values(value.effects))if(n!==null&&!Number.isFinite(n))throw Error('客观量表无效，未评价留空')
@@ -39,7 +41,8 @@ export function normalizeObservation(value:unknown):HealthObservation|null {
  const v=value as Record<string,unknown>
  if(!iso(v.at)||typeof v.id!=='string'||!/^[A-Za-z0-9_-]{1,64}$/.test(v.id))return null
  if(typeof v.student!=='string'||typeof v.teacher!=='string'||![v.student,v.teacher].every(k=>/^[a-f0-9]{64}$/.test(k)))return null
- for(const n of [v.practiceDays,v.teacherMinutes,v.consultations])if(!count(n))return null
+ for(const n of [v.practiceDays,v.consultations])if(!count(n))return null
+ if(!Number.isFinite(v.teacherMinutes)||(v.teacherMinutes as number)<0)return null
  const effects=v.effects as Record<string,unknown>|undefined
  if(!effects||typeof effects!=='object'||Array.isArray(effects))return null
  if(Object.keys(effects).sort().join(',')!=='measurement,self,teacher')return null
