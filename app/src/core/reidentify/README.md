@@ -35,7 +35,7 @@
 
 本卡把“一个人的旧→新公钥关系”抽象成 `identity-links` 的 `kind: 'student'` / `'teacher'` 两类；家人账户在这个应用里本来就是独立的学生身份，所以 V2-07b 可以直接复用、不需要改动本卡代码：
 
-- **老师端找旧家人**：`consult-package` 里每份代管问诊都带 `manager`（旧管理人权身份公钥）和 `encounter.profile.alias`（家人称呼）；V2-07b 可用 `manager === 旧学生公钥` 找出旧管理人名下的家人公钥与称呼，再按称呼匹配新家人身份。
+- **老师端找旧家人**：`consult-package` 里每份代管问诊都带 `manager`（当时按 M1-22 的 kind 2732 代管证明验过的旧管理人权身份公钥）和 `encounter.profile.alias`（家人称呼）；V2-07b 可用 `manager === 旧学生公钥` 找出旧管理人名下的家人公钥与称呼，再按称呼匹配新家人身份。
 - **写映射**：对新旧家人公钥调用本卡的 `saveIdentityLink(store, 'student', 旧家人公钥, 新家人公钥)`；之后 V2-07 已有的 `recordsForBackup`（按旧/新学生公钥一起查保留期记录）、`canonicalStudents`（名单归并）、`receiveRecordsBackup`（旧学生公钥验签放宽）都会自动生效，不需要再改本卡逻辑。
 - **消息**：`reidentify.request` / `reidentify.confirm` 的解析只读已知字段、忽略额外字段；V2-07b 可以在同一信封里加 family 字段扩展，不改已有消息版本。
 - **家人端不单独确认**：确认由管理人的那一次“是”覆盖；家人分片自己的 `identity-links` 也能用同一集合（每个家人身份有独立分片存储）。
