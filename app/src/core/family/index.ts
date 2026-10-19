@@ -178,6 +178,22 @@ export async function addFamilyMember(rootStore: LocalStore, rootIdentity: Ident
   return member
 }
 
+// V2-06：管理人在家人设置里给某位家人单独设城市（城市影响这位家人的真太阳时/时辰）。
+// 时间显示方式与照镜子时辰仍沿用管理人自己的设置，不在这里单独设。
+export async function setFamilyMemberCity(rootStore: LocalStore, account: number, city: string | null): Promise<FamilyMember[]> {
+  const members = await loadFamilyMembers(rootStore)
+  const target = members.find(member => member.account === account)
+  if (!target) throw new Error('没有这位家人')
+  const value = typeof city === 'string' && city.trim() !== '' ? city.trim() : null
+  if (value !== null && !cities.some(item => item.nameZh === value || item.nameEn === value)) throw new Error('请从列表中选择居住城市')
+  const scoped = memberStore(rootStore, account)
+  const profile = await loadProfile(scoped)
+  await saveProfile(scoped, { ...profile, city: field(value) })
+  const next = members.map(member => member.account === account ? { ...member, city: value } : member)
+  await rootStore.put(FAMILY_COLLECTION, FAMILY_KEY, next as unknown as StoreValue)
+  return next
+}
+
 export async function removeFamilyMember(rootStore: LocalStore, account: number): Promise<FamilyMember[]> {
   const members = await loadFamilyMembers(rootStore)
   const remaining = members.filter(member => member.account !== account)

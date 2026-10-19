@@ -1,6 +1,7 @@
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
 import { parseTongueAbstract, type TongueAbstract } from '../../../../domain/tcm/tongue'
 import type { LlmClient } from '../llm'
+import { isHeavenStamp } from '../heaven/stamp'
 import { check, type RedFlagResult } from '../redflags'
 import type { AttachmentRef, ConsultPackage, Encounter, Field } from '../record/types'
 import { emptyFields, missingFocuses, organizeIntake, MAX_ROUNDS, INTAKE_KEYS, type FollowupQuestion, type IntakeFields, type IntakeKey } from './followup'
@@ -260,7 +261,7 @@ export function buildConsultPackage(
   history: readonly HistoryCandidate[],
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
   trend?: ConsultPackage['trend'],
-  options: { manager?: string; managerProof?: ConsultPackage['managerProof'] } = {},
+  options: { manager?: string; managerProof?: ConsultPackage['managerProof']; heaven?: ConsultPackage['heaven'] } = {},
 ): ConsultPackage {
   const checkResult = canConfirm(state)
   if (!checkResult.ok) throw new Error(checkResult.reason)
@@ -286,6 +287,8 @@ export function buildConsultPackage(
     }
   }
   const unknown = <T,>(): Field<T> => ({ value: null, source: 'unknown' })
+  const heaven = options.heaven
+  if (heaven !== undefined && !isHeavenStamp(heaven)) throw new Error('天时格式无效')
   const encounter: Encounter = {
     id: state.encounterId,
     version: 1,
@@ -293,6 +296,7 @@ export function buildConsultPackage(
     student: state.student,
     teacher: state.teacher,
     createdAt: state.createdAt,
+    ...(heaven ? { heaven: { ...heaven } } : {}),
     profile: structuredClone(profile),
     intake: {
       chiefComplaint: structuredClone(state.fields.chiefComplaint),
@@ -310,6 +314,7 @@ export function buildConsultPackage(
     encounter,
     history: history.map(candidate => candidate.eventJson),
     attachments: attachments.map(item => ({ ref: { ...item.ref }, data: item.data })),
+    ...(heaven ? { heaven: { ...heaven } } : {}),
     ...(redFlag ? { redFlag } : {}),
     ...(trend ? { trend } : {}),
   }
@@ -344,7 +349,7 @@ export async function confirmAndSend(
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
   send: SendConsultPackage,
   trend?: ConsultPackage['trend'],
-  options: { manager?: string; managerProof?: ConsultPackage['managerProof'] } = {},
+  options: { manager?: string; managerProof?: ConsultPackage['managerProof']; heaven?: ConsultPackage['heaven'] } = {},
 ): Promise<ConsultPackage> {
   const pkg = buildConsultPackage(state, profile, history, attachments, trend, options)
   // 只有学生明确点“确认发送”才走到这里；之前任何一步都不调用 send。

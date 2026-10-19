@@ -10,6 +10,8 @@ import { verifyFamilyProof } from '../family/proof'
 import type { AdherenceReport } from '../adherence'
 import { INTAKE_COLLECTIONS, deleteDraft, restartAfterEmergency, type IntakeSession, type StoredPackage } from '../intake/session'
 import { localDay } from '../homework/schedule'
+import { isHeavenStamp } from '../heaven/stamp'
+import type { HeavenStamp } from '../heaven/stamp'
 import { saveTeacherRecord, rememberTeacherStudent } from '../records/teacher'
 import { updateFingerprint } from '../records/fingerprint'
 import { receiveRetentionSetting, RETENTION_TYPE } from '../records/retention'
@@ -55,6 +57,8 @@ export interface ConsultEnvelopePayload {
   manager?: string
   /** M1-22 代管证明：代管人私钥签名的 kind 2732 小事件，老师端验过才认 manager。 */
   managerProof?: unknown
+  /** V2-06：发送那一刻学生那边的天地人；签字病历原样沿用。 */
+  heaven?: unknown
 }
 
 export interface AttachmentEnvelopePayload {
@@ -79,6 +83,8 @@ export interface StoredConsult {
   manager?: string
   /** M1-22：带 manager 但代管证明没通过校验，老师端据此提示且不按代管扣费。 */
   managerInvalid?: boolean
+  /** V2-06：学生发送时的天地人（时辰、节气、城市）；老师起草页显示，签字病历沿用。 */
+  heaven?: HeavenStamp | null
 }
 
 export interface ConsultReadiness {
@@ -129,6 +135,7 @@ function isRef(value: unknown): value is AttachmentRef {
 
 function isEncounter(value: unknown): value is Encounter {
   if (!object(value) || !object(value.intake) || !object(value.plan) || !object(value.judgment) || !object(value.fourExams)) return false
+  if (value.heaven !== undefined && !isHeavenStamp(value.heaven)) return false
   if(value.intake.tongues!==undefined) {
     if(!Array.isArray(value.intake.tongues)||value.intake.tongues.length>4)return false
     try {value.intake.tongues.forEach(parseTongueAbstract)} catch {return false}
@@ -215,7 +222,13 @@ function recordValue(value: unknown): { id: string; teacher: string; createdAt: 
 
 // 老师端起草前必须带上的问诊包（只有引用，不带照片字节）。
 export function draftPackage(consult: StoredConsult): ConsultPackage {
-  return { encounter: structuredClone(consult.encounter), history: [...consult.history], attachments: [] }
+  const heaven = consult.heaven ?? consult.encounter.heaven
+  return {
+    encounter: structuredClone(consult.encounter),
+    history: [...consult.history],
+    attachments: [],
+    ...(heaven ? { heaven: { ...heaven } } : {}),
+  }
 }
 
 // M1-22 一家一本账：只有代管证明验过的问诊才把扣费记到代管人那本账；
@@ -238,6 +251,7 @@ export function consultEnvelope(pkg: ConsultPackage): Envelope {
       ...(pkg.trend ? { trend: pkg.trend } : {}),
       ...(pkg.manager ? { manager: pkg.manager } : {}),
       ...(pkg.managerProof ? { managerProof: structuredClone(pkg.managerProof) } : {}),
+      ...((pkg.heaven ?? pkg.encounter.heaven) ? { heaven: structuredClone(pkg.heaven ?? pkg.encounter.heaven) } : {}),
     } satisfies ConsultEnvelopePayload,
   }
 }
@@ -448,8 +462,12 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
       stress: (trendRaw as { stress: (number | null)[] }).stress,
     }
     : null
+  // V2-06：天地人（时辰、节气、城市）。格式不对就整包丢弃；缺了照常收（旧格式）。
+  const heavenRaw = value.heaven ?? value.encounter.heaven
+  if (heavenRaw !== undefined && !isHeavenStamp(heavenRaw)) return
+  const heaven: HeavenStamp | undefined = heavenRaw
   const stored: StoredConsult = {
-    encounter: value.encounter,
+    encounter: heaven && !value.encounter.heaven ? { ...value.encounter, heaven: { ...heaven } } : value.encounter,
     history: checked.history,
     attachments: value.attachments.map(ref => ({ ...ref })),
     receivedAt: new Date().toISOString(),
@@ -457,6 +475,7 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
     droppedHistory: checked.dropped,
     redFlag,
     ...(trend ? { trend } : {}),
+    ...(heaven ? { heaven: { ...heaven } } : {}),
     ...(manager ? { manager } : {}),
     ...(managerInvalid ? { managerInvalid: true } : {}),
   }
@@ -757,10 +776,13 @@ export async function completeConsultSigning(options: ConsultSigningOptions): Pr
   if (options.charge !== undefined && (!Number.isSafeInteger(options.charge) || options.charge <= 0)) throw new Error('扣费金额必须是正整数')
   const bookStudent = options.chargeBook?.student ?? options.final.student
   if (options.chargeBook?.student !== undefined && (typeof options.chargeBook.student !== 'string' || !HEX64.test(options.chargeBook.student))) throw new Error('代管人公钥格式无效')
-  const signed = signEncounter(options.final, options.identity.privateKey)
+  // V2-06：签字病历沿用问诊包里的天地人，不重新取；草稿里没有就补上包里那份。
+  const heaven = options.final.heaven ?? options.consult.heaven ?? options.consult.encounter.heaven
+  const final: Encounter = heaven && !options.final.heaven ? { ...options.final, heaven: { ...heaven } } : options.final
+  const signed = signEncounter(final, options.identity.privateKey)
   await options.send(options.consult.sender, { type: 'record.signed', version: 1, payload: signed })
   await saveTeacherRecord(options.store, signed)
-  if (options.draft) await updateFingerprint(options.store, options.final.teacher, options.draft, options.final)
+  if (options.draft) await updateFingerprint(options.store, options.final.teacher, options.draft, final)
   const chargeError = await recordCharge(options.ledger, options.final.teacher, bookStudent, signed.id, options.charge, options.chargeBook?.forMember, options.currency)
   return { signed, chargeError }
 }

@@ -2,6 +2,7 @@
 // 由技术合伙人建立；M1-09、M1-10、M1-11、M1-13、M1-14 直接引用，不要重复定义。
 
 import type { FamilyProof } from '../family/proof'
+import type { HeavenStamp } from '../heaven'
 import type { TongueAbstract } from '../../../../domain/tcm/tongue'
 
 /** 每个字段的来源。界面用颜色区分；AI 推测永远不能显示成事实。 */
@@ -18,6 +19,8 @@ export interface Encounter {
   student: string            // 学生公钥（64 位十六进制）
   teacher: string            // 老师公钥
   createdAt: string          // ISO 8601
+  /** V2-06：问诊时的天地人（时辰、节气、城市）。学生发送问诊包时取一次，签字病历原样沿用；没有就不显示。 */
+  heaven?: HeavenStamp
   profile: {                 // 宪章第十四条：老师端只留这些
     alias: Field<string>
     gender: Field<'male' | 'female' | 'other'>
@@ -80,6 +83,8 @@ export interface ConsultPackage {
   encounter: Encounter          // 只填了 profile 和 intake，来源都是 'student'
   history: string[]             // 学生授权附带的历史病历（签名事件 JSON 字符串），默认同一位老师的近 3 次
   attachments: { ref: AttachmentRef; data: Uint8Array }[]
+  /** V2-06：发送那一刻学生那边的天地人（时辰、节气、城市）；签字病历原样沿用，不重新取。 */
+  heaven?: HeavenStamp
   /** 急症/自伤标记（M1-19）：只随传输信封给老师端看，不进 Encounter schema。 */
   redFlag?: { hit: boolean; crisis: boolean }
   /** 最近 14 天状态与压力走势（M1-19）：只随传输信封给老师端看，不进 Encounter schema。 */

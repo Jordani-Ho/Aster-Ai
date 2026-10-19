@@ -39,6 +39,7 @@ function studentDraft(input: Encounter): Encounter {
   return {
     id: input.id, version: input.version, ...(input.supersedes ? { supersedes: input.supersedes } : {}),
     kind: input.kind, student: input.student, teacher: input.teacher, createdAt: input.createdAt,
+    ...(input.heaven ? { heaven: { ...input.heaven } } : {}),
     profile: structuredClone(input.profile), intake: structuredClone(input.intake),
     fourExams: { look: unknown(), listenSmell: unknown(), ask: unknown(), pulse: unknown() },
     judgment: { symptomSummary: unknown(), pattern: unknown(), mechanism: unknown(), rationale: unknown() },

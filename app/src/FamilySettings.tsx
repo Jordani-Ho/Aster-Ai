@@ -3,7 +3,7 @@ import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
 import { loadProfile } from './core/intake/session'
 import { cities } from '../../domain/tcm/bazi'
-import { addFamilyMember, FAMILY_RELATIONS, RELATION_LABELS, loadFamilyMembers, removeFamilyMember, type FamilyGender, type FamilyMember, type FamilyRelation } from './core/family'
+import { addFamilyMember, FAMILY_RELATIONS, RELATION_LABELS, loadFamilyMembers, removeFamilyMember, setFamilyMemberCity, type FamilyGender, type FamilyMember, type FamilyRelation } from './core/family'
 import { uiError } from './core/onboarding/ui'
 
 // M1-22：一部手机照顾全家。家人只给没有独立自理或支付能力的老人、孩子用；
@@ -47,12 +47,26 @@ export function FamilySettings({ store, identity, onChanged }: { store: LocalSto
     } catch (cause) { setError(uiError(cause, '移除家人没有成功，请稍后重试。')) } finally { setBusy(false) }
   }
 
+  // V2-06：家人可能和管理人不住在一起，城市要能单独改（影响这位家人的真太阳时/时辰）。
+  const changeCity = async (account: number, value: string) => {
+    setError(''); setStatus('')
+    try {
+      setMembers(await setFamilyMemberCity(store, account, value === '' ? null : value))
+      setStatus('已更新家人的居住城市；之后的记录按新城市算时辰。')
+      onChanged?.()
+    } catch (cause) { setError(uiError(cause, '居住城市没有改成功，请重试。')) }
+  }
+
   return <details><summary>添加家人</summary>
     <p className="privacy-note">给没有独立自理或支付能力的老人、孩子用。家人共用您接入的大模型，不需要各自接入；钱账记在您这一本账上，每笔可以注明家人。</p>
     {error && <p role="alert">{error}</p>}
     {status && <p role="status">{status}</p>}
     {members.length > 0 && <ul>
       {members.map(member => <li key={member.account}>{member.alias} · {RELATION_LABELS[member.relation]} · {member.birthDate}
+        <label>居住城市<select value={member.city ?? ''} onChange={event => void changeCity(member.account, event.target.value)}>
+          <option value="">跟本人一样</option>
+          {cities.map(item => <option key={item.nameZh} value={item.nameZh}>{item.nameZh}</option>)}
+        </select></label>
         <button type="button" disabled={busy} onClick={() => void remove(member.account)}>移除</button>
       </li>)}
     </ul>}

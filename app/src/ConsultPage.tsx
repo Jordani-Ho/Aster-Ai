@@ -12,6 +12,7 @@ import {
   type IntakeKey, type IntakeSession,
 } from './core/intake'
 import { loadTeachers } from './core/inbox'
+import { heavenNow, heavenStampOf } from './core/heaven'
 import { createFamilyProof } from './core/family/proof'
 import type { FamilyMember } from './core/family'
 import { MemberSwitcher } from './MemberSwitcher'
@@ -132,11 +133,13 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
       const [checkins, ratings, stress] = await Promise.all([listCheckins(store), listSelfRatings(store), listStressRatings(store)])
       const trend = last14DayTrend(checkins, ratings, stress)
       const currentProfile = await loadProfile(store)
-      // 替家人问诊：代管人（根身份）签一份代管证明，老师端验过才认代管、才记到代管人账上。
-      const managerOptions = managerIdentity
-        ? { manager: managerIdentity.publicKey, managerProof: createFamilyProof(managerIdentity, identity.publicKey) }
-        : {}
-      await confirmAndSend(store, session, currentProfile, history, [], sendFn, trend, managerOptions)
+      // V2-06：学生点“确认发送”时取一次天地人（时辰、节气、城市），随问诊包给老师；签字病历原样沿用。
+      const heaven = heavenStampOf(await heavenNow(store))
+      const options = {
+        ...(managerIdentity ? { manager: managerIdentity.publicKey, managerProof: createFamilyProof(managerIdentity, identity.publicKey) } : {}),
+        heaven,
+      }
+      await confirmAndSend(store, session, currentProfile, history, [], sendFn, trend, options)
       setSent(true)
       setSession({ ...session, phase: 'sent' })
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }

@@ -16,9 +16,11 @@ import type { FamilyMember } from './core/family'
 
 const DAY_NAMES: Record<number, string> = { 1: '差', 2: '一般', 3: '还行', 4: '不错', 5: '很好' }
 
-export function MirrorPage({ store, modelStore, llm, family = [], active = 0, onSwitch, member, onCheckedIn }: {
+export function MirrorPage({ store, modelStore, settingsStore, llm, family = [], active = 0, onSwitch, member, onCheckedIn }: {
   store: LocalStore
   modelStore?: LocalStore
+  /** V2-06：时间显示方式与照镜子时辰沿用管理人的设置（家人不单独设）。 */
+  settingsStore?: LocalStore
   llm: LlmClient | null
   family?: readonly Pick<FamilyMember, 'account' | 'alias'>[]
   active?: number
@@ -47,11 +49,13 @@ export function MirrorPage({ store, modelStore, llm, family = [], active = 0, on
   const calendarToday = localDay(now)
 
   // 天时每分钟刷新：时辰按当地真太阳时、节气按天文时刻换算到当地日期。
+  // 家人只按自己的档案城市算天时；时间显示方式与照镜子时辰沿用管理人（settingsStore）。
   useEffect(() => {
     let cancelled = false
+    const settings = settingsStore ?? store
     const tick = () => {
       void heavenNow(store).then(time => { if (!cancelled) setHeaven(time) }).catch(() => {})
-      void Promise.all([loadTimeDisplay(store), loadMirrorShichen(store)]).then(([mode, shichen]) => {
+      void Promise.all([loadTimeDisplay(settings), loadMirrorShichen(settings)]).then(([mode, shichen]) => {
         if (cancelled) return
         setDisplay(mode); setMirrorShichen(shichen)
       }).catch(() => {})
@@ -60,7 +64,7 @@ export function MirrorPage({ store, modelStore, llm, family = [], active = 0, on
     const timer = setInterval(tick, 60000)
     window.addEventListener('focus', tick)
     return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', tick) }
-  }, [store])
+  }, [store, settingsStore])
 
   useEffect(() => {
     let cancelled = false

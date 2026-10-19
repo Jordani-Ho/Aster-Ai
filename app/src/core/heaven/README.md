@@ -13,8 +13,11 @@
 heavenAt(at, city, { timeZone })   // { shichen, jieqi, city, localDate, clock, solarClock, solar }
 jieqiAt(at, timeZone)              // { name, at, localDate }
 formatHeavenTime({ shichen, clock }, 'both')  // '辰时 · 8:20'
-heavenNow(store)                   // 按档案里的城市算此刻的天时
+heavenNow(store)                   // 按档案里的城市算此刻的天时（家人分片用自己的城市）
 heavenStampOf(time)                // { shichen, jieqi, city }，写记录时带上
+isHeavenStamp(value)               // 严格校验记录/问诊包里的 heaven
+formatHeavenStamp(stamp, display)  // 只有时辰/节气/城市时怎么显示（钟点用该时辰的区间）
+heavenLine(stamp, display)         // 老师起草页那一行，如 '学生那边：戌时 · 寒露 · 洛杉矶'；没有 heaven 返回 null
 ```
 
 `clock` / `solarClock` 都是 `H:mm`（不补前导零，与界面“8:20”一致）。
@@ -29,8 +32,14 @@ heavenStampOf(time)                // { shichen, jieqi, city }，写记录时带
 - 到了选定时辰且今天还没照镜子时，镜子页提示“辰时到了，照照镜子吧”（只提醒，不拦截）。
 - 镜子页走势只拿**同一时辰**的镜子记录对照；其他时辰的记录不参与，并在走势下方提示“有 N 条记录时辰不同，不参与对照”。
 
+## 问诊包与病历上的天时（V2-06）
+
+- 学生点“确认发送”时取一次 heaven 放进 `ConsultPackage` 与 `Encounter`；老师签字时原样沿用，不重新取（面诊在老师开始面诊时取一次）。
+- 老师起草页顶部按老师自己的 `timeDisplay` 显示一行（`heavenLine`）：`shichen` → `戌时`，`clock` → `19:00–21:00`，`both` → `戌时（19:00–21:00）`，后面接节气与城市。没有 heaven 的旧病历不显示这一行，照常验签打开。
+- 家人：城市在家人设置里单独设（存家人分片的 `profile.city`），记录按家人的城市算时辰；时间显示方式与照镜子时辰沿用管理人自己的设置（`MirrorPage` 的 `settingsStore`）。
+
 ## 边界
 
-- 只做换算与配置；问诊/病历的自带天时交给后续卡片（不动 B 类 Encounter schema）。
+- 只做换算与配置；`heaven` 是可选字段，不参与签字硬规则。
 - 作业排程里的“时辰/节气”仍是本机钟点语义，不在本卡范围。
 - 依赖：`lunar-typescript`（既有）、`domain/tcm/bazi` 的均时差与城市表（既有），无新增依赖。

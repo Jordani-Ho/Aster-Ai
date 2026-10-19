@@ -30,6 +30,7 @@ import type { Identity } from './core/identity'
 import type { LlmClient } from './core/llm'
 import type { LocalStore } from './core/store'
 import { SignEncounterPage } from './SignEncounterPage'
+import { heavenLine, loadTimeDisplay, type TimeDisplay } from './core/heaven'
 import './inbox.css'
 
 function textField(field: { value: string | null } | undefined): string {
@@ -75,6 +76,8 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
   useEffect(()=>{let active=true;setCurrency('');const student=selected?(consultChargeBook(selected)?.student??selected.encounter.student):undefined;void moneyCurrencyFor(store,identity.publicKey,student).then(value=>{if(active)setCurrency(value??'')}).catch(()=>{if(active)setError('钱账币种读取失败，请核对钱账')});return()=>{active=false}},[store,identity.publicKey,selected])
   const [done, setDone] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [timeDisplay, setTimeDisplay] = useState<TimeDisplay>('both')
+  useEffect(() => { let active = true; void loadTimeDisplay(store).then(value => { if (active) setTimeDisplay(value) }).catch(() => {}); return () => { active = false } }, [store])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
@@ -123,7 +126,9 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
         next = structuredClone(ready.encounter)
       }
       setSelected(ready)
-      setDraft(next)
+      // V2-06：签字病历沿用问诊包里的天地人，不重新取；草稿卡片上也带着它。
+      const heaven = ready.heaven ?? ready.encounter.heaven
+      setDraft(heaven && !next.heaven ? { ...next, heaven: { ...heaven } } : next)
       setCharge('')
       setDone(false)
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -175,6 +180,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
   }
 
   if (selected && draft) {
+    const heavenLineText = heavenLine(draft.heaven, timeDisplay)
     return <>
       <div className="inbox-charge">
         <label>本次扣费（可选，{currency||'请先在管理页设置钱账币种'}）<input type="text" inputMode="decimal" value={charge} onChange={event => setCharge(event.target.value)} placeholder="不填就不扣" /></label>
@@ -182,6 +188,7 @@ export function TeacherInboxPage({ identity, store, onBack, send, ledger, render
         {status && <p role="status" className="inbox-status">{status}</p>}
         {error && <p role="alert" className="inbox-error">{error}</p>}
       </div>
+      {heavenLineText && <p className="inbox-note" role="status">{heavenLineText}</p>}
       <section className="inbox-card">{selected.encounter.intake.tongues?.map((record,index)=><TongueFigure key={index} record={record}/>)}{selected.trend && <><h2>最近 14 天状态与压力</h2><MiniTrend trend={selected.trend} /></>}<h2>这位学生的调养方案</h2>{renderCarePlan ? renderCarePlan(selected.sender) : null}</section>
       <SignEncounterPage
         initial={draft}

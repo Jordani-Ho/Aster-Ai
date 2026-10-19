@@ -5,6 +5,7 @@
 - 修改属于 B 类，须同时改文档和本文件。
 - 签名病历是 kind 2730 的 Nostr 事件，见文档第 2 节。
 - 三条硬规则（签字前不得残留 `ai_draft`、`intake` 只来自学生、学生端只认有效签名）见文档第 3 节。
+- V2-06（B 类，已同步 `docs/schemas/encounter.md`）：`Encounter` 新增可选 `heaven: HeavenStamp`（`{shichen,jieqi,city}`，见 `core/heaven/stamp.ts`）。学生确认发送时取一次放进问诊包与病历，老师签字原样沿用、不重新取；面诊在老师开始面诊时取一次。没有 `heaven` 的旧病历照常验签打开，只是起草页不显示那一行；不参与签字硬规则、不做数据迁移。
 
 ## M1-11 签字与交还
 
