@@ -1,11 +1,13 @@
-// 内测验收探测（由 verify.sh 在 gateway 容器里运行，容器里有 nostr-tools）。
-// 只发合成请求，不含真实资料；不打印任何请求正文、公钥全文或 IP。
+// 第二版内测验收探测（由 verify.sh 在 gateway 容器里运行，容器里有 nostr-tools）。
+// 只发合成请求，不含真实资料；不打印任何请求正文、公钥全文或密钥。
+// 检查六项：应用页面 200、网关无凭据 401、网关非成员 403、网关成员 202、
+//          中继成员 AUTH 通过、中继开放模式接受任意已认证身份。
 import { createHash } from 'node:crypto'
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure'
 
 const APP_URL = required('APP_URL').replace(/\/$/, '')
 const RELAY_WS = required('RELAY_WS')
-const MEMBER_SECRET_HEX = process.env.MEMBER_SECRET || ''
+const MEMBER_SECRET_HEX = required('MEMBER_SECRET')
 const MEMBER_PUBKEY = process.env.MEMBER_PUBKEY || ''
 const MARKER = 'ASTER_VERIFY_MARKER_9f3a'
 let failed = false
@@ -102,35 +104,28 @@ async function main() {
     else fail('网关非成员期望 403，实际 ' + status)
   } catch (error) { fail('网关非成员请求失败：' + error) }
 
-  if (MEMBER_SECRET_HEX) {
-    try {
-      const member = hexSecret(MEMBER_SECRET_HEX)
-      const pubkey = MEMBER_PUBKEY || getPublicKey(member)
-      const status = await post('/push/notify', JSON.stringify({ pubkey, marker: MARKER }), member)
-      if (status === 202) pass('网关接受成员请求并经隧道返回 202（推送路由，无订阅也 202）')
-      else fail('网关成员请求期望 202，实际 ' + status)
-    } catch (error) { fail('网关成员请求失败：' + error) }
-  } else {
-    console.log('SKIP 成员网关请求（.env 没有 VERIFY_MEMBER_SECRET；把 SELF_TEST_MEMBER=1 后重跑 setup.sh）')
-  }
-
-  // 3. 中继：非成员被拒、成员通过
+  let member
   try {
-    const result = await relayAuth(generateSecretKey())
-    if (process.env.RELAY_COMMUNITY_OPEN!=='false' && result==='ok') pass('中继开放模式接受已认证连接')
-    else if (process.env.RELAY_COMMUNITY_OPEN==='false' && (result === 'rejected' || result === 'closed')) pass('中继拒绝非成员 AUTH（' + result + '）')
-    else fail('中继非成员 AUTH 期望被拒，实际 ' + result)
-  } catch (error) { fail('中继非成员探测失败：' + error) }
+    member = hexSecret(MEMBER_SECRET_HEX)
+    const pubkey = MEMBER_PUBKEY || getPublicKey(member)
+    const status = await post('/push/notify', JSON.stringify({ pubkey, marker: MARKER }), member)
+    if (status === 202) pass('网关接受成员请求并经隧道返回 202（推送路由，无订阅也 202）')
+    else fail('网关成员请求期望 202，实际 ' + status)
+  } catch (error) { fail('网关成员请求失败：' + error) }
 
-  if (MEMBER_SECRET_HEX) {
+  // 3. 中继：成员 AUTH 通过、开放模式接受任意已认证身份
+  if (member) {
     try {
-      const result = await relayAuth(hexSecret(MEMBER_SECRET_HEX))
+      const result = await relayAuth(member)
       if (result === 'ok') pass('中继接受成员 AUTH')
       else fail('中继成员 AUTH 期望通过，实际 ' + result)
     } catch (error) { fail('中继成员探测失败：' + error) }
-  } else {
-    console.log('SKIP 成员中继探测（缺少 VERIFY_MEMBER_SECRET）')
   }
+  try {
+    const result = await relayAuth(generateSecretKey())
+    if (result === 'ok') pass('中继开放模式接受已认证的新身份')
+    else fail('中继开放模式期望接受已认证连接，实际 ' + result + '（内测需要 RELAY_COMMUNITY_OPEN=true）')
+  } catch (error) { fail('中继开放模式探测失败：' + error) }
 
   console.log(failed ? 'RESULT FAIL' : 'RESULT PASS')
   process.exit(failed ? 1 : 0)

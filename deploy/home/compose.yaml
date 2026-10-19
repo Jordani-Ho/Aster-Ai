@@ -1,7 +1,8 @@
-# 知衡内测部署：中继 + 模型网关（含推送）+ 手机网页应用 + Cloudflare Tunnel。
+# 知衡内测部署（第二版）：中继 + 模型网关（含推送）+ 手机网页应用 + Cloudflare Tunnel。
 # 不开任何路由器端口，也不在宿主机发布任何端口：所有对外流量只经 cloudflared 主动连出。
 # 访问日志全部关闭：relay/gateway/web 的 Docker 日志驱动为 none；网关自己的指标日志写到 /dev/null。
-name: aster-home
+# 隔离自测可以设 COMPOSE_PROJECT_NAME=另一个名字，与常驻部署并存；数据目录跟着仓库目录走。
+name: ${COMPOSE_PROJECT_NAME:-aster-home}
 
 services:
   relay:
@@ -53,9 +54,9 @@ services:
       driver: none
     networks: [internal]
 
-  # ---- 域名模式：一条 token 隧道，三条 Public Hostname 在 Cloudflare Zero Trust 里配置 ----
+  # ---- 固定域名模式（下一步再做）：一条 token 隧道，三条 Public Hostname 在 Cloudflare Zero Trust 里配置 ----
   cloudflared:
-    # cloudflared 固定到 2026.9.3（发布于 2026-09-24，Apache-2.0）；升级见 README 6.7。
+    # cloudflared 固定到 2026.9.3（发布于 2026-09-24，Apache-2.0）。
     image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
     profiles: ["domain"]
     command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN:-}
@@ -70,7 +71,7 @@ services:
   # 云朵临时隧道地址由云朵进程日志打印，所以这两个服务保留 stdout 日志（只有隧道地址与连接状态，
   # 没有请求内容）；拿到地址后 quick-start.sh 会重建 relay/gateway/web，不需要再读日志。
   cloudflared-app:
-    # cloudflared 固定到 2026.9.3（发布于 2026-09-24，Apache-2.0）；升级见 README 6.7。
+    # cloudflared 固定到 2026.9.3（发布于 2026-09-24，Apache-2.0）。
     image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
     profiles: ["quick"]
     command: tunnel --no-autoupdate --loglevel info --url http://web:8080
@@ -84,7 +85,7 @@ services:
     networks: [internal]
 
   cloudflared-relay:
-    # cloudflared 固定到 2026.9.3（发布于 2026-09-24，Apache-2.0）；升级见 README 6.7。
+    # cloudflared 固定到 2026.9.3（发布于 2026-09-24，Apache-2.0）。
     image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
     profiles: ["quick"]
     command: tunnel --no-autoupdate --loglevel info --url http://relay:8080

@@ -1,6 +1,7 @@
 // 生成网关配置与成员名单（由 setup.sh 调用，也可以单独运行）。
+// 第二版成员名单从空开始，人员经邀请链接登记进网关。
 // 只读环境变量，不写日志、不打印密钥。
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, existsSync } from 'node:fs'
 import {MemberStore} from '../../../gateway/members.js'
 
 mkdirSync('data/gateway', { recursive: true })
@@ -15,7 +16,7 @@ for (const key of members) {
   seen.add(key)
 }
 const file='data/gateway/members.json'
-if(!existsSync(file)){const legacy=existsSync('data/gateway-members.json')?JSON.parse(readFileSync('data/gateway-members.json','utf8')):[];writeFileSync(file,JSON.stringify(legacy),{mode:0o600})}
+if(!existsSync(file)) writeFileSync(file,'[]',{mode:0o600})
 const store=new MemberStore(file);for(const member of seen)store.add(member)
 
 const appOrigin = process.env.APP_ORIGIN ?? ''

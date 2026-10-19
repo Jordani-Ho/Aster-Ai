@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# 无域名自测：./quick-start.sh
+# 无域名内测：./quick-start.sh（一条命令）
 # 用 Cloudflare 临时隧道（trycloudflare.com）跑通；地址每次重启都会变，只适合自测。
 # 会做：准备镜像/密钥/占位配置 → 起临时隧道 → 读出两个临时地址 → 写回 .env →
-#       重新生成中继/网关配置 → 重建 relay/gateway/web → 等页面可用。
-# 注意：cloudflared 自身的重启会换临时地址，所以这里带一个“地址变了就重来”的循环。
+#       重新生成中继/网关配置 → 重建 relay/gateway/web → 等页面可用 → 最后一行打印手机可打开的网址。
+# 注意：cloudflared 自身重启会换临时地址；Cloudflare 对短时间重复建临时隧道会限流（429），
+#       遇到时等一分钟左右再试，本脚本会自动退避重试。
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -29,6 +30,12 @@ extract_url() {
   return 1
 }
 
+# Cloudflare 临时隧道限流时日志里会出现 429；此时等一会儿再建，不要连续猛点。
+tunnel_rate_limited() {
+  docker compose --profile quick logs --no-color cloudflared-app cloudflared-relay 2>/dev/null | grep -Eqi '429|Too Many Requests|rate.?limit' && return 0
+  return 1
+}
+
 set_env() {
   local key="$1" value="$2"
   if grep -q "^${key}=" .env; then
@@ -50,18 +57,32 @@ wait_page() {
 # 3) 取地址 → 写回 .env → 重新生成配置 → 重建后端。cloudflared 换地址时重试。
 APP_URL=""
 RELAY_URL=""
-for attempt in 1 2 3; do
+for attempt in 1 2 3 4 5; do
   log "第 ${attempt} 次读取临时隧道地址…"
-  APP_URL="$(extract_url cloudflared-app)" || die "没读到应用隧道地址，查看：docker compose logs cloudflared-app"
-  RELAY_URL="$(extract_url cloudflared-relay)" || die "没读到中继隧道地址，查看：docker compose logs cloudflared-relay"
+  if ! APP_URL="$(extract_url cloudflared-app)"; then
+    if tunnel_rate_limited; then
+      log "Cloudflare 临时隧道被限流（429）；等 60 秒再试（不要连续重建）。"
+      sleep 60
+      docker compose --profile quick up -d --force-recreate --no-deps cloudflared-app cloudflared-relay || true
+      continue
+    fi
+    die "没读到应用隧道地址，查看：docker compose logs cloudflared-app"
+  fi
+  if ! RELAY_URL="$(extract_url cloudflared-relay)"; then
+    if tunnel_rate_limited; then
+      log "Cloudflare 临时隧道被限流（429）；等 60 秒再试。"
+      sleep 60
+      docker compose --profile quick up -d --force-recreate --no-deps cloudflared-app cloudflared-relay || true
+      continue
+    fi
+    die "没读到中继隧道地址，查看：docker compose logs cloudflared-relay"
+  fi
   APP_HOST="${APP_URL#https://}"
   RELAY_HOST="${RELAY_URL#https://}"
   log "应用临时地址：$APP_URL"
   log "中继临时地址：${RELAY_URL/https:/wss:}"
   set_env APP_DOMAIN "$APP_HOST"
   set_env RELAY_DOMAIN "$RELAY_HOST"
-  # 无域名模式下网关不单独暴露，浏览器经应用同源访问；这里只为 README/打印一致。
-  set_env GATEWAY_DOMAIN "$APP_HOST"
   log "用临时地址重新生成配置…"
   SKIP_BUILD=1 ./setup.sh
   log "重建 relay / gateway / web…"
@@ -74,14 +95,18 @@ for attempt in 1 2 3; do
   else
     log "页面还没通，若地址未变可稍后再试；先重试一次。"
   fi
-  if [ "$attempt" = "3" ]; then
-    die "三次都没稳定下来。看日志：docker compose --profile quick logs cloudflared-app web"
+  if [ "$attempt" = "5" ]; then
+    die "五次都没稳定下来。看日志：docker compose --profile quick logs cloudflared-app web"
   fi
+  sleep 5
 done
 
 log ""
 log "已就绪（临时地址，重启后会变；只适合自测）："
-log "  应用：$APP_URL"
 log "  中继：${RELAY_URL/https:/wss:}"
-log "  网关：https://${APP_HOST}（页面同源访问 /v1 与 /push）"
-log "验收：./verify.sh"
+log "  网关：$APP_URL（页面同源访问 /v1 与 /push）"
+log "  验收：./verify.sh"
+log "  停止：docker compose --profile quick down（数据仍在 data/，不会删）"
+log ""
+log "手机直接打开这个网址："
+log "$APP_URL"
