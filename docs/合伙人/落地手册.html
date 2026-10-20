@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>知衡落地手册</title>
+<style>
+  @page { size: A4; margin: 18mm 18mm 20mm 18mm; }
+  :root { --ink:#1f2a24; --muted:#5d6b63; --green:#235c42; --blue:#1d4f8f; --line:#d9e2dc; --soft:#f3f7f4; }
+  body { font-family: "Noto Sans CJK SC", sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.75; }
+  h1 { font-size: 22pt; color: var(--green); margin: 0 0 4pt; }
+  .sub { color: var(--muted); margin-bottom: 14pt; }
+  h2 { font-size: 14pt; color: var(--green); border-bottom: 1.5pt solid var(--green); padding-bottom: 3pt; margin: 18pt 0 8pt; page-break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 12pt 0 5pt; page-break-after: avoid; }
+  p { margin: 0 0 7pt; }
+  ol, ul { margin: 0 0 8pt; padding-left: 18pt; } li { margin-bottom: 3pt; }
+  table { width:100%; border-collapse: collapse; font-size: 10pt; margin: 6pt 0 10pt; page-break-inside: avoid; }
+  th, td { border: 0.75pt solid var(--line); padding: 5pt 7pt; text-align: left; vertical-align: top; } th { background: var(--soft); }
+  pre { font-family: "Noto Sans Mono CJK SC", monospace; font-size: 9pt; background:#f4f5f4; border:0.75pt solid var(--line); border-radius:4pt; padding:7pt 9pt; white-space: pre-wrap; margin: 4pt 0 9pt; page-break-inside: avoid; }
+  code { font-family: "Noto Sans Mono CJK SC", monospace; font-size: 9pt; }
+  .note { border-left: 3pt solid #c9a227; background:#fbf7ea; padding: 6pt 10pt; margin: 8pt 0; font-size: 10pt; page-break-inside: avoid; }
+  figure { margin: 6pt 0 10pt; text-align: center; page-break-inside: avoid; }
+  figcaption { font-size: 9pt; color: var(--muted); }
+  .pb { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<h1>知衡落地手册</h1>
+<div class="sub">写给帮老师把知衡装起来的技术人员 · 2026 年 10 月</div>
+
+<p>知衡不需要说明书：老师和学生打开就能用，用的过程中自己摸索。这份手册只讲一件事——<b>怎样把它装起来、连起来</b>。</p>
+
+<h2>一、整体是怎么连的</h2>
+<figure>
+<svg width="640" height="330" viewBox="0 0 640 330" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans CJK SC" font-size="12">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5d6b63"/></marker></defs>
+  <!-- phones -->
+  <rect x="15" y="40" width="150" height="90" rx="12" fill="#f3f7f4" stroke="#235c42" stroke-width="1.5"/>
+  <text x="90" y="64" text-anchor="middle" font-weight="bold" fill="#235c42">老师的手机/电脑</text>
+  <text x="90" y="86" text-anchor="middle" fill="#5d6b63" font-size="11">老师 + 老师的智能体</text>
+  <text x="90" y="104" text-anchor="middle" fill="#5d6b63" font-size="11">病历、钱账存在这里</text>
+  <rect x="475" y="40" width="150" height="90" rx="12" fill="#f2f5fa" stroke="#1d4f8f" stroke-width="1.5"/>
+  <text x="550" y="64" text-anchor="middle" font-weight="bold" fill="#1d4f8f">学生的手机</text>
+  <text x="550" y="86" text-anchor="middle" fill="#5d6b63" font-size="11">学生 + 学生的智能体</text>
+  <text x="550" y="104" text-anchor="middle" fill="#5d6b63" font-size="11">镜子、作业存在这里</text>
+  <!-- server box -->
+  <rect x="200" y="150" width="240" height="160" rx="12" fill="#ffffff" stroke="#1f2a24" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="320" y="172" text-anchor="middle" font-weight="bold">部署机器（您来装的这一台）</text>
+  <text x="320" y="189" text-anchor="middle" fill="#5d6b63" font-size="10.5">老师的电脑 或 云服务器 · Docker</text>
+  <rect x="220" y="200" width="95" height="44" rx="8" fill="#f8f8f6" stroke="#5d6b63"/>
+  <text x="267" y="219" text-anchor="middle" font-size="11.5">网页应用</text><text x="267" y="235" text-anchor="middle" font-size="10" fill="#5d6b63">web</text>
+  <rect x="325" y="200" width="95" height="44" rx="8" fill="#f8f8f6" stroke="#5d6b63"/>
+  <text x="372" y="219" text-anchor="middle" font-size="11.5">中继</text><text x="372" y="235" text-anchor="middle" font-size="10" fill="#5d6b63">relay · 只转加密信</text>
+  <rect x="220" y="252" width="200" height="44" rx="8" fill="#f8f8f6" stroke="#5d6b63"/>
+  <text x="320" y="271" text-anchor="middle" font-size="11.5">网关 gateway</text><text x="320" y="287" text-anchor="middle" font-size="10" fill="#5d6b63">推送提醒</text>
+  <!-- entrance -->
+  <rect x="245" y="40" width="150" height="56" rx="10" fill="#fbf7ea" stroke="#c9a227"/>
+  <text x="320" y="62" text-anchor="middle" font-weight="bold">对外入口</text>
+  <text x="320" y="80" text-anchor="middle" font-size="10.5" fill="#5d6b63">隧道 或 域名 + HTTPS</text>
+  <line x1="165" y1="75" x2="243" y2="68" stroke="#5d6b63" marker-end="url(#a)" marker-start="url(#a)"/>
+  <line x1="475" y1="75" x2="397" y2="68" stroke="#5d6b63" marker-end="url(#a)" marker-start="url(#a)"/>
+  <line x1="320" y1="96" x2="320" y2="148" stroke="#5d6b63" marker-end="url(#a)"/>
+  <!-- models -->
+  <rect x="15" y="200" width="150" height="70" rx="10" fill="#ffffff" stroke="#235c42"/>
+  <text x="90" y="225" text-anchor="middle" font-size="11.5">老师自己的大模型</text>
+  <text x="90" y="244" text-anchor="middle" font-size="10" fill="#5d6b63">DeepSeek / 千问 /</text><text x="90" y="258" text-anchor="middle" font-size="10" fill="#5d6b63">Kimi / 豆包</text>
+  <rect x="475" y="200" width="150" height="70" rx="10" fill="#ffffff" stroke="#1d4f8f"/>
+  <text x="550" y="225" text-anchor="middle" font-size="11.5">学生自己的大模型</text>
+  <text x="550" y="244" text-anchor="middle" font-size="10" fill="#5d6b63">各人自己选、自己付费</text>
+  <line x1="90" y1="130" x2="90" y2="198" stroke="#235c42" marker-end="url(#a)"/>
+  <line x1="550" y1="130" x2="550" y2="198" stroke="#1d4f8f" marker-end="url(#a)"/>
+</svg>
+<figcaption>老师和学生的手机经“对外入口”打开网页应用，彼此的消息经中继转发（加密，中继看不到内容）。<br>大模型由各人的手机直接调用，不经过部署机器。病历、舌象、钱账都存在各自手机上。</figcaption>
+</figure>
+
+<h3>每个馆独立一套</h3>
+<p>阿慈养生馆和小黄运动馆<b>各装一套</b>，互不相干。一套里只有一位登记的老师和他邀请的学生。</p>
+
+<h2>二、国内网络先处理好</h2>
+<ul>
+  <li><b>代码</b>：GitHub 公开仓库 <code>Jordani-Ho/Aster-Ai</code>，部署文件在 <code>deploy/home/</code>。GitHub 慢可下载压缩包。</li>
+  <li><b>Docker 镜像</b>：先配好国内镜像加速源。</li>
+  <li><b>编译</b>：中继在容器里编译 Rust（10 到 30 分钟），为 crates 配国内镜像；npm 也可配国内镜像。</li>
+  <li><b>大模型</b>：不用在服务器上配，老师和学生在应用里各自填自己的钥匙。</li>
+</ul>
+
+<h2>三、两种装法，任选一种</h2>
+<table>
+  <tr><th style="width:18%"></th><th>A：老师自己的电脑</th><th>B：云服务器</th></tr>
+  <tr><td>适合</td><td>先试用</td><td>长期使用</td></tr>
+  <tr><td>需要</td><td>Windows + WSL2 Ubuntu，或一台 Linux 电脑；电脑要一直开着</td><td>一台 Linux 云服务器（2 核 4 GB 够用）+ 一个域名</td></tr>
+  <tr><td>对外入口</td><td>隧道（脚本默认用 Cloudflare 临时隧道，网址每次重启会变）</td><td>两个子域名 + Caddy 自动 HTTPS，网址固定</td></tr>
+</table>
+<p>两种都先装好：Docker（含 compose）、Node 22、git、curl。</p>
+
+<h3>A：老师自己的电脑</h3>
+<pre>cd deploy/home
+cp .env.example .env
+./quick-start.sh        # 最后一行打印手机能打开的网址
+./verify.sh             # 六项都应 PASS</pre>
+<div class="note">Cloudflare 临时隧道在国内可能时快时慢。不稳定时，可换成国内内网穿透服务，把两个地址分别指向 <code>web:8080</code>（应用）和 <code>relay:8080</code>（中继，需支持 WebSocket）；或改走 B。</div>
+
+<h3>B：云服务器</h3>
+<ol>
+  <li>域名下建两个子域名，都解析到服务器：<code>app.域名</code>（应用）、<code>relay.域名</code>（中继）。</li>
+  <li>编辑 <code>deploy/home/.env</code>：
+<pre>APP_DOMAIN=app.域名
+RELAY_DOMAIN=relay.域名
+VAPID_SUBJECT=mailto:你的邮箱</pre></li>
+  <li>生成配置并启动：
+<pre>./setup.sh
+docker compose up -d --build relay gateway web</pre></li>
+  <li>在同一个 Docker 网络里加一个 Caddy，负责 HTTPS 和 WebSocket，服务器只开 80、443：
+<pre>app.域名 {
+    reverse_proxy web:8080
+}
+relay.域名 {
+    reverse_proxy relay:8080
+}</pre></li>
+  <li>验收：<code>./verify.sh</code>。</li>
+</ol>
+<div class="note">B 的反向代理部分还没有在国内实际走过，遇到问题请联系发起人。服务器放在哪里、要不要备案等，请老师和技术人员按当地情况自己判断。</div>
+
+<h2>四、装好以后交给老师</h2>
+<ol>
+  <li>在部署机器上取一次性登记口令：<code>cat deploy/home/data/teacher-setup-code.txt</code>，只交给老师本人。</li>
+  <li>把应用网址发给老师。老师打开 → 选“我是老师” → 接入自己的模型 → 进“管理”→“我是这个社区的老师”→ 输入口令。</li>
+  <li>看到“社区已建立，可以邀请学生”就完成了。接下来老师自己改门面、邀请学生。</li>
+</ol>
+
+<h2>五、日常维护</h2>
+<table>
+  <tr><th style="width:28%">要做的事</th><th>命令（在 <code>deploy/home/</code> 下）</th></tr>
+  <tr><td>停止（数据保留）</td><td><code>docker compose down</code>（A 加 <code>--profile quick</code>）</td></tr>
+  <tr><td>重新启动</td><td>A：<code>./quick-start.sh</code>；B：<code>docker compose up -d relay gateway web</code></td></tr>
+  <tr><td>更新到新版本</td><td><code>git pull</code> → <code>docker compose build relay gateway web</code> → 重新启动 → <code>./verify.sh</code></td></tr>
+  <tr><td>检查是否正常</td><td><code>./verify.sh</code></td></tr>
+</table>
+<ul>
+  <li><code>.env</code>、<code>data/</code> 和登记口令都不要外传，也不要提交到任何仓库。</li>
+  <li>部署机器上只有加密后的消息和推送订阅；病历、舌象、钱账都在老师和学生各自手机里，部署机器坏了也不丢。</li>
+</ul>
+
+<h2>六、用起来以后：有问题找谁</h2>
+<figure>
+<svg width="600" height="90" viewBox="0 0 600 90" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans CJK SC" font-size="12">
+  <defs><marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5d6b63"/></marker></defs>
+  <rect x="5" y="20" width="120" height="44" rx="10" fill="#f3f7f4" stroke="#235c42"/><text x="65" y="40" text-anchor="middle">老师 / 学生</text><text x="65" y="56" text-anchor="middle" font-size="10" fill="#5d6b63">用的时候发现问题</text>
+  <rect x="160" y="20" width="110" height="44" rx="10" fill="#fbf7ea" stroke="#c9a227"/><text x="215" y="47" text-anchor="middle">发起人</text>
+  <rect x="305" y="20" width="130" height="44" rx="10" fill="#ffffff" stroke="#1f2a24"/><text x="370" y="40" text-anchor="middle">Claude</text><text x="370" y="56" text-anchor="middle" font-size="10" fill="#5d6b63">带 AI 工程师修改</text>
+  <rect x="470" y="20" width="125" height="44" rx="10" fill="#f2f5fa" stroke="#1d4f8f"/><text x="532" y="40" text-anchor="middle">技术人员</text><text x="532" y="56" text-anchor="middle" font-size="10" fill="#5d6b63">更新到新版本</text>
+  <line x1="125" y1="42" x2="158" y2="42" stroke="#5d6b63" marker-end="url(#b)"/>
+  <line x1="270" y1="42" x2="303" y2="42" stroke="#5d6b63" marker-end="url(#b)"/>
+  <line x1="435" y1="42" x2="468" y2="42" stroke="#5d6b63" marker-end="url(#b)"/>
+</svg>
+</figure>
+<ul>
+  <li>老师和技术人员<b>不改代码</b>。用的过程中觉得哪里不对、哪里不顺、哪个叫法不合适，都直接告诉发起人。</li>
+  <li>装不上、打不开：先跑 <code>./verify.sh</code>，把没通过的那一行发给发起人。</li>
+  <li>改好以后会发布新版本，技术人员按“更新到新版本”那一行操作即可。</li>
+</ul>
+
+</body>
+</html>
