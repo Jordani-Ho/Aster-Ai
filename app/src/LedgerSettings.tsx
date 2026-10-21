@@ -20,7 +20,7 @@ type LinkStatus = Parameters<NonNullable<TransportOptions['onStatus']>>[0]
 
 // 账本设置：默认自己起一个 transport；M1-15a 之后 App 传入已有的同步控制器（同一个 transport），
 // 避免同一份加密存储上同时跑两个账本控制器。
-export function LedgerSettings({ identity, store, ledger, managed = false, status: sharedStatus, members = [],llm=null,teacher=null,teacherName='' }: {
+export function LedgerSettings({ identity, store, ledger, managed = false, status: sharedStatus, members = [],llm=null,teacher=null,teacherName='',flat=false }: {
   identity: Identity
   store: LocalStore
   managed?: boolean
@@ -31,6 +31,8 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
   /** V2-09：学生端只显示当前在用的馆那本账，并写明“在某某老师这里的余额”。 */
   teacher?: string | null
   teacherName?: string
+  /** V2-15：管理页“钱账”块已经有一层折叠标题时，不再套第二层“钱账与对账”。 */
+  flat?: boolean
 }) {
   const [books, setBooks] = useState<LedgerView[]>([]), [error, setError] = useState('')
   const [links, setLinks] = useState<IdentityLink[]>([])
@@ -120,7 +122,7 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
   // V2-12：老师端把没有账本的学生也列出来，第一次点“确认入账”时才建账。
   const bookedStudents = new Set(visibleBooks.map(view => view.ledger.student))
   const pendingStudents = teacher ? [] : students.filter(student => !bookedStudents.has(student))
-  return <details><summary>钱账与对账</summary>
+  const body = <>
     <p role="status">{status === 'ready' ? '已连接社区中继' : status === 'connecting' ? '正在连接社区中继' : status === 'rejected' ? '中继拒绝连接，请核对成员资格' : '等待连接社区中继'}</p>
     {error && <p role="alert">{error}</p>}
     <p>{teacher ? '老师记过账后这里会显示余额。' : '学生连上社区后就会出现在这里；第一次记账时自动建账。'}</p><button type="button" onClick={()=>void run(runtime=>runtime.requestSync())}>立即对账</button>
@@ -166,5 +168,7 @@ export function LedgerSettings({ identity, store, ledger, managed = false, statu
       <p>还没记过账</p>
       {runtimeRef.current && <MoneyEntry store={store} book={createLedger(identity.publicKey, student)} writer={runtimeRef.current} llm={llm} onConfirmed={()=>setRevision(v=>v+1)} />}
     </section>)}
-  </details>
+  </>
+  if (flat) return <section aria-label="钱账与对账">{body}</section>
+  return <details><summary>钱账与对账</summary>{body}</details>
 }

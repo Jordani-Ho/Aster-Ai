@@ -21,11 +21,13 @@ export interface StorefrontSettingsProps {
   store: LocalStore
   llm: LlmClient | null
   send?: (recipient: string, envelope: Envelope) => Promise<unknown>
+  /** V2-15：管理页“我的门面”块已有标题，不再重复标题与说明。 */
+  compact?: boolean
 }
 
 // V2-09 老师“我的门面”：左边直接改，下边学生视角预览；点“用这个样子”才签名发布，
 // 保留“恢复上次样子”（只存上一版）。门面保存不签健康内容、不记钱。
-export function StorefrontSettings({ identity, store, llm, send }: StorefrontSettingsProps) {
+export function StorefrontSettings({ identity, store, llm, send, compact = false }: StorefrontSettingsProps) {
   const [draft, setDraft] = useState<Storefront>(DEFAULT_STOREFRONT)
   const [saved, setSaved] = useState<{ current: boolean; previous: Storefront | null }>({ current: false, previous: null })
   const [instruction, setInstruction] = useState('')
@@ -117,8 +119,8 @@ export function StorefrontSettings({ identity, store, llm, send }: StorefrontSet
   }
 
   return <section aria-label="我的门面">
-    <h2>我的门面</h2>
-    <p>学生打开您的邀请会先看到这里：馆名、标志、颜色和短介绍。改了先看预览，点“用这个样子”才生效。</p>
+    {compact ? null : <><h2>我的门面</h2>
+    <p>学生打开您的邀请会先看到这里：馆名、标志、颜色和短介绍。改了先看预览，点“用这个样子”才生效。</p></>}
     <div className="storefront-form">
       <label>馆名<input value={draft.name} maxLength={STOREFRONT_LIMITS.name} placeholder="例如：阿慈养生馆" onChange={event => update({ name: event.target.value })} onBlur={() => saveDraft(draft)} /></label>
       <label>显示称呼<input value={draft.displayName} maxLength={STOREFRONT_LIMITS.displayName} placeholder="例如：阿慈" onChange={event => update({ displayName: event.target.value })} onBlur={() => saveDraft(draft)} /></label>

@@ -12,7 +12,7 @@ test('V2-04 一句话草稿不入账，真人确认后钱账同步；退款、�
   calls++;await route.fulfill({contentType:'application/json',body:JSON.stringify({choices:[{message:{content:JSON.stringify({events})}}]})})
  })
  await teacher.getByRole('button',{name:'管理',exact:true}).click()
- await teacher.locator('summary').filter({hasText:/^钱账与对账$/}).click()
+ await teacher.locator('summary').filter({hasText:/^钱账$/}).click()
  await teacher.getByLabel('这位学生的称呼').fill('合成小王')
  await teacher.getByLabel('钱账币种',{exact:true}).selectOption('CNY')
  const say=async(text:string)=>{await teacher.getByLabel('说一句话记账').fill(text);await teacher.getByRole('button',{name:'生成记账草稿',exact:true}).click();await expect(teacher.getByRole('article',{name:'钱账确认草稿'})).toBeVisible()}

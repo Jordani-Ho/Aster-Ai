@@ -1,0 +1,39 @@
+/* V2-15 建馆引导：一屏一步，手机上先能用；还没进老师工作台，不套 teacher-shell。 */
+.opening-guide {
+  box-sizing: border-box;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 20px 16px 40px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #203b34;
+  background: #f7f4ee;
+  min-height: 100dvh;
+}
+.opening-guide * { box-sizing: border-box; }
+.opening-head { margin: 0 0 14px; }
+.opening-eyebrow { margin: 0; font-size: 12px; letter-spacing: 2px; color: #6d786f; }
+.opening-progress { margin: 4px 0 0; font-size: 14px; color: #2f5d50; font-weight: 600; }
+.opening-step { background: #fff; border: 1px solid #d9dfd5; border-radius: 16px; padding: 18px 16px; margin: 0 0 14px; }
+.opening-step h1 { margin: 0 0 6px; font-size: 24px; }
+.opening-step > p { margin: 0 0 12px; font-size: 14px; line-height: 1.7; color: #4c5a54; }
+.opening-step label { display: block; margin: 10px 0; font-size: 14px; }
+.opening-step input, .opening-step textarea, .opening-step select {
+  display: block; width: 100%; margin-top: 4px; padding: 10px;
+  font: inherit; font-size: 16px; border: 1px solid #cfc7b9; border-radius: 8px; background: #fff;
+}
+.opening-step textarea { resize: vertical; }
+.opening-note { margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: #6d786f; }
+.opening-preview-label { margin: 14px 0 6px !important; font-size: 12px !important; color: #6d786f !important; }
+.opening-venue { margin: 0 0 4px !important; font-size: 18px !important; font-weight: 600; color: #245a3f !important; }
+.opening-intro { margin: 0 !important; color: #4c5a54 !important; }
+.opening-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 14px; }
+.opening-actions button {
+  font: inherit; min-height: 44px; padding: 10px 18px; border-radius: 10px;
+  border: 1px solid #adc0b4; background: #fff; color: #234d40; cursor: pointer;
+}
+.opening-actions button:disabled { opacity: .6; cursor: default; }
+.opening-actions .opening-primary { border-color: #2f5d50; background: #2f5d50; color: #fff; font-weight: 600; }
+.opening-open { flex: 1; min-height: 52px; font-size: 18px; }
+.opening-error { color: #b91c1c; font-size: 14px; font-weight: 600; }
+.invite-ticket { margin: 10px 0 0; }
+.invite-ticket img { display: block; margin: 10px 0 0; border-radius: 8px; background: #fff; }

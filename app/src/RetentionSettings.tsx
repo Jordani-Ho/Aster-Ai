@@ -13,7 +13,7 @@ import {
 // 设置随调养方案一起发给学生；学生端按这个期限滚动删除自己的镜子记录、问诊卡片和作业打卡。
 const CHOICES = [30, 60, 90, 180, 365, 730, RETENTION_MAX_DAYS]
 
-export function RetentionSettings({ identity, store, send }: { identity: Identity; store: LocalStore; send?: SendEnvelope }) {
+export function RetentionSettings({ identity, store, send, compact = false }: { identity: Identity; store: LocalStore; send?: SendEnvelope; compact?: boolean }) {
   const [days, setDays] = useState(RETENTION_DEFAULT_DAYS)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
@@ -39,8 +39,8 @@ export function RetentionSettings({ identity, store, send }: { identity: Identit
   }
 
   return <section aria-label="记录保留期限">
-    <h2>记录保留期限</h2>
-    <p>超过期限，双方的记录（镜子记录、问诊卡片、作业打卡、老师端医案）会按天滚动删除；调养方案、作业规则和老师的改稿习惯摘要长期保留。</p>
+    {compact ? null : <><h2>记录保留期限</h2>
+    <p>超过期限，双方的记录（镜子记录、问诊卡片、作业打卡、老师端医案）会按天滚动删除；调养方案、作业规则和老师的改稿习惯摘要长期保留。</p></>}
     <label>保留多久<select value={days} onChange={event => void save(Number(event.target.value))}>
       {CHOICES.map(value => <option key={value} value={value}>{value} 天</option>)}
     </select></label>
