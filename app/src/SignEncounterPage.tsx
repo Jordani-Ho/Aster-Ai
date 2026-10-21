@@ -51,7 +51,7 @@ export function SignEncounterPage({initial,onConfirm,onCancel,onRevise,compariso
   }))
   const sectionDefinitions=[
     {key:'intake',title:'学生陈述',render:<>
-      {(['chiefComplaint','presentIllness','history','medsAllergies'] as const).map((key,i)=><p key={key}>{['主诉','现病史','既往史','用药与过敏'][i]}：{encounter.intake[key].value??'未知'}</p>)}<p>照片：{encounter.intake.attachments.length} 张</p>
+      {(['chiefComplaint','presentIllness','history','medsAllergies'] as const).map((key,i)=><p key={key}>{['主诉','现病史','既往史','用药与过敏'][i]}：{encounter.intake[key].value??'未知'}</p>)}{encounter.intake.attachments.length>0&&<p>照片：{encounter.intake.attachments.length} 张</p>}
     </>},
     ...fieldSections,
     {key:'homework',title:'作业',render:encounter.plan.homework.length===0?<p>暂无</p>:<>{encounter.plan.homework.map(h=><div className="sign-field" key={h.id}><h3>{h.title}</h3><p>{h.detail}</p><p>{scheduleLabel(h.schedule)}{h.durationDays?' · '+h.durationDays+'天':''}</p><span className={'source source-'+h.source}>{labels[h.source]}</span></div>)}</>},

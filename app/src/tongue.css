@@ -17,6 +17,21 @@
 .tongue-summary { margin: 6px 0; }
 .tongue-rows { list-style: none; padding: 0; margin: 6px 0 0; }
 .tongue-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0; }
+/* V2-13：老师逐项改值改成整行布局；控件 48px / 16px，长选项不撑破窄屏。 */
+.tongue-row-edit {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px;
+  padding: 12px 0; border-top: 1px solid #e7e3d9;
+}
+.tongue-row-edit:first-child { border-top: 0; padding-top: 2px; }
+.tongue-row-edit .tongue-row-label { width: auto; font-size: 15px; font-weight: 600; color: #333; overflow-wrap: anywhere; }
+.tongue-row-edit select {
+  width: 100%; max-width: 100%; min-height: 48px; box-sizing: border-box;
+  padding: 10px 12px; font-size: 16px; line-height: 1.4;
+  border: 1px solid #cfc7b9; border-radius: 10px; background: #fff; color: #111;
+  text-overflow: ellipsis;
+}
+.tongue-row-edit .tongue-row-pending,
+.tongue-row-edit .tongue-row-diff { font-size: 13px; overflow-wrap: anywhere; }
 .tongue-row-label { width: 3em; color: #444; }
 .tongue-row-value { min-width: 3em; }
 .tongue-row-pending { font-size: 12px; color: #8a5a00; }

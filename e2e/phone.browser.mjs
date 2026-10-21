@@ -43,6 +43,8 @@ try {
     await expect(page.getByRole('heading', { name: '病历草稿', exact: true })).toBeVisible()
     await layout(page)
     expect(await page.locator('[data-long-record="no"]').count()).toBe(1)
+    // 没有照片时整行不显示。
+    expect(await page.getByText(/照片：\d+ 张/).count()).toBe(0)
     await page.evaluate(() => { const page = document.querySelector('.sign-page'); if (page) window.scrollTo(0, page.getBoundingClientRect().top + window.scrollY) })
     await shot(page, 'sign')
     await page.getByRole('button', { name: '签字发出', exact: true }).click()
@@ -112,7 +114,7 @@ try {
     expect(errors).toEqual([])
     await context.close()
   }
-  // 舌象：切换入口不靠“放大”也常显
+  // 舌象：切换入口不靠“放大”也常显；逐项改值整行布局
   {
     const { context, page, errors } = await open('tongue')
     await expect(page.getByRole('group', { name: '对照方式' })).toBeVisible()
@@ -121,6 +123,22 @@ try {
     await page.getByRole('button', { name: '只看裁剪图', exact: true }).click()
     expect(await page.locator('.tongue-frames').evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length)).toBe(1)
     await shot(page, 'tongue')
+    // 逐项改值：一项一行，控件 ≥44px / 16px，窄屏不溢出。
+    const rows = page.locator('.tongue-row-edit')
+    expect(await rows.count()).toBe(6)
+    const measured = await rows.evaluateAll(nodes => nodes.map(node => {
+      const select = node.querySelector('select')
+      const rect = select.getBoundingClientRect()
+      return { height: rect.height, fontSize: getComputedStyle(select).fontSize, right: rect.right, width: rect.width, rowWidth: node.getBoundingClientRect().width }
+    }))
+    for (const item of measured) {
+      expect(item.height).toBeGreaterThanOrEqual(43.5)
+      expect(item.fontSize).toBe('16px')
+      expect(item.right).toBeLessThanOrEqual(375)
+      expect(item.width).toBeGreaterThan(item.rowWidth * 0.8)
+    }
+    await page.locator('.tongue-rows').scrollIntoViewIfNeeded()
+    await shot(page, 'tongue-rows')
     expect(errors).toEqual([])
     await context.close()
   }

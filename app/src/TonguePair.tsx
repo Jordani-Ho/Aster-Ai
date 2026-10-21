@@ -4,6 +4,7 @@ import {
   tongueFeatureShortText, tongueFeatureText, tongueFeatureValue, tongueNeedsCheck,
   tongueSummary, withTongueFeature, type FeatureKey, type TongueAbstract, type TongueCropState,
 } from '../../domain/tcm/tongue'
+import './tongue.css'
 
 // 固定图例，按方案原话；形状用法固定：实线/实色是候选，虚线是待定区域，灰底是颜色未定。
 const LEGEND = '实线／实色：候选特征；虚线：待定区域；灰底：颜色未定。'
@@ -120,7 +121,7 @@ function TongueRow({ record, candidate, featureKey, editable, onChange }: {
   const value = tongueFeatureText(record.features, featureKey)
   const changed = candidate ? tongueFeatureShortText(candidate.features, featureKey) !== tongueFeatureShortText(record.features, featureKey) : false
   const pending = tongueNeedsCheck(record, featureKey)
-  return <div className="tongue-row">
+  return <div className={'tongue-row' + (editable ? ' tongue-row-edit' : '')}>
     <span className="tongue-row-label">{FEATURE_LABELS[featureKey]}</span>
     {editable
       ? <select aria-label={'修改' + FEATURE_LABELS[featureKey]} value={tongueFeatureValue(record.features, featureKey)}
