@@ -3,7 +3,7 @@ import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
 import type { Ledger } from './core/ledger'
 import { parseChainFields } from './core/ledger'
-import { confirmMoney, currencyCode, formatMoney, type MoneyDraft, type MoneyWriter } from './core/ledger/money'
+import { confirmMoney, currencyCode, formatMoney, saveMoneyCurrency, type MoneyDraft, type MoneyWriter } from './core/ledger/money'
 import { draftMoney } from './core/ledger/money-draft'
 const labels={topup:'充值',gift:'赠送钱',charge:'扣费',refund:'退款'}
 interface PendingDraft {id:string;alias:string;currency:string;text:string;requestedAt:string}
@@ -30,7 +30,7 @@ export function MoneyEntry({store,book,writer,llm,onConfirmed}:{store:LocalStore
    const job=resume??{id:crypto.randomUUID(),alias:alias.trim(),currency,text,requestedAt:new Date().toISOString()}
    currencyCode(job.currency)
    if(!job.alias||job.alias.length>30)throw Error('请先给这本钱账填一个能认出的学生称呼')
-   await store.put('money-alias',book.student,job.alias);await store.put('settings','money-currency',job.currency)
+   await store.put('money-alias',book.student,job.alias);await saveMoneyCurrency(store,job.currency)
    await store.put('money-drafts',book.student,{...job,teacher:book.teacher,student:book.student})
    pending.current=job
    const members=[...new Set(book.events.map(e=>parseChainFields(e).forMember).filter((v):v is string=>!!v))]
