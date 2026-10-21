@@ -28,5 +28,6 @@
 | [V2-11](V2-11-selftest-ready.md) | 内测准备：家里部署对齐第二版 + 一页“内测怎么开始” | DeepSeek | V2-01 至 V2-10 |
 | [V2-12](V2-12-first-ledger.md) | 钱账第一次就能记：老师端首次建账和币种入口 | DeepSeek | V2-04、V2-11 |
 | [V2-13](V2-13-teacher-on-phone.md) | 老师端全在手机上用 | DeepSeek | V2-12 |
+| [V2-14](V2-14-community-dashboard.md) | 社区仪表盘：每个馆只交统计数，我们只看不改 | DeepSeek | V2-13 |
 
 第二批（地基合并后再展开）：自我调整（表层配置化）、门面、物流（本地资源）、观察。
