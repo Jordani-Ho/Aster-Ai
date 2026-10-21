@@ -29,5 +29,6 @@
 | [V2-12](V2-12-first-ledger.md) | 钱账第一次就能记：老师端首次建账和币种入口 | DeepSeek | V2-04、V2-11 |
 | [V2-13](V2-13-teacher-on-phone.md) | 老师端全在手机上用 | DeepSeek | V2-12 |
 | [V2-14](V2-14-community-dashboard.md) | 社区仪表盘：每个馆只交统计数，我们只看不改 | DeepSeek | V2-13 |
+| [V2-15](V2-15-open-the-hall.md) | 建馆：老师第一次进来，一步一步开馆（排在 V2-13 之前） | DeepSeek | V2-12 |
 
 第二批（地基合并后再展开）：自我调整（表层配置化）、门面、物流（本地资源）、观察。
