@@ -6,7 +6,7 @@ import './homework.css'
 import { lazy, Suspense, useEffect, useRef, useState, useMemo } from 'react'
 import { PushSettings } from './PushSettings'
 import { OpeningGuide } from './OpeningGuide'
-import { hasOpenedHall } from './core/hall'
+import { hasOpenedHall, loadHall } from './core/hall'
 import { TongueLevelSettings } from './TongueLevelSettings'
 import { TemplateSettings } from './TemplateSettings'
 
@@ -114,8 +114,14 @@ export function App() {
       const saved=await store.get('settings','role') as {role?:Role}|undefined
       const nextRole=saved?.role??null
       // V2-15：老师端先判定这座馆开没开；老部署有门面/学生/问诊就跳过引导。
+      // 新馆开馆后还要等第一位学生加入（completedAt）才算走完引导。
       let opened: boolean | null = null
-      if (nextRole === 'teacher') { try { opened = await hasOpenedHall(store, person) } catch { opened = false } }
+      if (nextRole === 'teacher') {
+        try {
+          const hall = await loadHall(store)
+          opened = hall ? Boolean(hall.completedAt) : await hasOpenedHall(store, person)
+        } catch { opened = false }
+      }
       setHallOpened(opened)
       setRole(nextRole);setIdentity(person)
       // V2-05 第 4 步：打开应用时每天跑一次保留期清理（不做后台任务）。
@@ -189,8 +195,10 @@ export function App() {
   const chooseRole = async (next: Role) => {
     setError('')
     if (next === 'teacher' && storeRef.current && identityRef.current) {
-      try { setHallOpened(await hasOpenedHall(storeRef.current, identityRef.current)) }
-      catch { setHallOpened(false) }
+      try {
+        const hall = await loadHall(storeRef.current)
+        setHallOpened(hall ? Boolean(hall.completedAt) : await hasOpenedHall(storeRef.current, identityRef.current))
+      } catch { setHallOpened(false) }
     } else setHallOpened(null)
     setRole(next)
     try { if (storeRef.current) await storeRef.current.put('settings', 'role', { role: next }) }
