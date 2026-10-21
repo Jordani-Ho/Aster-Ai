@@ -14,6 +14,8 @@ V2-15：`node e2e/opening.browser.mjs` 独立启动 Vite + Chromium，不需中�
 
 V2-13：`node e2e/phone.browser.mjs` 用真实老师端组件在 375px×812 下逐页验收今天/远程/面诊/管理/邀请/门面/钱账/换机/长病历折叠/舌象切换/建馆“先进去看看”，断言页面不横向滚动、可见按钮 ≥44px、二维码可保存/分享，并写 `docs/screenshots/phone-teacher-*.png`（非 CI）。`phone.spec.ts` 再经真实中继验证“收到问诊→打开→签字发出”全程不横向滚动、邀请链接在另一浏览器上下文打开老师门面、启动注册 service worker 与 manifest 图标。CI 运行两者。
 
+V2-14：统计字段/隐私扫描、开关与一天一次、仪表盘白名单/30 天分组在 `app/src/core/dashboard/*.test.ts`（合成身份与 fake-indexeddb，不连中继）；`phone.browser.mjs` 增加“管理 → 向社区分享运行统计”的实际字段预览、关掉后不发，以及 `/#dashboard` 只读页无按钮/表单/链接、无钥匙不显示数据；`phone.spec.ts` 在真实应用里再断言一次只读页无操作控件。CI 运行这些用例，不配置仪表盘公钥时各馆完全不发。
+
 这里只运行合成身份和资料。M1-15a 合并后接入完整九步问诊与四条硬性验收，使用真实编译中继、真实网关和 Chromium；模型与推送为本地替身，不需要 API Key。
 
 ## 一条命令

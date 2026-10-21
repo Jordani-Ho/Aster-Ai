@@ -49,6 +49,9 @@ services:
       VITE_MODEL_GATEWAY_URL: https://${APP_DOMAIN:-placeholder.invalid}/v1
       VITE_PUSH_GATEWAY_URL: https://${APP_DOMAIN:-placeholder.invalid}
       VITE_PUSH_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      # V2-14：仪表盘公钥/地址；留空时页面不发统计、也不显示入口。
+      VITE_DASHBOARD_PUBKEY: ${DASHBOARD_PUBKEY:-}
+      VITE_DASHBOARD_URL: ${DASHBOARD_URL:-}
     depends_on: [gateway]
     logging:
       driver: none

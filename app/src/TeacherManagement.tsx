@@ -7,6 +7,7 @@ import { InviteSettings } from './InviteSettings'
 import { StorefrontSettings } from './StorefrontSettings'
 import { RetentionSettings } from './RetentionSettings'
 import { ReidentifyLinks } from './ReidentifyPages'
+import { StatsSharing } from './StatsSharing'
 
 export interface TeacherManagementProps {
   identity: Identity
@@ -44,6 +45,10 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledgerP
     <details className="teacher-card manage-block" aria-label="换手机">
       <summary>换手机</summary>
       <ReidentifyLinks identity={identity} store={store} gateway={gateway} />
+    </details>
+    <details className="teacher-card manage-block" aria-label="向社区分享运行统计">
+      <summary>向社区分享运行统计</summary>
+      <StatsSharing store={store} />
     </details>
     {settings}
   </main>
