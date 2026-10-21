@@ -6,8 +6,9 @@ import {nip98Authorization} from '../llm/nip98'
 import {addTeacher} from '../inbox'
 import {createLedgerSync} from '../ledger/sync'
 export const INVITE_ERROR='邀请暂不可用，请向老师要一个新链接'
-export function makeInvite(identity:Identity,url:string,now=Math.floor(Date.now()/1000)):Event{
- return JSON.parse(JSON.stringify(finalizeEvent({kind:27235,created_at:now,tags:[['u',url],['method','POST'],['expiration',String(now+7*86400)],['nonce',crypto.randomUUID()]],content:'{"type":"aster.invite","version":1}'},identity.privateKey)))
+// V2-15：第一个邀请 1 小时内有效；有效期是参数，默认仍是 7 天。协议格式不变。
+export function makeInvite(identity:Identity,url:string,now=Math.floor(Date.now()/1000),expiresInSeconds=7*86400):Event{
+ return JSON.parse(JSON.stringify(finalizeEvent({kind:27235,created_at:now,tags:[['u',url],['method','POST'],['expiration',String(now+expiresInSeconds)],['nonce',crypto.randomUUID()]],content:'{"type":"aster.invite","version":1}'},identity.privateKey)))
 }
 export function validateInvite(input:Event,url:string,now=Math.floor(Date.now()/1000)):boolean{
  try{const event={id:input.id,pubkey:input.pubkey,sig:input.sig,kind:input.kind,created_at:input.created_at,tags:input.tags.map(t=>[...t]),content:input.content};const one=(name:string)=>{const tags=event.tags.filter(t=>t[0]===name);return tags.length===1&&tags[0].length===2?tags[0][1]:null};const expires=Number(one('expiration'));return event.kind===27235&&event.content==='{"type":"aster.invite","version":1}'&&Number.isSafeInteger(event.created_at)&&event.created_at<=now+60&&Number.isSafeInteger(expires)&&expires>now&&expires>event.created_at&&expires-event.created_at<=604800&&one('u')===url&&one('method')==='POST'&&typeof one('nonce')==='string'&&getEventHash(event)===event.id&&verifyEvent(event)}catch{return false}

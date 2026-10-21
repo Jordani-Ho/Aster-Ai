@@ -1,7 +1,7 @@
 import {useState} from 'react'
 import type {LocalStore} from './core/store'
 import {providers,ModelRequestError,normalizeModel,testConnection,savePersonalModel,connectionError,type PersonalModel,type ModelGateway} from './core/llm/personal'
-export function ModelSettings({store,gateway,current,onSaved,initial=false}:{store:LocalStore;gateway:ModelGateway|null;current:PersonalModel|null;onSaved:(model:PersonalModel)=>void;initial?:boolean}){
+export function ModelSettings({store,gateway,current,onSaved,initial=false,submitLabel}:{store:LocalStore;gateway:ModelGateway|null;current:PersonalModel|null;onSaved:(model:PersonalModel)=>void;initial?:boolean;submitLabel?:string}){
  const [provider,setProvider]=useState(current?.provider??providers[0]!.id)
  const selected=providers.find(p=>p.id===provider)!
  const [baseUrl,setBaseUrl]=useState(current?.baseUrl??selected.baseUrl),[model,setModel]=useState(current?.model??selected.model),[apiKey,setApiKey]=useState(''),[endpoint,setEndpoint]=useState(current?.provider==='doubao'?current.model:'')
@@ -19,6 +19,6 @@ export function ModelSettings({store,gateway,current,onSaved,initial=false}:{sto
  <details open={provider==='other'}><summary>模型与地址</summary><p><label>接口地址<input disabled={busy} value={baseUrl} onChange={e=>{setBaseUrl(e.target.value);changed()}} style={{width:'100%',boxSizing:'border-box'}}/></label></p>{!selected.endpointId&&<p><label>模型名称<input disabled={busy} value={model} onChange={e=>{setModel(e.target.value);changed()}}/></label></p>}<p>使用按量计费的模型接口。账户地区与接口地址须匹配；不要填写聊天会员或编程套餐地址。</p></details>
  <p>整理时会将所需文字发给您选择的模型服务商；浏览器连接不上时，经社区网关转发，网关不保存凭证和内容。接入后调用失败，内测期间可能使用备用模型。</p>
  {error&&<p role="alert">{error}</p>}{tested&&<p role="status">✓ 连接成功</p>}
- <button disabled={busy} onClick={()=>void test()}>{busy?'请稍候…':'测试连接'}</button>{tested&&<button disabled={busy} onClick={()=>void save()}>{initial?'进入首页':'保存接入'}</button>}
+ <button disabled={busy} onClick={()=>void test()}>{busy?'请稍候…':'测试连接'}</button>{tested&&<button disabled={busy} onClick={()=>void save()}>{initial?(submitLabel??'进入首页'):'保存接入'}</button>}
  </section>
 }

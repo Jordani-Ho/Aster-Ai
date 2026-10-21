@@ -19,7 +19,26 @@ export async function connectModel(page:Page){
  await page.getByLabel('接入凭证',{exact:true}).fill('SYNTHETIC_PERSONAL_TOKEN')
  await page.getByRole('button',{name:'测试连接',exact:true}).click()
  await expect(page.getByText('✓ 连接成功',{exact:true})).toBeVisible()
- await page.getByRole('button',{name:'进入首页',exact:true}).click()
+ // V2-15：老师第一次进来在建馆引导里；学生仍是“进入首页”。
+ const next=page.getByRole('button',{name:'下一步',exact:true})
+ if(await next.count())await next.click()
+ else await page.getByRole('button',{name:'进入首页',exact:true}).click()
+}
+/** V2-15 建馆引导第 2–5 步：登记口令、给馆起名、开馆、返回第一位学生的 1 小时邀请。 */
+export async function openCommunity(page:Page):Promise<string>{
+ await expect(page.getByRole('heading',{name:'登记为社区老师',exact:true})).toBeVisible()
+ await page.getByLabel('部署口令',{exact:true}).fill('SYNTHETIC_DEPLOYMENT_TOKEN')
+ await page.getByRole('button',{name:'登记为社区老师',exact:true}).click()
+ await expect(page.getByRole('heading',{name:'给馆起名',exact:true})).toBeVisible()
+ await page.getByLabel('馆名',{exact:true}).fill('合成养生馆')
+ await page.getByLabel('学生怎么称呼您',{exact:true}).fill('合成老师')
+ await page.getByRole('button',{name:'下一步',exact:true}).click()
+ await expect(page.getByRole('heading',{name:'开馆',exact:true})).toBeVisible()
+ await page.getByRole('button',{name:'开馆',exact:true}).click()
+ await expect(page.getByRole('heading',{name:'邀请第一位学生',exact:true})).toBeVisible()
+ const link=page.getByLabel('邀请链接',{exact:true})
+ await expect(link).toBeVisible()
+ return link.inputValue()
 }
 async function actualActor(page:Page){return page.evaluate(async()=>{const p='/src/core/store/index.ts',{resumeStore}=await import(p),session=await resumeStore();try{return {pubkey:session.identity.publicKey,key:[...session.identity.privateKey]}}finally{session.store.close();session.identity.privateKey.fill(0)}})}
 export const test=base.extend<{people:{teacher:Person;student:Person};seedLedger:boolean;communityOpen:boolean}>({
@@ -32,14 +51,12 @@ export const test=base.extend<{people:{teacher:Person;student:Person};seedLedger
    await mockModel(tc);await mockModel(sc)
    const teacher={context:tc,page:await tc.newPage(),actor:actors.teacher},student={context:sc,page:await sc.newPage(),actor:actors.student}
    await teacher.page.goto('/');await expect(teacher.page.getByRole('heading',{name:'您是老师还是学生？'})).toBeVisible()
-   await teacher.page.getByRole('button',{name:'我是老师',exact:true}).click();await connectModel(teacher.page);await expect(teacher.page.getByRole('heading',{name:'今天',exact:true})).toBeVisible()
-   await teacher.page.getByRole('button',{name:'管理',exact:true}).click()
-   await teacher.page.getByText('我是这个社区的老师',{exact:true}).click()
-   await teacher.page.getByLabel('部署口令',{exact:true}).fill('SYNTHETIC_DEPLOYMENT_TOKEN')
-   await teacher.page.getByRole('button',{name:'登记为社区老师',exact:true}).click();await expect(teacher.page.getByText('社区已建立，可以邀请学生。',{exact:true})).toBeVisible()
-   await teacher.page.getByRole('button',{name:'邀请学生',exact:true}).click();const link=teacher.page.getByLabel('邀请链接',{exact:true});await expect(link).toBeVisible()
-   await student.page.goto(await link.inputValue());await expect(student.page.getByRole('button',{name:'开始使用',exact:true})).toBeVisible();await student.page.getByRole('button',{name:'开始使用',exact:true}).click();await connectModel(student.page);await expect(student.page.getByRole('heading',{name:'镜子',exact:true})).toBeVisible()
-   await teacher.page.getByRole('button',{name:'今天',exact:true}).click()
+   await teacher.page.getByRole('button',{name:'我是老师',exact:true}).click();await connectModel(teacher.page)
+   // V2-15：第一次进来走建馆引导，开馆后拿到第一位学生的 1 小时邀请。
+   const link=await openCommunity(teacher.page)
+   await student.page.goto(link);await expect(student.page.getByRole('button',{name:'开始使用',exact:true})).toBeVisible();await student.page.getByRole('button',{name:'开始使用',exact:true}).click();await connectModel(student.page);await expect(student.page.getByRole('heading',{name:'镜子',exact:true})).toBeVisible()
+   // 学生连上社区后老师才认得他；建馆引导自动结束，进入正常首页。
+   await expect(teacher.page.getByRole('heading',{name:'今天',exact:true})).toBeVisible()
    setActors(await actualActor(teacher.page),await actualActor(student.page))
    for(const page of [teacher.page,student.page])await expect(page.getByText('中继：已连接',{exact:true})).toBeVisible()
    if(!communityOpen){expect((await request.post(runtime.controlURL+'/reset',{headers,data:{communityOpen:false,members:[actors.teacher.pubkey,actors.student.pubkey],relayOnly:true}})).status()).toBe(200);for(const page of [teacher.page,student.page]){await page.reload();await expect(page.getByText('中继：已连接',{exact:true})).toBeVisible()}}

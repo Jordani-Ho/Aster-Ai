@@ -81,22 +81,24 @@ try {
   await expect(teacher.getByRole('heading', { name: '您是老师还是学生？' })).toBeVisible({ timeout: 60000 })
   await teacher.getByRole('button', { name: '我是老师', exact: true }).click()
   await connectModel(teacher)
-  await expect(teacher.getByRole('heading', { name: '今天', exact: true })).toBeVisible({ timeout: 20000 })
-  await connected(teacher)
-  await shot(teacher, '01-teacher-home')
-  check('老师打开网址、接入模型（Kimi 表单，模型用本地替身）、进入首页')
-
-  await teacher.getByRole('button', { name: '管理', exact: true }).click()
-  await teacher.getByText('我是这个社区的老师', { exact: true }).click()
+  // V2-15：第一次进来走建馆引导（模型 → 登记 → 起名 → 开馆 → 第一位学生邀请）。
+  await expect(teacher.getByRole('heading', { name: '登记为社区老师', exact: true })).toBeVisible({ timeout: 20000 })
   await teacher.getByLabel('部署口令', { exact: true }).fill(TOKEN)
   await teacher.getByRole('button', { name: '登记为社区老师', exact: true }).click()
-  await expect(teacher.getByText('社区已建立，可以邀请学生。', { exact: true })).toBeVisible({ timeout: 20000 })
-  await teacher.getByRole('button', { name: '邀请学生', exact: true }).click()
+  await expect(teacher.getByRole('heading', { name: '给馆起名', exact: true })).toBeVisible({ timeout: 20000 })
+  await teacher.getByLabel('馆名', { exact: true }).fill('合成养生馆')
+  await teacher.getByLabel('学生怎么称呼您', { exact: true }).fill('合成阿慈')
+  await teacher.getByLabel(/短介绍/).fill('一起照顾日常作息。')
+  await expect(teacher.getByText('合成阿慈老师邀请你', { exact: true })).toBeVisible()
+  await teacher.getByRole('button', { name: '下一步', exact: true }).click()
+  await expect(teacher.getByRole('heading', { name: '开馆', exact: true })).toBeVisible()
+  await teacher.getByRole('button', { name: '开馆', exact: true }).click()
+  await expect(teacher.getByRole('heading', { name: '邀请第一位学生', exact: true })).toBeVisible({ timeout: 20000 })
   const invite = teacher.getByLabel('邀请链接', { exact: true })
   await expect(invite).toBeVisible()
   const inviteLink = await invite.inputValue()
   await shot(teacher, '02-invite-link')
-  check('老师用一次性口令登记社区、生成邀请链接', inviteLink.slice(0, 60) + '…')
+  check('老师用一次性口令登记社区、起名开馆、生成第一位学生的 1 小时邀请', inviteLink.slice(0, 60) + '…')
 
   // ---- 学生设备 ----
   await student.goto(inviteLink)
@@ -107,6 +109,12 @@ try {
   await connected(student)
   await shot(student, '03-student-mirror')
   check('学生打开邀请首屏、开始使用、接入模型、进入镜子')
+
+  // 学生连上社区后，老师端建馆引导自动结束，进入正常首页。
+  await expect(teacher.getByRole('heading', { name: '今天', exact: true })).toBeVisible({ timeout: 30000 })
+  await connected(teacher)
+  await shot(teacher, '01-teacher-home')
+  check('第一位学生加入后，老师端自动进入首页')
 
   // 1. 拍舌象
   await student.getByLabel('舌象记录的居住城市').selectOption('北京市')
@@ -168,40 +176,30 @@ try {
   await student.getByRole('button', { name: '返回', exact: true }).click()
   check('学生收到签字病历与作业，完成打卡')
 
-  // 5. 老师说一句话记账、学生看余额
-  // 注意：新装环境第一次记账前，老师端还没有账本；钱账页的币种选择只出现在已有账本里。
-  // 这是走查发现的真实入口缺口：先记录到 findings，继续走后面的步骤。
+  // 5. 老师说一句话记账、学生看余额（V2-12：第一次确认时自动建账）
   await teacher.getByRole('button', { name: '管理', exact: true }).click()
-  await teacher.locator('summary').filter({ hasText: /^钱账与对账$/ }).click()
+  await teacher.locator('summary').filter({ hasText: /^钱账$/ }).click()
   await teacher.getByRole('button', { name: '立即对账', exact: true }).click()
   const currencySelect = teacher.getByLabel('钱账币种', { exact: true })
-  let moneyOk = true
-  try { await expect(currencySelect).toBeVisible({ timeout: 15000 }) } catch { moneyOk = false }
-  if (moneyOk) {
-    await currencySelect.selectOption('CNY')
-    await teacher.getByLabel('这位学生的称呼', { exact: true }).fill('小王')
-    await teacher.getByLabel('说一句话记账').fill('收到小王 100')
-    await teacher.getByRole('button', { name: '生成记账草稿', exact: true }).click()
-    await expect(teacher.getByRole('article', { name: '钱账确认草稿' })).toBeVisible({ timeout: 30000 })
-    await teacher.getByRole('button', { name: '确认入账', exact: true }).click()
-    await expect(teacher.getByText(/已记入钱账/)).toBeVisible({ timeout: 20000 })
-    await shot(teacher, '09-money-teacher')
-    await student.getByRole('button', { name: '其他', exact: true }).click()
-    await student.locator('summary').filter({ hasText: /^设置$/ }).click()
-    await student.locator('summary').filter({ hasText: /^钱账与对账$/ }).click()
-    await expect(student.getByText(/钱账余额：.*100\.00/)).toBeVisible({ timeout: 30000 })
-    await shot(student, '10-money-student')
-    check('老师一句话记账（真人确认入账），学生看到余额 100.00')
-  } else {
-    await shot(teacher, '09-money-blocked')
-    const finding = '老师端首次记账前没有币种/建账入口：钱账页只有“尚未登记账本”，而币种选择只出现在已有账本里；学生在邀请时开的账本没有同步到老师端（接收端只处理本机已有的账本）。'
-    findings.push(finding)
-    console.log('FINDING money-first-entry · ' + finding)
-    check('老师说一句话记账、学生看余额：阻塞（入口缺口），已记录 finding')
-  }
+  await expect(currencySelect).toBeVisible({ timeout: 15000 })
+  await currencySelect.selectOption('CNY')
+  await teacher.getByLabel('这位学生的称呼', { exact: true }).fill('小王')
+  await teacher.getByLabel('说一句话记账').fill('收到小王 100')
+  await teacher.getByRole('button', { name: '生成记账草稿', exact: true }).click()
+  await expect(teacher.getByRole('article', { name: '钱账确认草稿' })).toBeVisible({ timeout: 30000 })
+  await teacher.getByRole('button', { name: '确认入账', exact: true }).click()
+  await expect(teacher.getByText(/已记入钱账/)).toBeVisible({ timeout: 20000 })
+  await shot(teacher, '09-money-teacher')
+  await student.getByRole('button', { name: '其他', exact: true }).click()
+  await student.locator('summary').filter({ hasText: /^设置$/ }).click()
+  await student.locator('summary').filter({ hasText: /^钱账与对账$/ }).click()
+  await expect(student.getByText(/钱账余额：.*100\.00/)).toBeVisible({ timeout: 30000 })
+  await shot(student, '10-money-student')
+  check('老师一句话记账（真人确认入账），学生看到余额 100.00')
 
   // 6. 老师改门面、学生看到
   await teacher.getByRole('button', { name: '管理', exact: true }).click()
+  await teacher.locator('details.manage-block').filter({ hasText: /^我的门面/ }).locator('summary').click()
   const venue = teacher.locator('section[aria-label="我的门面"]')
   await venue.getByLabel('馆名', { exact: true }).fill('阿慈养生馆')
   await venue.getByLabel('显示称呼', { exact: true }).fill('阿慈')
@@ -217,6 +215,7 @@ try {
 
   // 7. 清空学生浏览器 + 换机找回
   await teacher.getByRole('button', { name: '管理', exact: true }).click()
+  await teacher.locator('details.manage-block').filter({ hasText: /^换手机/ }).locator('summary').click()
   const recoverSection = teacher.locator('section[aria-label="换手机找回"]')
   await recoverSection.getByLabel(/你的称呼/).fill('阿慈')
   await recoverSection.getByRole('button', { name: '生成“学生换手机”链接', exact: true }).click()

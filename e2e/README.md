@@ -10,6 +10,8 @@ V2-10：签字页多了一行“和上次比”四选一（不选也能签）；
 
 V2-11：`node e2e/selftest.walkthrough.mjs` 是《内测怎么开始》的干净环境走查脚本（不跑在 CI）：`BASE_URL=https://<临时隧道域名> DEPLOY_TOKEN=<data/teacher-setup-code.txt> node e2e/selftest.walkthrough.mjs`，用两个 375px 浏览器上下文分别当老师和学生，按八件事走一遍并截图到 `docs/screenshots/selftest-*.png`。模型请求用本地固定替身（没有真实模型密钥），其余（网关登记、邀请、中继、签名、门面、换机、家人）都走真实部署。
 
+V2-15：`node e2e/opening.browser.mjs` 独立启动 Vite + Chromium，不需中继/Rust；用真实 `OpeningGuide` / `TeacherManagement` 组件与 fake 模型/网关路由走五步建馆、第 3 步重载续走、1 小时邀请、过期重生成、第一位学生加入后进首页、管理页分块顺序与默认折叠。`opening.spec.ts` 再经真实中继/网关验证同一流程、学生用另一设备打开邀请、过期链接提示与老部署直接进首页；`fixtures.ts` 已改为老师先走建馆引导再生成第一位学生邀请。CI 运行两者，只用合成数据。
+
 这里只运行合成身份和资料。M1-15a 合并后接入完整九步问诊与四条硬性验收，使用真实编译中继、真实网关和 Chromium；模型与推送为本地替身，不需要 API Key。
 
 ## 一条命令
