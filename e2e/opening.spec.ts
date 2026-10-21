@@ -78,7 +78,7 @@ test('V2-15 全新部署：只看到引导，五步走完后第一位学生用 1
       // 验收 3（后段）：开馆后管理页按顺序分块、默认折叠。
       await page.getByRole('button', { name: '管理', exact: true }).click()
       const titles = await page.locator('details.manage-block > summary').allInnerTexts()
-      expect(titles).toEqual(['邀请学生', '我的门面', '钱账', '记录保留多久', '换手机'])
+      expect(titles).toEqual(['邀请学生', '我的门面', '钱账', '记录保留多久', '换手机', '向社区分享运行统计'])
       expect(await page.locator('details.manage-block').evaluateAll(nodes => nodes.map(node => (node as HTMLDetailsElement).open))).toEqual([false, false, false, false, false])
     } finally { await studentContext.close() }
   } finally { await teacher.context.close() }

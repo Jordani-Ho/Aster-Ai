@@ -66,3 +66,14 @@ test('V2-13 老师在手机上生成邀请二维码，链接可直接分享/打�
   expect(manifest.icons.some(icon => icon.sizes === '512x512' && icon.type === 'image/png')).toBe(true)
   expect(await teacher.locator('link[rel="apple-touch-icon"]').getAttribute('href')).toBe('/apple-touch-icon.png')
 })
+
+test('V2-14 社区仪表盘只读：没有钥匙不显示数据，页面上没有任何可改变馆的操作', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, baseURL: runtime.baseURL })
+  try {
+    const page = await context.newPage()
+    await page.goto('/#dashboard')
+    await expect(page.getByRole('heading', { name: '社区仪表盘', exact: true })).toBeVisible()
+    await expect(page.getByText('没有解密钥匙，不显示任何数据。', { exact: true })).toBeVisible()
+    expect(await page.locator('button, input, select, textarea, a, form').count()).toBe(0)
+  } finally { await context.close() }
+})

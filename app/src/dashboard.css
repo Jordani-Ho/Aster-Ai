@@ -1,0 +1,29 @@
+/* V2-14 只读社区仪表盘与老师端统计预览。 */
+.dashboard-page {
+  box-sizing: border-box;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #203b34;
+  background: #f7f4ee;
+  min-height: 100dvh;
+}
+.dashboard-page h1 { margin: 0 0 8px; font-size: 26px; }
+.dashboard-page > p { margin: 0 0 10px; font-size: 14px; line-height: 1.7; color: #4c5a54; }
+.dashboard-hall { margin: 20px 0 0; }
+.dashboard-hall h2 { margin: 0 0 8px; font-size: 17px; color: #245a3f; }
+.dashboard-scroll { overflow-x: auto; background: #fff; border: 1px solid #d9dfd5; border-radius: 12px; }
+.dashboard-page table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px; }
+.dashboard-page th, .dashboard-page td { padding: 8px 10px; border-bottom: 1px solid #edf0e8; text-align: left; white-space: nowrap; }
+.dashboard-page th { background: #f5f8f3; font-weight: 600; color: #44584e; }
+.dashboard-page tr:last-child td { border-bottom: 0; }
+
+/* 老师“管理 → 向社区分享运行统计” */
+.stats-toggle { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 16px; }
+.stats-toggle input { width: 22px; height: 22px; }
+.stats-preview { margin-top: 8px; }
+.stats-preview > p { margin: 0 0 6px; font-size: 14px; color: #333; }
+.stats-preview dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 14px; }
+.stats-preview dt { color: #5a6b62; }
+.stats-preview dd { margin: 0; overflow-wrap: anywhere; }

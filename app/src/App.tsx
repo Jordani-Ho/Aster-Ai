@@ -9,6 +9,11 @@ import { OpeningGuide } from './OpeningGuide'
 import { hasOpenedHall, loadHall } from './core/hall'
 import { TongueLevelSettings } from './TongueLevelSettings'
 import { TemplateSettings } from './TemplateSettings'
+import { CommunityDashboard } from './CommunityDashboard'
+import { dashboardConfig } from './core/dashboard/config'
+import { recordError } from './core/dashboard/errors'
+import { startStatsSession } from './core/dashboard/session'
+import { sendDailyStats } from './core/dashboard/stats'
 
 import type { Identity } from './core/identity'
 import { bootstrapIdentity, readInviteLink, acceptInvite, gatewayBase, INVITE_ERROR, validateInvite } from './core/onboarding'
@@ -37,6 +42,8 @@ type RecoveryFlow =
   | { kind: 'teacher'; newTeacher: string; name: string; oldTeachers: string[] }
 const env = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env
 const defaultRelays = (env.VITE_COMMUNITY_RELAYS ?? '').split(',').map(value => value.trim()).filter(Boolean)
+// V2-14：仪表盘公钥/地址由部署 .env 注入；留空就完全不发。
+const dashboard = dashboardConfig(env)
 // 部署时配置这两个变量，发送成功后才会调用 M1-08 的 notifyRecipient；没配置就不提醒，不影响发送。
 const pushGatewayUrl = env.VITE_PUSH_GATEWAY_URL ?? ''
 const pushVapidPublicKey = env.VITE_PUSH_VAPID_PUBLIC_KEY ?? ''
@@ -48,6 +55,8 @@ export function App() {
   const [backupModel,setBackupModel]=useState(false)
   const [role, setRole] = useState<Role | null>(null)
   // V2-15：老师第一次进来先走建馆引导；老部署已有门面/学生/问诊的直接视为已开馆。
+  // V2-14：只读仪表盘走同一个单页的 hash，不新增服务器接口；hash 里的钥匙读一次就收起来。
+  const [dashboardRoute] = useState(() => location.hash.startsWith('#dashboard'))
   const [hallOpened, setHallOpened] = useState<boolean | null>(null)
   // M1-22 家人子账户：家人清单、当前在看谁（0 = 本人），以及每位家人的中继连接。
   const [family, setFamily] = useState<FamilyMember[]>([])
@@ -65,12 +74,59 @@ export function App() {
   const storeRef = useRef<LocalStore | null>(null)
   const identityRef = useRef<Identity | null>(null)
   const stackRef = useRef<Wiring | null>(null)
+  const statsSending = useRef(false)
 
   // V2-13：启动即注册现有 sw.js（只管推送通知），“添加到主屏幕”不再依赖先开提醒。
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
     void navigator.serviceWorker.register('/sw.js').catch(() => {})
   }, [])
+
+  // V2-14：只记录错误类型，不记内容；统计只读这些次数。
+  useEffect(() => {
+    if (!identity || !storeRef.current) return
+    const store = storeRef.current
+    const uncaught = () => { void recordError(store, 'uncaughtError') }
+    const rejection = () => { void recordError(store, 'unhandledRejection') }
+    window.addEventListener('error', uncaught)
+    window.addEventListener('unhandledrejection', rejection)
+    return () => { window.removeEventListener('error', uncaught); window.removeEventListener('unhandledrejection', rejection) }
+  }, [identity])
+
+  // V2-14：老师端累计当天应用在线秒数（统计里的“服务在线时长”）。
+  useEffect(() => {
+    if (role !== 'teacher' || !identity || !storeRef.current) return
+    const store = storeRef.current
+    let live = true
+    let timer: ReturnType<typeof setInterval> | null = null
+    let statsSession: Awaited<ReturnType<typeof startStatsSession>> | null = null
+    void startStatsSession(store).then(next => {
+      if (!live) return
+      statsSession = next
+      timer = setInterval(() => { void next.tick().catch(() => {}) }, 60_000)
+    }).catch(() => {})
+    const flush = () => { void statsSession?.tick().catch(() => {}) }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', flush)
+    return () => {
+      live = false
+      if (timer) clearInterval(timer)
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', flush)
+      void statsSession?.stop().catch(() => {})
+    }
+  }, [role, identity])
+
+  // V2-14：打开应用且中继就绪时，若开关开、配置了仪表盘、今天还没发，就发一条统计。
+  useEffect(() => {
+    if (role !== 'teacher' || !identity || stackStatus !== 'ready' || !dashboard.configured || statsSending.current) return
+    const store = storeRef.current, stack = stackRef.current
+    if (!store || !stack) return
+    statsSending.current = true
+    void sendDailyStats({ store, send: stack.send, dashboardPubkey: dashboard.pubkey, dashboardUrl: dashboard.url })
+      .catch(() => {})
+      .finally(() => { statsSending.current = false })
+  }, [role, identity, stackStatus])
 
   useEffect(() => {
     let cancelled = false
@@ -246,6 +302,8 @@ export function App() {
   const llm=useMemo(()=>modelConfig?createPersonalClient(modelConfig,modelGateway,setBackupModel):null,[modelConfig,modelGateway])
   const modelNotice=<>{backupModel&&<p role="status" style={{fontSize:12}}>今天用的是备用模型，请检查您的模型账户</p>}</>
   const modelSettings=store?<details><summary>我的大模型</summary><ModelSettings key={modelConfig?.testedAt??'new'} store={store} gateway={modelGateway} current={modelConfig??null} onSaved={config=>setModelConfig(config)}/></details>:null
+  // V2-14：只读社区仪表盘。没有解密钥匙时不显示任何数据，也不渲染任何操作控件。
+  if (dashboardRoute) return <CommunityDashboard relays={defaultRelays} />
   // V2-07：换机找回链接先走认回页；学生没点“是”之前不改名单、不接受新老师公钥。
   if (store && identity && recovery) {
     return recovery.kind === 'student'

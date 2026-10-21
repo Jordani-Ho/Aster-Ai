@@ -2,7 +2,7 @@ import { chromium, expect } from '@playwright/test'
 import { createServer } from '../app/node_modules/vite/dist/node/index.js'
 import { fileURLToPath } from 'node:url'
 const root = fileURLToPath(new URL('../', import.meta.url)).replace(/\\/g, '/')
-const server = await createServer({ configFile: root + 'app/vite.config.ts', root: root + 'app', server: { host: '127.0.0.1', port: 0 }, resolve: { alias: { react: root + 'app/node_modules/react', 'react-dom': root + 'app/node_modules/react-dom' } } })
+const server = await createServer({ configFile: root + 'app/vite.config.ts', root: root + 'app', server: { host: '127.0.0.1', port: 0 }, resolve: { alias: { react: root + 'app/node_modules/react', 'react-dom': root + 'app/node_modules/react-dom' } }, define: { 'import.meta.env.VITE_DASHBOARD_PUBKEY': JSON.stringify('d'.repeat(64)), 'import.meta.env.VITE_DASHBOARD_URL': JSON.stringify('https://phone.synthetic.invalid/#dashboard') } })
 await server.listen()
 const browser = await chromium.launch({ headless: true })
 
@@ -66,7 +66,7 @@ try {
   {
     const { context, page, errors } = await open('manage')
     await expect(page.getByRole('heading', { name: '管理', exact: true })).toBeVisible()
-    expect(await page.locator('details.manage-block > summary').allInnerTexts()).toEqual(['邀请学生', '我的门面', '钱账', '记录保留多久', '换手机'])
+    expect(await page.locator('details.manage-block > summary').allInnerTexts()).toEqual(['邀请学生', '我的门面', '钱账', '记录保留多久', '换手机', '向社区分享运行统计'])
     await layout(page)
     await shot(page, 'manage')
     await page.locator('details.manage-block').filter({ hasText: /^邀请学生/ }).locator('summary').click()
@@ -96,6 +96,17 @@ try {
     await expect(page.getByRole('region', { name: '换手机找回' })).toBeVisible()
     await layout(page)
     await shot(page, 'reidentify')
+    // 向社区分享运行统计：默认开、能看到实际要发的字段与值；关掉后什么都不发。
+    await page.locator('details.manage-block').filter({ hasText: /向社区分享运行统计/ }).locator('summary').click()
+    await expect(page.getByRole('checkbox', { name: '向社区分享运行统计' })).toBeChecked()
+    await expect(page.getByText('今天发出去的就是这几行数字：', { exact: true })).toBeVisible()
+    const preview = page.locator('.stats-preview dl')
+    await expect(preview).toContainText('本馆 ID')
+    await expect(preview).toContainText('学生人数')
+    await expect(preview).toContainText('当天收到的问诊')
+    await page.getByRole('checkbox', { name: '向社区分享运行统计' }).uncheck()
+    await expect(page.getByText('已关闭，今天什么都不发。', { exact: true })).toBeVisible()
+    await shot(page, 'stats')
     expect(errors).toEqual([])
     await context.close()
   }
@@ -151,5 +162,14 @@ try {
     expect(errors).toEqual([])
     await context.close()
   }
-  console.log('PASS: V2-13 老师端 375px 今天/远程/签字/面诊/管理/邀请二维码分享/门面/钱账/换机/长病历折叠/舌象切换/建馆先进去看看')
+  // 只读社区仪表盘：没有解密钥匙不显示数据，页面上没有任何操作控件
+  {
+    const { context, page, errors } = await open('dashboard')
+    await expect(page.getByRole('heading', { name: '社区仪表盘', exact: true })).toBeVisible()
+    await expect(page.getByText('没有解密钥匙，不显示任何数据。', { exact: true })).toBeVisible()
+    expect(await page.locator('button, input, select, textarea, a, form').count()).toBe(0)
+    expect(errors).toEqual([])
+    await context.close()
+  }
+  console.log('PASS: V2-13 老师端 375px 今天/远程/签字/面诊/管理/邀请二维码分享/门面/钱账/换机/长病历折叠/舌象切换/建馆先进去看看；V2-14 统计开关与只读仪表盘')
 } finally { await browser.close(); await server.close() }

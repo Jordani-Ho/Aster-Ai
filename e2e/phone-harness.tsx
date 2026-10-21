@@ -8,6 +8,7 @@ import { LedgerSettings } from '../app/src/LedgerSettings'
 import { SignEncounterPage } from '../app/src/SignEncounterPage'
 import { TonguePair } from '../app/src/TonguePair'
 import { OpeningGuide } from '../app/src/OpeningGuide'
+import { CommunityDashboard } from '../app/src/CommunityDashboard'
 import { createIdentity } from '../app/src/core/identity'
 import { openStore, resumeStore } from '../app/src/core/store'
 import { createLedgerSync } from '../app/src/core/ledger/sync'
@@ -116,6 +117,7 @@ const crop = await tongueCrop()
 function Scene() {
   const shell = (content: React.ReactNode) => <div className="teacher-shell"><div className="teacher-content">{content}</div></div>
   if (scene === 'opening') return <OpeningScene />
+  if (scene === 'dashboard') return <CommunityDashboard relays={[]} />
   if (scene === 'today') return <TeacherWorkspace identity={teacher.identity} store={teacher.store} stack={null} llm={null} gateway={gateway} status={status} ledgerPanel={ledgerPanel} settings={settingsNode} mirror={mirror} />
   if (scene === 'remote') return shell(<TeacherInboxPage identity={teacher.identity} store={teacher.store} send={send} llm={null} onBack={() => {}} />)
   if (scene === 'in-person') return shell(<InPersonPage identity={teacher.identity} store={teacher.store} llm={null} onBack={() => {}} />)

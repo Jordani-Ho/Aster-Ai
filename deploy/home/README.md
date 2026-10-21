@@ -76,7 +76,15 @@ cd deploy/home
 - 想彻底重来：`docker compose --profile quick down`，再删除 `data/`（不可恢复；先确认不再需要这些本机资料）。
 - 中继只存端到端加密后的信件；relay/gateway/web 的容器访问日志全部关闭。
 
-## 七、常见问题
+## 七、社区仪表盘（可选）
+
+- 想收各馆的运行统计：在 `.env` 填 `DASHBOARD_PUBKEY`（运营方生成的 64 位十六进制公钥）和 `DASHBOARD_URL`（例如 `https://应用域名/#dashboard`）。
+- 两项任意一项留空：各馆完全不发统计，老师管理页也会写明“未配置”。
+- 仪表盘只读，只显示各馆每天交的计数/时长；不含病历、舌象、钱账、名字、城市、IP。
+- **仪表盘私钥不进 `.env`、不进仓库**。运营方在自己的浏览器打开 `DASHBOARD_URL` 时带上 `#dashboard=<私钥>` 一次；页面读完会把钥匙收进本浏览器 sessionStorage（关掉浏览器即失效），地址栏不再保留。没有钥匙时页面不显示任何数据。
+- 改完 `.env` 后重跑 `./quick-start.sh`（或 `docker compose --profile quick up -d --force-recreate web`）让页面按新变量重建。
+
+## 八、常见问题
 
 - **最后一行不是网址 / 报错“没读到应用隧道地址”**：Cloudflare 临时隧道会被限流（429）。等 1 分钟再跑 `./quick-start.sh`；脚本遇到 429 会自动退避重试。
 - **手机打不开网址**：电脑要保持开机、WSL 不要关；先在本机运行 `./verify.sh` 看第一项是否 PASS。
@@ -84,6 +92,6 @@ cd deploy/home
 - **想强制重建镜像**（改了代码以后）：`docker compose --profile quick build --no-cache relay gateway web`，再跑 `./quick-start.sh`。
 - **登记口令在哪**：`deploy/home/data/teacher-setup-code.txt`；只在本机，注册一次后仍然保留，别外传。
 
-## 八、下一步（现在不用做）
+## 九、下一步（现在不用做）
 
 固定域名（Cloudflare Zero Trust 命名隧道）与香港/东京服务器是内测稳定后的第二步，届时另开部署卡；本文与脚本只覆盖临时隧道自测。
