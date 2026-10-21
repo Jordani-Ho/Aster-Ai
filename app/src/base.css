@@ -1,0 +1,7 @@
+/* V2-13：手机底座。去掉浏览器默认 8px 外边距，主屏幕打开时不留白边。 */
+html, body, #root { margin: 0; padding: 0; }
+body {
+  min-height: 100dvh;
+  background: #f6f5ef;
+  -webkit-text-size-adjust: 100%;
+}

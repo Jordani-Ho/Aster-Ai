@@ -66,6 +66,12 @@ export function App() {
   const identityRef = useRef<Identity | null>(null)
   const stackRef = useRef<Wiring | null>(null)
 
+  // V2-13：启动即注册现有 sw.js（只管推送通知），“添加到主屏幕”不再依赖先开提醒。
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    void navigator.serviceWorker.register('/sw.js').catch(() => {})
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     void bootstrapIdentity().then(async session => {

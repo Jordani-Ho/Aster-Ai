@@ -32,3 +32,18 @@
 .sign-compare-options button { min-height: 36px; padding: 0 14px; font-size: 14px; border-radius: 999px; border: 1px solid #d0d0d0; background: #fff; color: #111; }
 .sign-compare-options button[aria-pressed='true'] { border-color: #15803d; background: #15803d; color: #fff; }
 .sign-compare-note { margin: 8px 0 0; font-size: 13px; color: #555; }
+
+/* V2-13：长病历分段折叠；手机上每段标题与按钮 ≥44px，输入框 16px 避免 iOS 聚焦放大。 */
+.sign-section { border: 1px solid var(--sign-line); border-radius: 12px; margin: 12px 0; background: #fff; overflow: hidden; }
+.sign-section > summary { min-height: 44px; display: flex; align-items: center; padding: 8px 12px; background: #faf9f6; cursor: pointer; }
+.sign-section > summary h2 { margin: 0; font-size: 15px; }
+.sign-section-body { padding: 2px 12px 10px; }
+.sign-section .sign-field { border: 0; border-top: 1px solid var(--sign-line); border-radius: 0; margin: 0; padding: 10px 0; background: transparent; }
+.sign-section .sign-field:first-child { border-top: 0; }
+.sign-fold-bar { border: 1px solid #d9dfd5; border-radius: 12px; background: #f5f8f3; padding: 10px 12px; margin: 12px 0; }
+.sign-fold-bar p { margin: 0 0 8px; font-size: 13px; color: #44584e; }
+.sign-fold-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sign-fold-actions button { min-height: 44px; padding: 0 14px; font-size: 15px; border-radius: 9px; border: 1px solid #cfc7b9; background: #fff; color: #234d40; cursor: pointer; }
+.sign-actions button, .sign-compare-options button { min-height: 44px; }
+.sign-editor textarea { font-size: 16px; }
+.sign-editor button { min-height: 44px; }

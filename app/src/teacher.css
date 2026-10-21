@@ -5,3 +5,11 @@
 .teacher-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(480px,100%);display:grid;grid-template-columns:repeat(4,1fr);padding:10px 8px calc(10px + env(safe-area-inset-bottom));box-sizing:border-box;background:#fffef9;border-top:1px solid #d4dbcf;z-index:20;gap:4px}.teacher-nav button{border:0;background:transparent}.teacher-nav button[aria-current=page]{background:#e2eee3;color:#174b37;font-weight:700}.teacher-shell .sign-page{padding-bottom:25px}.draft-card{background:white;border:1px solid #dce3d8;border-radius:14px;padding:12px}.draft-card .sign-field{border-radius:0;margin:0;border-bottom:1px solid #edf0e8;box-shadow:none}.draft-card h3{font-size:16px}.teacher-content .sign-editor textarea{margin:8px 0}.teacher-content .sign-foot{position:static}.teacher-content .sign-actions{margin-top:12px}
 
 .teacher-settings{padding:0 16px}.teacher-shell .in-person-page>footer{position:sticky;bottom:80px;z-index:10;background:#f6f5ef;padding:10px 0}.teacher-shell label{display:block;margin:10px 0}.teacher-shell .inbox-card>h2{margin-top:6px}
+
+/* V2-13 手机化：去掉白边后补安全区；输入框 16px 避免 iOS 聚焦自动放大；触控目标 ≥44px。 */
+.teacher-top{padding-top:calc(16px + env(safe-area-inset-top))}
+.teacher-shell input,.teacher-shell textarea,.teacher-shell select{font-size:16px}
+.teacher-shell summary{min-height:44px;display:flex;align-items:center;gap:6px}
+.teacher-shell .manage-block>summary{min-height:52px;font-weight:600}
+.teacher-shell button{min-height:44px}
+.teacher-shell .sign-page{padding-bottom:calc(25px + env(safe-area-inset-bottom))}

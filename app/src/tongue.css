@@ -9,10 +9,11 @@
 .tongue-frame figcaption { font-size: 12px; color: #6b6b6b; margin-top: 4px; text-align: center; }
 .tongue-frame-missing { font-size: 12px; color: #6b6b6b; padding: 8px; text-align: center; margin: 0; }
 .tongue-pair.expanded .tongue-frames { max-width: 640px; }
-.tongue-switch { display: flex; gap: 6px; margin: 4px 0 8px; }
-.tongue-switch button[aria-pressed="true"] { font-weight: 600; }
+.tongue-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+.tongue-switch button { min-height: 44px; padding: 0 12px; font-size: 15px; border: 1px solid #d0d0d0; border-radius: 999px; background: #fff; color: #111; }
+.tongue-switch button[aria-pressed="true"] { font-weight: 600; border-color: #15803d; background: #e7f7ec; }
 .tongue-legend { font-size: 12px; color: #6b6b6b; margin: 8px 0 4px; }
-.tongue-expand { margin: 2px 0 8px; }
+.tongue-expand { min-height: 44px; padding: 0 12px; font-size: 15px; border: 1px solid #d0d0d0; border-radius: 9px; background: #fff; color: #111; margin: 2px 0 8px; }
 .tongue-summary { margin: 6px 0; }
 .tongue-rows { list-style: none; padding: 0; margin: 6px 0 0; }
 .tongue-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0; }

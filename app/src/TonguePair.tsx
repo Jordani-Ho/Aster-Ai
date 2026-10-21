@@ -72,11 +72,12 @@ export function TonguePair({
   return <section className={expanded ? 'tongue-pair expanded' : 'tongue-pair'} aria-label="舌象对照">
     {title && <p className="tongue-title">{title}</p>}
     {colorNote && <p className="tongue-alert" role="status">{colorNote}</p>}
-    {expanded && <div className="tongue-switch" role="group" aria-label="放大对照切换">
+    {/* V2-13：手机上没地方“放大”，切换入口常显；并排看/只看一张随时可用。 */}
+    <div className="tongue-switch" role="group" aria-label="对照方式">
       <button type="button" aria-pressed={focus === 'both'} onClick={() => setFocus('both')}>并排看</button>
       <button type="button" aria-pressed={focus === 'crop'} onClick={() => setFocus('crop')}>只看裁剪图</button>
       <button type="button" aria-pressed={focus === 'figure'} onClick={() => setFocus('figure')}>只看示意图</button>
-    </div>}
+    </div>
     <div className="tongue-frames" style={focus === 'both' ? undefined : { gridTemplateColumns: '1fr' }}>
       {focus !== 'figure' && <figure className="tongue-frame">
         <div className="tongue-frame-box">
