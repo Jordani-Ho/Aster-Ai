@@ -9,13 +9,29 @@
 .tongue-frame figcaption { font-size: 12px; color: #6b6b6b; margin-top: 4px; text-align: center; }
 .tongue-frame-missing { font-size: 12px; color: #6b6b6b; padding: 8px; text-align: center; margin: 0; }
 .tongue-pair.expanded .tongue-frames { max-width: 640px; }
-.tongue-switch { display: flex; gap: 6px; margin: 4px 0 8px; }
-.tongue-switch button[aria-pressed="true"] { font-weight: 600; }
+.tongue-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+.tongue-switch button { min-height: 44px; padding: 0 12px; font-size: 15px; border: 1px solid #d0d0d0; border-radius: 999px; background: #fff; color: #111; }
+.tongue-switch button[aria-pressed="true"] { font-weight: 600; border-color: #15803d; background: #e7f7ec; }
 .tongue-legend { font-size: 12px; color: #6b6b6b; margin: 8px 0 4px; }
-.tongue-expand { margin: 2px 0 8px; }
+.tongue-expand { min-height: 44px; padding: 0 12px; font-size: 15px; border: 1px solid #d0d0d0; border-radius: 9px; background: #fff; color: #111; margin: 2px 0 8px; }
 .tongue-summary { margin: 6px 0; }
 .tongue-rows { list-style: none; padding: 0; margin: 6px 0 0; }
 .tongue-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0; }
+/* V2-13：老师逐项改值改成整行布局；控件 48px / 16px，长选项不撑破窄屏。 */
+.tongue-row-edit {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px;
+  padding: 12px 0; border-top: 1px solid #e7e3d9;
+}
+.tongue-row-edit:first-child { border-top: 0; padding-top: 2px; }
+.tongue-row-edit .tongue-row-label { width: auto; font-size: 15px; font-weight: 600; color: #333; overflow-wrap: anywhere; }
+.tongue-row-edit select {
+  width: 100%; max-width: 100%; min-height: 48px; box-sizing: border-box;
+  padding: 10px 12px; font-size: 16px; line-height: 1.4;
+  border: 1px solid #cfc7b9; border-radius: 10px; background: #fff; color: #111;
+  text-overflow: ellipsis;
+}
+.tongue-row-edit .tongue-row-pending,
+.tongue-row-edit .tongue-row-diff { font-size: 13px; overflow-wrap: anywhere; }
 .tongue-row-label { width: 3em; color: #444; }
 .tongue-row-value { min-width: 3em; }
 .tongue-row-pending { font-size: 12px; color: #8a5a00; }

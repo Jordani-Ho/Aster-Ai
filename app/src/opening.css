@@ -3,7 +3,7 @@
   box-sizing: border-box;
   max-width: 480px;
   margin: 0 auto;
-  padding: 20px 16px 40px;
+  padding: calc(20px + env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom));
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: #203b34;
   background: #f7f4ee;
@@ -34,6 +34,7 @@
 .opening-actions button:disabled { opacity: .6; cursor: default; }
 .opening-actions .opening-primary { border-color: #2f5d50; background: #2f5d50; color: #fff; font-weight: 600; }
 .opening-open { flex: 1; min-height: 52px; font-size: 18px; }
+.opening-actions .opening-skip { width: 100%; min-height: 44px; }
 .opening-error { color: #b91c1c; font-size: 14px; font-weight: 600; }
 .invite-ticket { margin: 10px 0 0; }
 .invite-ticket img { display: block; margin: 10px 0 0; border-radius: 8px; background: #fff; }

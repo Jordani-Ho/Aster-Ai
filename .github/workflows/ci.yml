@@ -89,6 +89,8 @@ jobs:
         run: node e2e/storefront.browser.mjs
       - name: V2-15 opening-guide browser integration
         run: node e2e/opening.browser.mjs
+      - name: V2-13 teacher-phone browser integration
+        run: node e2e/phone.browser.mjs
       - run: npm run test:e2e-env
       - run: npm run test:deployment
       - name: Build patched relay

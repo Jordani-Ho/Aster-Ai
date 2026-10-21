@@ -25,3 +25,9 @@
 
 .mini-trend { margin: 6px 0; }
 .mini-trend-line { margin: 2px 0; font-size: 12px; color: #555; letter-spacing: 1px; }
+
+/* V2-13：手机上返回/操作按钮 ≥44px，扣费输入 16px 避免 iOS 自动放大。 */
+.inbox-back { min-height: 44px; padding: 0 14px; font-size: 15px; }
+.inbox-actions button { min-height: 44px; }
+.inbox-charge input { font-size: 16px; width: 140px; }
+@media (max-width: 420px) { .inbox-charge { max-width: 100%; } }

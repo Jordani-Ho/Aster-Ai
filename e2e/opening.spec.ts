@@ -157,3 +157,21 @@ test('V2-15 老部署升级：已有学生/门面的老师直接进正常首页�
     expect(await page.getByText('第 1 步，共 5 步', { exact: true }).count()).toBe(0)
   } finally { await teacher.context.close() }
 })
+
+test('V2-13 建馆第 5 步“先进去看看”：不进邀请也能进工作台，管理里还能继续邀请', async ({ browser, request }) => {
+  await reset(request)
+  const teacher = await freshPage(browser)
+  const page = teacher.page
+  try {
+    await connectModel(page)
+    await openCommunity(page)
+    await expect(page.getByRole('heading', { name: '邀请第一位学生', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: '先进去看看', exact: true }).click()
+    await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
+    // 以后还能在“管理 → 邀请学生”继续邀请。
+    await page.getByRole('button', { name: '管理', exact: true }).click()
+    await page.locator('details.manage-block').filter({ hasText: /^邀请学生/ }).locator('summary').click()
+    await page.getByRole('button', { name: '生成邀请', exact: true }).click()
+    await expect(page.getByAltText('学生扫码即可加入')).toBeVisible()
+  } finally { await teacher.context.close() }
+})

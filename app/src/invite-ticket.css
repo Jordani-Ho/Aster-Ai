@@ -1,0 +1,14 @@
+/* V2-13 邀请二维码：手机上直接复制/保存/分享，按钮不小于 44px。 */
+.invite-ticket { margin: 10px 0 0; max-width: 100%; }
+.invite-ticket img { display: block; margin: 10px 0 0; max-width: 100%; height: auto; border-radius: 10px; background: #fff; }
+.invite-ticket-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; align-items: center; }
+.invite-ticket-actions button,
+.invite-ticket-actions .invite-save {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 8px 14px; font: inherit; font-size: 16px;
+  border: 1px solid #adc0b4; border-radius: 10px; background: #fff; color: #234d40;
+  cursor: pointer; text-decoration: none;
+}
+.invite-ticket-actions .invite-save { border-color: #2f5d50; background: #2f5d50; color: #fff; }
+.invite-ticket label { display: block; margin: 10px 0 0; font-size: 14px; }
+.invite-ticket input { display: block; width: 100%; margin-top: 4px; padding: 10px; font: inherit; font-size: 16px; border: 1px solid #cfc7b9; border-radius: 8px; background: #fff; box-sizing: border-box; }

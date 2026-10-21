@@ -231,6 +231,11 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
           </div>}
         </> : error ? null : <p className="opening-note">正在生成邀请…</p>}
         <p className="opening-note">学生加入后会自动连上社区；老师这边会自动进入首页。</p>
+        {/* V2-13：第一位学生迟迟没连上时，老师可以直接进工作台；以后还能在管理页邀请。 */}
+        <div className="opening-actions">
+          <button type="button" className="opening-skip" disabled={busy} onClick={() => void finish()}>先进去看看</button>
+        </div>
+        <p className="opening-note">不急的话，也可以以后在「管理 → 邀请学生」继续邀请。</p>
       </section>
     </>}
   </main>

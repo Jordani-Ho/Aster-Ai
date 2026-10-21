@@ -4,6 +4,7 @@ import {
   tongueFeatureShortText, tongueFeatureText, tongueFeatureValue, tongueNeedsCheck,
   tongueSummary, withTongueFeature, type FeatureKey, type TongueAbstract, type TongueCropState,
 } from '../../domain/tcm/tongue'
+import './tongue.css'
 
 // 固定图例，按方案原话；形状用法固定：实线/实色是候选，虚线是待定区域，灰底是颜色未定。
 const LEGEND = '实线／实色：候选特征；虚线：待定区域；灰底：颜色未定。'
@@ -72,11 +73,12 @@ export function TonguePair({
   return <section className={expanded ? 'tongue-pair expanded' : 'tongue-pair'} aria-label="舌象对照">
     {title && <p className="tongue-title">{title}</p>}
     {colorNote && <p className="tongue-alert" role="status">{colorNote}</p>}
-    {expanded && <div className="tongue-switch" role="group" aria-label="放大对照切换">
+    {/* V2-13：手机上没地方“放大”，切换入口常显；并排看/只看一张随时可用。 */}
+    <div className="tongue-switch" role="group" aria-label="对照方式">
       <button type="button" aria-pressed={focus === 'both'} onClick={() => setFocus('both')}>并排看</button>
       <button type="button" aria-pressed={focus === 'crop'} onClick={() => setFocus('crop')}>只看裁剪图</button>
       <button type="button" aria-pressed={focus === 'figure'} onClick={() => setFocus('figure')}>只看示意图</button>
-    </div>}
+    </div>
     <div className="tongue-frames" style={focus === 'both' ? undefined : { gridTemplateColumns: '1fr' }}>
       {focus !== 'figure' && <figure className="tongue-frame">
         <div className="tongue-frame-box">
@@ -119,7 +121,7 @@ function TongueRow({ record, candidate, featureKey, editable, onChange }: {
   const value = tongueFeatureText(record.features, featureKey)
   const changed = candidate ? tongueFeatureShortText(candidate.features, featureKey) !== tongueFeatureShortText(record.features, featureKey) : false
   const pending = tongueNeedsCheck(record, featureKey)
-  return <div className="tongue-row">
+  return <div className={'tongue-row' + (editable ? ' tongue-row-edit' : '')}>
     <span className="tongue-row-label">{FEATURE_LABELS[featureKey]}</span>
     {editable
       ? <select aria-label={'修改' + FEATURE_LABELS[featureKey]} value={tongueFeatureValue(record.features, featureKey)}
