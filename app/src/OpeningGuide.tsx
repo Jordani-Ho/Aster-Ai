@@ -194,7 +194,7 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
         <p>学生打开邀请会先看到这里。先填馆名和称呼，下面就是学生看到的样子。</p>
         <label>馆名<input value={draft.name} maxLength={STOREFRONT_LIMITS.name} placeholder="例如：阿慈养生馆" onChange={event => update({ name: event.target.value })} onBlur={saveDraft} /></label>
         <label>学生怎么称呼您<input value={draft.displayName} maxLength={STOREFRONT_LIMITS.displayName} placeholder="例如：阿慈" onChange={event => update({ displayName: event.target.value })} onBlur={saveDraft} /></label>
-        <label>主题<select value={draft.theme} onChange={event => { update({ theme: event.target.value as StorefrontTheme }); saveDraft() }}>
+        <label>主题<select aria-label="主题" value={draft.theme} onChange={event => { update({ theme: event.target.value as StorefrontTheme }); saveDraft() }}>
           {THEMES.map(theme => <option key={theme} value={theme}>{STOREFRONT_THEMES[theme].label}</option>)}
         </select></label>
         <label>短介绍（最多 {STOREFRONT_LIMITS.intro} 字）<textarea rows={3} maxLength={STOREFRONT_LIMITS.intro} value={draft.intro} placeholder="例如：一起照顾日常作息，慢慢练成适合自己的习惯。" onChange={event => update({ intro: event.target.value })} onBlur={saveDraft} /></label>

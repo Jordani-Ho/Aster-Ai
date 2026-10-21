@@ -101,7 +101,7 @@ test('V2-15 第一个邀请超过 1 小时：学生看到不可用，老师重�
         const { loadGuide, saveGuide } = await import(hallPath)
         const guide = await loadGuide(session.store)
         if (!guide.firstInvite) throw Error('没有第一位邀请')
-        await saveGuide(session.store, { step: 5, firstInvite: { ...guide.firstInvite, expiresAt: Date.now() - 1000 } })
+        await saveGuide(session.store, { step: 5, firstInvite: { ...guide.firstInvite, expiresAt: guide.firstInvite.createdAt + 1 } })
       } finally { session.store.close(); session.identity.privateKey.fill(0) }
     })
     await page.reload()
