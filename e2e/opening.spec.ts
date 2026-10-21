@@ -117,6 +117,7 @@ test('V2-15 第一个邀请超过 1 小时：学生看到不可用，老师重�
     } finally { await expiredContext.close() }
 
     await page.getByRole('button', { name: '重新生成', exact: true }).click()
+    await expect.poll(() => page.getByLabel('邀请链接', { exact: true }).inputValue()).not.toBe(invite)
     const next = await page.getByLabel('邀请链接', { exact: true }).inputValue()
     expect(next).not.toBe(invite)
     expect(invitationExpiry(next)).toBe(3600)

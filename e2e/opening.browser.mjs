@@ -52,6 +52,7 @@ try {
   await page.reload()
   await expect(page.getByText('邀请已过期', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '重新生成', exact: true }).click()
+  await expect.poll(() => page.getByLabel('邀请链接', { exact: true }).inputValue()).not.toBe(invite)
   const regenerated = await page.getByLabel('邀请链接', { exact: true }).inputValue()
   expect(regenerated).not.toBe(invite)
 
