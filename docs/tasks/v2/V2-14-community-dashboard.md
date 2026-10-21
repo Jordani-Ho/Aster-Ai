@@ -19,3 +19,8 @@
 1. 一座馆一天的统计信封里，用测试扫描找不到任何病历字段、公钥（除收发双方）、名字、城市。
 2. 老师关掉开关后，第二天不发任何统计。
 3. 仪表盘页上没有任何会改变馆的操作。
+
+## 完成记录
+
+- 合并请求：https://github.com/Jordani-Ho/Aster-Ai/pull/53
+- 结果：community.stats 一天一条（白名单计数/时长/错误类型，不读内容、不读本人感受）；管理页第 6 块“向社区分享运行统计”默认开、显示实际字段、关掉不发；/#dashboard 只读页无控件、无钥匙不显示数据；.env.example 与 compose 注入 DASHBOARD_PUBKEY/DASHBOARD_URL。55 文件 / 416 测试，phone.browser 与 phone.spec 覆盖仪表盘/统计开关。
