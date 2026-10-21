@@ -108,11 +108,20 @@ test('V2-15 第一个邀请超过 1 小时：学生看到不可用，老师重�
     await expect(page.getByText('邀请已过期', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: '重新生成', exact: true })).toBeVisible()
 
-    // 旧链接：学生打开只看到“邀请暂不可用”。
+    // 旧链接：另签一张已过期的邀请，学生打开只看到“邀请暂不可用”（本机保存的链接本身仍是 1 小时签名）。
+    const expiredLink = await page.evaluate(async gateway => {
+      const onboardingPath = '/src/core/onboarding/index.ts', storePath = '/src/core/store/index.ts'
+      const { makeInvite, inviteLink } = await import(onboardingPath)
+      const session = await (await import(storePath)).resumeStore()
+      try {
+        const now = Math.floor(Date.now() / 1000) - 7200
+        return inviteLink(location.href, makeInvite(session.identity, gateway + '/invite/redeem', now, 3600))
+      } finally { session.store.close(); session.identity.privateKey.fill(0) }
+    }, runtime.gatewayUrl)
     const expiredContext = await browser.newContext({ viewport: { width: 375, height: 812 }, baseURL: runtime.baseURL })
     try {
       const expiredPage = await expiredContext.newPage()
-      await expiredPage.goto(invite)
+      await expiredPage.goto(expiredLink)
       await expect(expiredPage.getByText('邀请暂不可用，请向老师要一个新链接', { exact: true })).toBeVisible()
     } finally { await expiredContext.close() }
 
