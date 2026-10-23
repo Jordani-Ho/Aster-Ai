@@ -12,6 +12,7 @@ test('first open asks role then model; invitation automatically registers studen
  expect(state.teachers).toContain(actors.teacher.pubkey);expect(state.books.some((v:any)=>v.value.teacher===actors.teacher.pubkey)).toBe(true)
  await student.getByRole('button',{name:'我',exact:true}).click();await settings(student);await expect(student.getByRole('region',{name:'我的老师'})).toBeVisible();expect(await student.locator('body').innerText()).not.toMatch(forbidden)
  await settings(people.teacher.page);expect(await people.teacher.page.locator('body').innerText()).not.toMatch(forbidden)
+ await people.teacher.page.getByRole('button',{name:'我的馆',exact:true}).click()
  await people.teacher.page.locator('summary').filter({hasText:/^邀请学生$/}).click();await people.teacher.page.getByRole('button',{name:'生成邀请',exact:true}).click();await expect(people.teacher.page.getByAltText('学生扫码即可加入')).toBeVisible()
 })
 test('expired and nonmember invitation links fail with plain explanation and no registration',async({people,browser})=>{
