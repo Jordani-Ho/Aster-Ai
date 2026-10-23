@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { ModelSettings } from './ModelSettings'
-import { InviteTicket } from './InviteTicket'
-import { StorefrontWelcome } from './StorefrontWelcome'
+import { toDataURL } from 'qrcode'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
-import type { PersonalModel, ModelGateway } from './core/llm/personal'
+import {
+  connectionError, normalizeModel, providers, savePersonalModel, testConnection,
+  type ModelGateway, type PersonalModel,
+} from './core/llm/personal'
 import { onboardingRequest } from './core/onboarding'
 import {
   DEFAULT_STOREFRONT, STOREFRONT_LIMITS, STOREFRONT_THEMES, THEMES,
@@ -16,10 +17,12 @@ import {
   loadGuide, loadHall, markHallOpened, saveGuide,
   type GuideInvite, type GuideState, type GuideStep,
 } from './core/hall'
-import './opening.css'
+import { StorefrontWelcome, VenueEmblem } from './StorefrontWelcome'
+import './newui.css'
+import './newui2.css'
 
-// V2-15 建馆引导：一屏一步；进度只存本机，关掉再打开从同一屏继续。
-// 开馆 = 本机状态 + 门面签发；第一位学生的邀请 1 小时内有效，学生加入后进入正常首页。
+// V2-17 建馆五步（05a–05e）：逻辑沿用 V2-15（断点续走、第一位学生 1 小时邀请、“先进去看看”），
+// 只换界面：模型 → 登记 → 起馆名 → 开馆 → 邀请第一位学生。
 export interface OpeningGuideProps {
   identity: Identity
   store: LocalStore
@@ -30,15 +33,41 @@ export interface OpeningGuideProps {
   onDone: () => void
 }
 
+const GUIDE_PROVIDERS = [
+  { id: 'deepseek', label: 'DeepSeek' },
+  { id: 'qwen', label: '千问' },
+  { id: 'other', label: '其他' },
+] as const
+type GuideProvider = (typeof GUIDE_PROVIDERS)[number]['id']
+
+function providerDefaults(id: GuideProvider) {
+  const found = providers.find(item => item.id === id) ?? providers.find(item => item.id === 'other')!
+  return { baseUrl: found.baseUrl, model: found.model, endpointId: found.endpointId }
+}
+
+function clockLabel(at: number): string {
+  const date = new Date(at)
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${hours}:${minutes}`
+}
+
 export function OpeningGuide({ identity, store, gateway, modelGateway, modelConfig, onModelSaved, onDone }: OpeningGuideProps) {
   const [loaded, setLoaded] = useState(false)
   const [step, setStep] = useState<GuideStep>(1)
   const [token, setToken] = useState('')
+  const [displayName, setDisplayName] = useState('')
   const [draft, setDraft] = useState<Storefront>(DEFAULT_STOREFRONT)
   const [invite, setInvite] = useState<GuideInvite | null>(null)
   const [expired, setExpired] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [provider, setProvider] = useState<GuideProvider>('deepseek')
+  const [baseUrl, setBaseUrl] = useState(providerDefaults('deepseek').baseUrl)
+  const [model, setModel] = useState(providerDefaults('deepseek').model)
+  const [apiKey, setApiKey] = useState('')
+  const [qr, setQr] = useState('')
+  const [copied, setCopied] = useState('')
   const finishing = useRef(false)
 
   // 读回进度：已开馆但还没送走第一位学生的，直接回到第 5 步；已完成的直接进首页。
@@ -52,6 +81,7 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
       setStep(next.step)
       setInvite(next.firstInvite)
       setDraft(savedDraft ?? DEFAULT_STOREFRONT)
+      setDisplayName(savedDraft?.displayName ?? '')
       setLoaded(true)
     })().catch(() => { if (active) { setError('建馆引导读取失败，请重试。'); setLoaded(true) } })
     return () => { active = false }
@@ -63,7 +93,6 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
     setStep(saved.step)
     setInvite(saved.firstInvite)
   }
-
   const go = async (nextStep: GuideStep) => {
     setError(''); setBusy(true)
     try { await persist(nextStep) } catch { setError('进度没有保存成功，请重试。') } finally { setBusy(false) }
@@ -76,7 +105,7 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, step, modelConfig])
 
-  // 第 5 步：开馆后立刻生成 1 小时邀请；过期后只提示，等老师点“重新生成”。
+  // 第 5 步：开馆后立刻生成 1 小时邀请；过期后只提示，等老师点“重新生成邀请”。
   useEffect(() => {
     if (!loaded || step !== 5) return
     let active = true
@@ -98,6 +127,13 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
     return () => clearInterval(timer)
   }, [step, invite])
 
+  useEffect(() => {
+    let active = true
+    if (step !== 5 || !invite || expired) { setQr(''); return }
+    void toDataURL(invite.link, { width: 480, errorCorrectionLevel: 'L' }).then(value => { if (active) setQr(value) }).catch(() => { if (active) setQr('') })
+    return () => { active = false }
+  }, [step, invite, expired])
+
   const finish = async () => {
     if (finishing.current) return
     finishing.current = true
@@ -115,14 +151,36 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, store])
 
-  if (!loaded) return <main className="opening-guide"><p>正在准备建馆…</p></main>
+  const connectModel = async () => {
+    if (busy) return
+    setBusy(true); setError('')
+    try {
+      const defaults = providerDefaults(provider)
+      const selected = providers.find(item => item.id === provider)
+      if (selected?.endpointId) throw new Error('请先把接入点 ID 填在“接口地址”里')
+      const config = normalizeModel({ provider, baseUrl: provider === 'other' || selected?.endpointId ? baseUrl : defaults.baseUrl, model, apiKey, testedAt: '' })
+      if (config.apiKey === '') throw new Error('先填模型账户密钥')
+      await testConnection(config, modelGateway)
+      const saved = { ...config, testedAt: new Date().toISOString() }
+      await savePersonalModel(store, saved)
+      onModelSaved(saved)
+      await persist(2)
+    } catch (cause) {
+      setError(cause instanceof Error && cause.message === '先填模型账户密钥' ? '先填模型账户密钥' : connectionError(cause))
+    } finally { setBusy(false) }
+  }
 
   const register = async () => {
-    if (busy || token.trim() === '') return
+    if (busy) return
+    const name = displayName.trim()
+    if (name === '') { setError('先填一个学生认得的称呼。'); return }
+    if (name.length > STOREFRONT_LIMITS.displayName) { setError(`称呼最多 ${STOREFRONT_LIMITS.displayName} 个字。`); return }
     setBusy(true); setError('')
     try {
       await onboardingRequest(identity, gateway + '/invite/seed', { token: token.trim() })
       setToken('')
+      await saveStorefrontDraft(store, { ...draft, displayName: name } as Storefront)
+      setDraft(current => ({ ...current, displayName: name }))
       await persist(3)
     } catch { setError('登记未成功，请核对口令，或联系部署者。') } finally { setBusy(false) }
   }
@@ -130,8 +188,8 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
   const saveDraft = () => { void saveStorefrontDraft(store, normalizeStorefront(draft) ?? draft).catch(() => {}) }
   const update = (patch: Partial<Storefront>) => { setDraft(current => ({ ...current, ...patch })); setError('') }
   const nextFromVenue = async () => {
-    const clean = normalizeStorefront(draft)
-    if (!clean || clean.name === '' || clean.displayName === '') { setError('先填馆名和学生怎么称呼您，学生才知道这是谁。'); return }
+    const clean = normalizeStorefront({ ...draft, displayName: displayName.trim() })
+    if (!clean || clean.name === '') { setError('先给馆起个名字。'); return }
     setBusy(true); setError('')
     try {
       await saveStorefrontDraft(store, clean)
@@ -141,7 +199,7 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
   }
 
   const openHall = async () => {
-    const clean = normalizeStorefront(draft)
+    const clean = normalizeStorefront({ ...draft, displayName: displayName.trim() })
     if (!clean || clean.name === '' || clean.displayName === '') { setError('门面还没填完整，请返回上一步。'); return }
     setBusy(true); setError('')
     try {
@@ -153,7 +211,7 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
   }
 
   const regenerate = async () => {
-    setBusy(true); setError('')
+    setBusy(true); setError(''); setCopied('')
     try {
       const next = await createFirstInvite({ identity, store, base: location.href, gateway })
       setInvite(next); setExpired(false)
@@ -161,82 +219,144 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
     } catch (cause) { setError(cause instanceof Error ? cause.message : '邀请暂时无法生成，请重试。') } finally { setBusy(false) }
   }
 
-  return <main className="opening-guide">
-    <header className="opening-head">
-      <p className="opening-eyebrow">知衡 · 建馆</p>
-      <p className="opening-progress" role="status">第 {step} 步，共 5 步</p>
-    </header>
-    {error && <p role="alert" className="opening-error">{error}</p>}
+  const copy = () => {
+    if (!invite) return
+    void navigator.clipboard?.writeText(invite.link).then(() => setCopied('邀请已复制，可以发给学生。')).catch(() => setCopied('请长按邀请链接复制。'))
+  }
 
-    {step === 1 && <section className="opening-step" aria-label="接入自己的模型">
-      <h1>接入自己的模型</h1>
-      <p>开馆后，起草病历、整理钱账都用您自己的模型账户。费用由自己的账户承担。</p>
-      {modelConfig === undefined ? <p>正在读取接入设置…</p> : <ModelSettings initial store={store} gateway={modelGateway} current={modelConfig} submitLabel="下一步" onSaved={model => { onModelSaved(model); void persist(2) }} />}
-    </section>}
+  if (!loaded) return <main className="op-page"><p className="nl-quiet">正在准备建馆…</p></main>
 
-    {step === 2 && <>
-      <section className="opening-step" aria-label="登记为社区老师">
-        <h1>登记为社区老师</h1>
-        <p>第一次建立社区时，输入部署电脑提供的一次性口令。登记后，这座馆才能邀请学生。</p>
-        <label>部署口令<input type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} /></label>
-        <p className="opening-note">口令在部署电脑上：deploy/home/data/teacher-setup-code.txt。</p>
-        {!gateway && <p role="alert" className="opening-error">还没有配置社区网关，暂时不能登记。</p>}
-      </section>
-      <div className="opening-actions">
-        <button disabled={busy} onClick={() => void go(1)}>返回</button>
-        <button className="opening-primary" disabled={busy || token.trim() === '' || !gateway} onClick={() => void register()}>登记为社区老师</button>
-      </div>
-    </>}
+  const stepBack = (next: GuideStep) => { setError(''); void go(next) }
+  const canBack = !busy && (step > 1 || step === 1)
+  const header = <header className="op-head">
+    {step > 1 && step !== 5 ? <button type="button" className="op-back" aria-label="返回上一步" disabled={!canBack} onClick={() => stepBack((step - 1) as GuideStep)}>‹</button> : <span className="op-back-placeholder" />}
+    <span className="op-step-label">建馆 · 第 {step} / 5 步</span>
+  </header>
+  const progress = <div className="op-progress" aria-hidden="true">{([1, 2, 3, 4, 5] as GuideStep[]).map(item => <span key={item} className={item <= step ? 'op-progress-seg done' : 'op-progress-seg'} />)}</div>
+  const errorLine = error && <p role="alert" className="nl-danger-strong op-error">{error}</p>
 
-    {step === 3 && <>
-      <section className="opening-step" aria-label="给馆起名">
-        <h1>给馆起名</h1>
-        <p>学生打开邀请会先看到这里。先填馆名和称呼，下面就是学生看到的样子。</p>
-        <label>馆名<input value={draft.name} maxLength={STOREFRONT_LIMITS.name} placeholder="例如：阿慈养生馆" onChange={event => update({ name: event.target.value })} onBlur={saveDraft} /></label>
-        <label>学生怎么称呼您<input value={draft.displayName} maxLength={STOREFRONT_LIMITS.displayName} placeholder="例如：阿慈" onChange={event => update({ displayName: event.target.value })} onBlur={saveDraft} /></label>
-        <label>主题<select aria-label="主题" value={draft.theme} onChange={event => { update({ theme: event.target.value as StorefrontTheme }); saveDraft() }}>
-          {THEMES.map(theme => <option key={theme} value={theme}>{STOREFRONT_THEMES[theme].label}</option>)}
-        </select></label>
-        <label>短介绍（最多 {STOREFRONT_LIMITS.intro} 字）<textarea rows={3} maxLength={STOREFRONT_LIMITS.intro} value={draft.intro} placeholder="例如：一起照顾日常作息，慢慢练成适合自己的习惯。" onChange={event => update({ intro: event.target.value })} onBlur={saveDraft} /></label>
-        <p className="opening-preview-label">学生看到的样子（预览）</p>
-        <div className="storefront-preview"><StorefrontWelcome storefront={draft} teacher={identity.publicKey} preview /></div>
-      </section>
-      <div className="opening-actions">
-        <button disabled={busy} onClick={() => void go(2)}>返回</button>
-        <button className="opening-primary" disabled={busy} onClick={() => void nextFromVenue()}>下一步</button>
-      </div>
-    </>}
-
-    {step === 4 && <>
-      <section className="opening-step" aria-label="开馆">
-        <h1>开馆</h1>
-        <p>点“开馆”后，这座馆就正式开张：门面会签名生效，接着邀请第一位学生。</p>
-        <p className="opening-venue">{draft.name || '还没有馆名'} · {draft.displayName || '还没有称呼'} · {STOREFRONT_THEMES[draft.theme].label}</p>
-        {draft.intro && <p className="opening-intro">{draft.intro}</p>}
-      </section>
-      <div className="opening-actions">
-        <button disabled={busy} onClick={() => void go(3)}>返回</button>
-        <button className="opening-primary opening-open" disabled={busy} onClick={() => void openHall()}>开馆</button>
-      </div>
-    </>}
-
-    {step === 5 && <>
-      <section className="opening-step" aria-label="邀请第一位学生">
-        <h1>邀请第一位学生</h1>
-        <p>开馆了。请第一位学生用另一部手机扫码，或打开这个链接。这个邀请 1 小时内有效。</p>
-        {invite ? <>
-          <InviteTicket link={invite.link} note={expired ? '邀请已过期' : `有效到 ${new Date(invite.expiresAt).toLocaleTimeString()}`} />
-          {expired && <div className="opening-actions">
-            <button className="opening-primary" disabled={busy} onClick={() => void regenerate()}>重新生成</button>
-          </div>}
-        </> : error ? null : <p className="opening-note">正在生成邀请…</p>}
-        <p className="opening-note">学生加入后会自动连上社区；老师这边会自动进入首页。</p>
-        {/* V2-13：第一位学生迟迟没连上时，老师可以直接进工作台；以后还能在管理页邀请。 */}
-        <div className="opening-actions">
-          <button type="button" className="opening-skip" disabled={busy} onClick={() => void finish()}>先进去看看</button>
+  if (step === 1) {
+    const selected = providers.find(item => item.id === provider)
+    return <main className="op-page">
+      {header}{progress}
+      {errorLine}
+      <section aria-label="接入自己的模型">
+        <p className="op-eyebrow">先认识您的智能体</p>
+        <h1 className="op-title">让它帮您打理馆</h1>
+        <p className="op-desc">接上您常用的模型。以后您说，<br />它替您整理；签字还是您自己来。</p>
+        <div className="op-card">
+          <div className="op-card-head"><h2>选择模型</h2><span className="op-chip-soft">可随时更换</span></div>
+          <div className="op-providers" role="group" aria-label="选择服务商">
+            {GUIDE_PROVIDERS.map(item => <button type="button" key={item.id} aria-pressed={provider === item.id} className="op-provider" onClick={() => { setProvider(item.id); const defaults = providerDefaults(item.id); setBaseUrl(defaults.baseUrl); setModel(defaults.model); setApiKey(''); setError('') }}>{item.label}</button>)}
+          </div>
+          <label>模型账户密钥<input type="password" autoComplete="off" disabled={busy} value={apiKey} placeholder="粘贴模型账户密钥" onChange={event => { setApiKey(event.target.value); setError('') }} /></label>
+          {provider === 'other' && <>
+            <label>接口地址<input disabled={busy} value={baseUrl} placeholder="https://…/v1" onChange={event => setBaseUrl(event.target.value)} /></label>
+            <label>模型名称<input disabled={busy} value={model} placeholder="模型名称" onChange={event => setModel(event.target.value)} /></label>
+          </>}
+          {selected?.docs && <p className="op-link-row"><a href={'/help/' + provider + '.html'} target="_blank" rel="noopener noreferrer">没有账户？查看接入方法 ›</a></p>}
         </div>
-        <p className="opening-note">不急的话，也可以以后在「管理 → 邀请学生」继续邀请。</p>
+        <div className="op-hint"><span className="op-hint-icon" aria-hidden="true"><VenueEmblem emblem="leaf" /></span><span>接入后，会先试一句话，<br />看看能不能正常回答。</span></div>
       </section>
-    </>}
+      <footer className="op-foot"><button type="button" className="nl-primary" disabled={busy} onClick={() => void connectModel()}>测试并继续</button></footer>
+    </main>
+  }
+
+  if (step === 2) {
+    return <main className="op-page">
+      {header}{progress}
+      {errorLine}
+      <section aria-label="登记为社区老师">
+        <p className="op-eyebrow">模型已接好 ✓</p>
+        <h1 className="op-title">先登记您这位老师</h1>
+        <p className="op-desc">填一个学生认得的称呼。<br />登记好，就可以起馆名了。</p>
+        <div className="op-card">
+          <label>学生怎么称呼您<input value={displayName} maxLength={STOREFRONT_LIMITS.displayName} disabled={busy} placeholder="例如：阿慈老师" onChange={event => { setDisplayName(event.target.value); setError('') }} /></label>
+          <label>登记口令<input type="password" autoComplete="off" disabled={busy} value={token} placeholder="粘贴收到的登记口令" onChange={event => setToken(event.target.value)} /></label>
+          <p className="op-card-note">用收到的登记口令完成登记。</p>
+        </div>
+        <div className="op-note-card">
+          <strong>只登记这一次</strong>
+          <p>以后打开就是您的馆。馆名、介绍，都可以在开馆后慢慢改。</p>
+        </div>
+        {!gateway && <p role="alert" className="nl-danger-strong">还没有配置社区网关，暂时不能登记。</p>}
+      </section>
+      <footer className="op-foot"><button type="button" className="nl-primary" disabled={busy || token.trim() === '' || displayName.trim() === '' || !gateway} onClick={() => void register()}>登记，下一步</button></footer>
+    </main>
+  }
+
+  if (step === 3) {
+    return <main className="op-page">
+      {header}{progress}
+      {errorLine}
+      <section aria-label="给馆起名">
+        <h1 className="op-title">给您的馆起个名</h1>
+        <p className="op-desc">学生打开邀请，先看到这里。</p>
+        <label>馆名<input value={draft.name} maxLength={STOREFRONT_LIMITS.name} placeholder="例如：阿慈养生馆" onChange={event => update({ name: event.target.value })} onBlur={saveDraft} /></label>
+        <label>一句介绍<textarea rows={3} maxLength={STOREFRONT_LIMITS.intro} value={draft.intro} placeholder="一起照顾日常作息，慢慢练成适合自己的习惯。" onChange={event => update({ intro: event.target.value })} onBlur={saveDraft} /></label>
+        <div className="op-color-row">
+          <span>馆的颜色</span>
+          <div className="op-colors" role="group" aria-label="馆的颜色">
+            {THEMES.map((theme: StorefrontTheme) => <button type="button" key={theme} aria-pressed={draft.theme === theme} className={'op-color op-theme-' + theme} onClick={() => { update({ theme }); saveDraft() }}><span aria-hidden="true" />{STOREFRONT_THEMES[theme].label}</button>)}
+          </div>
+        </div>
+        <p className="op-preview-label">学生看到的样子</p>
+        <div className="op-preview"><StorefrontWelcome storefront={{ ...draft, displayName: displayName || draft.displayName }} teacher={identity.publicKey} preview compact /></div>
+      </section>
+      <footer className="op-foot"><button type="button" className="nl-primary" disabled={busy} onClick={() => void nextFromVenue()}>就用这个名字</button></footer>
+    </main>
+  }
+
+  if (step === 4) {
+    return <main className="op-page">
+      {header}{progress}
+      {errorLine}
+      <section className="op-open" aria-label="开馆">
+        <span className="op-open-emblem"><VenueEmblem emblem={draft.emblem} /></span>
+        <p className="nl-quiet">您的馆准备好了</p>
+        <h1 className="op-title op-open-name">{draft.name || '还没有馆名'}</h1>
+        <p className="nl-quiet">{displayName || draft.displayName || '还没有称呼'}老师</p>
+        <div className="op-card op-open-card">
+          {draft.intro && <p>{draft.intro}</p>}
+          <ul className="op-checks">
+            <li>✓ 模型已接好</li>
+            <li>✓ 老师已登记</li>
+            <li>✓ 门面已备好</li>
+          </ul>
+        </div>
+        <p className="nl-quiet op-open-note">开馆后，就能邀请第一位学生。<br />名字和门面以后还可以改。</p>
+      </section>
+      <footer className="op-foot"><button type="button" className="nl-primary" disabled={busy} onClick={() => void openHall()}>开馆</button></footer>
+    </main>
+  }
+
+  return <main className="op-page">
+    {header}{progress}
+    {errorLine}
+    <section aria-label="邀请第一位学生">
+      <p className="op-eyebrow">{draft.name || '我的馆'} · 已开馆</p>
+      <h1 className="op-title">请第一位学生进来</h1>
+      <p className="op-desc">把邀请发给他，或让他当面扫码。</p>
+      <div className="op-card op-invite">
+        <p className="op-invite-title">{displayName || draft.displayName || '老师'}老师的邀请</p>
+        {qr ? <img className="op-qr" src={qr} width={240} height={240} alt="学生扫码即可加入" /> : expired ? <p className="op-qr-missing">邀请已过期</p> : <p className="nl-quiet">正在生成二维码…</p>}
+        <p className="nl-quiet">二维码示意</p>
+        {!expired && <span className="op-badge">这份邀请 1 小时有效</span>}
+        {invite && <p className="nl-quiet">{expired ? '邀请已过期' : `有效至今天 ${clockLabel(invite.expiresAt)}`}</p>}
+        {expired
+          ? <button type="button" className="nl-primary op-regenerate" disabled={busy} onClick={() => void regenerate()}>重新生成邀请</button>
+          : <button type="button" className="op-link-button" disabled={busy} onClick={() => void regenerate()}>重新生成邀请 ›</button>}
+        <details className="op-link-details"><summary>邀请链接</summary>
+          <label>邀请链接<input readOnly aria-label="邀请链接" value={invite?.link ?? ''} /></label>
+          <button type="button" onClick={copy}>复制邀请</button>
+          {copied && <p role="status">{copied}</p>}
+        </details>
+      </div>
+      <div className="op-hint"><span className="op-hint-icon" aria-hidden="true">👥</span><span>学生自己接入模型、照镜子、问诊。<br />您在“今天”等他就好。</span></div>
+    </section>
+    <footer className="op-foot">
+      <button type="button" className="nl-primary" disabled={busy || expired || !invite} onClick={copy}>复制邀请，发给学生</button>
+      <button type="button" className="op-link-button" disabled={busy} onClick={() => void finish()}>先进去看看</button>
+    </footer>
   </main>
 }

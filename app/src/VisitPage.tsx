@@ -13,7 +13,7 @@ import { loadTeacherTemplate } from './core/drafting/template'
 import { draftEncounter as draftWithModel } from './core/drafting'
 import { reviseEncounter } from './core/drafting/revise'
 import { recordSignedObservation, type ObservationNote } from './core/kangbi'
-import { contactsForAlert, detectRegion, type RedFlagResult } from './core/redflags'
+import type { RedFlagResult } from './core/redflags'
 import { formatHeavenTime, heavenNow, heavenStampOf, type HeavenTime } from './core/heaven'
 import { EXAM_KEYS, splitFourExams, type ExamKey } from './four-exams'
 import { confirmHeardExams, setExamDraft } from './review-model'
@@ -238,7 +238,6 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
         </details>}
         {redFlag && <section role="alert" className="nl-card">
           <h2>请尽快去医院</h2>
-          {redFlag.actions.includes('crisis') && contactsForAlert(redFlag, detectRegion(navigator.language)).filter(item => item.action === 'crisis').map(item => <p key={item.contact.number}>心理援助：{item.contact.number} · {item.contact.name}</p>)}
           <p className="nl-quiet">这段描述命中了本地急症红线{redFlag.matched.length > 0 ? '：' + redFlag.matched.join('、') : ''}。老师在现场，记录可以继续，由老师判断。</p>
           <button type="button" onClick={() => setRedFlag(null)}>我已知晓</button>
         </section>}

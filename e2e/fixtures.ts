@@ -12,30 +12,41 @@ export async function mockModel(context:BrowserContext){
  await context.route('https://model.synthetic.example/v1/chat/completions',fulfillFromModel)
 }
 export async function connectModel(page:Page){
- await expect(page.getByRole('heading',{name:'接入您的大模型',exact:true})).toBeVisible()
+ // V2-17：老师第一次进来是五步建馆引导（第 1 步接模型）；学生仍是“接入您的大模型”。
+ const guide=page.getByRole('heading',{name:'让它帮您打理馆',exact:true}),student=page.getByRole('heading',{name:'接入您的大模型',exact:true})
+ await expect(guide.or(student)).toBeVisible()
+ if(await guide.isVisible()){
+  await page.getByRole('button',{name:'其他',exact:true}).click()
+  await page.getByLabel('接口地址',{exact:true}).fill('https://model.synthetic.example/v1')
+  await page.getByLabel('模型名称',{exact:true}).fill('synthetic-fixture')
+  await page.getByLabel('模型账户密钥',{exact:true}).fill('SYNTHETIC_PERSONAL_TOKEN')
+  await page.getByRole('button',{name:'测试并继续',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'先登记您这位老师',exact:true})).toBeVisible()
+  return
+ }
+ await expect(student).toBeVisible()
  await page.getByLabel('选择服务商',{exact:true}).selectOption('other')
  await page.getByLabel('接口地址',{exact:true}).fill('https://model.synthetic.example/v1')
  await page.getByLabel('模型名称',{exact:true}).fill('synthetic-fixture')
  await page.getByLabel('接入凭证',{exact:true}).fill('SYNTHETIC_PERSONAL_TOKEN')
  await page.getByRole('button',{name:'测试连接',exact:true}).click()
  await expect(page.getByText('✓ 连接成功',{exact:true})).toBeVisible()
- // V2-15：老师第一次进来在建馆引导里；学生仍是“进入首页”。
- const next=page.getByRole('button',{name:'下一步',exact:true})
- if(await next.count())await next.click()
- else await page.getByRole('button',{name:'进入首页',exact:true}).click()
+ await page.getByRole('button',{name:'进入首页',exact:true}).click()
 }
-/** V2-15 建馆引导第 2–5 步：登记口令、给馆起名、开馆、返回第一位学生的 1 小时邀请。 */
+/** V2-17 建馆引导第 2–5 步：登记、给馆起名、开馆、返回第一位学生的 1 小时邀请。 */
 export async function openCommunity(page:Page):Promise<string>{
- await expect(page.getByRole('heading',{name:'登记为社区老师',exact:true})).toBeVisible()
- await page.getByLabel('部署口令',{exact:true}).fill('SYNTHETIC_DEPLOYMENT_TOKEN')
- await page.getByRole('button',{name:'登记为社区老师',exact:true}).click()
- await expect(page.getByRole('heading',{name:'给馆起名',exact:true})).toBeVisible()
- await page.getByLabel('馆名',{exact:true}).fill('合成养生馆')
+ await expect(page.getByRole('heading',{name:'先登记您这位老师',exact:true})).toBeVisible()
  await page.getByLabel('学生怎么称呼您',{exact:true}).fill('合成老师')
- await page.getByRole('button',{name:'下一步',exact:true}).click()
- await expect(page.getByRole('heading',{name:'开馆',exact:true})).toBeVisible()
+ await page.getByLabel('登记口令',{exact:true}).fill('SYNTHETIC_DEPLOYMENT_TOKEN')
+ await page.getByRole('button',{name:'登记，下一步',exact:true}).click()
+ await expect(page.getByRole('heading',{name:'给您的馆起个名',exact:true})).toBeVisible()
+ await page.getByLabel('馆名',{exact:true}).fill('合成养生馆')
+ await page.getByLabel('一句介绍',{exact:true}).fill('一起照顾日常作息。')
+ await page.getByRole('button',{name:'就用这个名字',exact:true}).click()
+ await expect(page.getByText('✓ 模型已接好',{exact:true})).toBeVisible()
  await page.getByRole('button',{name:'开馆',exact:true}).click()
- await expect(page.getByRole('heading',{name:'邀请第一位学生',exact:true})).toBeVisible()
+ await expect(page.getByRole('heading',{name:'请第一位学生进来',exact:true})).toBeVisible()
+ await page.locator('details.op-link-details > summary').click()
  const link=page.getByLabel('邀请链接',{exact:true})
  await expect(link).toBeVisible()
  return link.inputValue()

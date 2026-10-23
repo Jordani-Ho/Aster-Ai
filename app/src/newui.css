@@ -63,7 +63,7 @@
 .nl-status { font-size: 13px; color: var(--nl-muted); margin: 6px 0 0; }
 /* 面诊进行中 */
 .nl-flow-head { display: flex; align-items: center; gap: 10px; padding: calc(14px + env(safe-area-inset-top)) 16px 12px; border-bottom: 1px solid var(--nl-line); }
-.nl-back { border: 0 !important; background: transparent !important; font-size: 28px; line-height: 1; min-width: 44px; padding: 0 !important; }
+.nl-back { display: inline-flex; align-items: center; justify-content: center; border: 0 !important; background: transparent !important; font-size: 28px; line-height: 1; min-width: 44px; min-height: 44px; padding: 0 !important; }
 .nl-flow-head h1 { font-size: 24px; margin: 0; }
 .nl-flow-head small { display: block; font-size: 14px; color: var(--nl-muted); font-family: var(--nl-sans); }
 .nl-flow-body { padding: 14px 16px calc(96px + env(safe-area-inset-bottom)); }
@@ -159,6 +159,4 @@
 .nl-tabs button { flex: 1; min-height: 44px; }
 .nl-tabs button[aria-pressed=true] { background: var(--nl-soft); border-color: var(--nl-accent); color: var(--nl-accent-deep); font-weight: 600; }
 .nl-manage h1 { font-size: 32px; }
-.nl-manage .manage-block { background: var(--nl-card); border: 1px solid var(--nl-line); border-radius: 18px; padding: 12px 16px; margin: 10px 0; }
-.nl-manage .manage-block > summary { font-family: var(--nl-serif); font-size: 18px; }
 @media (max-width: 359px) { .nl-shell h1 { font-size: 34px; } .nl-exam { min-height: 100px; } }

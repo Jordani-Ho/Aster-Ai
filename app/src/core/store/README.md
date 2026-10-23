@@ -31,8 +31,6 @@ V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`
 
 | 集合 | 用途与字段 | 备注 |
 | :-- | :-- | :-- |
-| `redflag-log` | 用户点“我已知晓”关闭急症提示后的本地日志：`categoryId`、`action`、`at`、`region` | 不含对话原文 |
-| `redflag-notify` | “通知老师”的本地待发送记录：`categoryId`、`action`、`at` | 不含对话原文 |
 | `intake-draft` | 未发送的采集草稿（键为病历 id） | 确认发送或替换后删除 |
 | `intake-sent` | 已发送问诊包的本机副本 `{encounter,history,attachments}` | 附件字节在 `intake-attachments` |
 | `intake-outbox` | 中继未接通时暂存的问诊包 | `flushIntakeOutbox` 发送成功即删除 |
