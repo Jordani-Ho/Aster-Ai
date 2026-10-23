@@ -90,7 +90,7 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
     <StorefrontSettings identity={identity} store={store} llm={llm} send={send} compact />
   </SubPage>
   if (view === 'ledger') return <SubPage title="钱账明细" onBack={() => setView('hall')}>
-    <LedgerSettings managed flat identity={identity} store={store} ledger={ledger as never} />
+    <LedgerSettings managed flat identity={identity} store={store} ledger={ledger as never} llm={llm} />
   </SubPage>
   if (view === 'retention') return <SubPage title="记录保留多久" onBack={() => setView('settings')}>
     <RetentionSettings identity={identity} store={store} send={send} compact />

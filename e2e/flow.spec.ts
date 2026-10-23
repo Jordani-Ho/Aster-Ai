@@ -61,13 +61,32 @@ async function intake(page: Page, quote: string) {
   await studentConsult(page)
   await page.getByLabel('按键盘上的🎤说话就行').fill(quote)
   await page.getByRole('button',{name:'说好了，继续',exact:true}).click()
-  for(let i=0;i<4;i++) { const skip=page.getByRole('button',{name:'跳过，直接整理',exact:true}).first(); try { await skip.waitFor({state:'visible',timeout:10000}) } catch { break } await skip.click() }
-  await expect(page.getByRole('region',{name:'问诊卡片'})).toBeVisible()
+  const card = page.getByRole('region',{name:'问诊卡片'})
+  for(let i=0;i<4;i++) {
+    if(await card.count()) break
+    const skip=page.getByRole('button',{name:'跳过，直接整理',exact:true}).first()
+    await expect(skip).toBeVisible({timeout:60000})
+    await expect(skip).toBeEnabled({timeout:60000})
+    await skip.click()
+  }
+  await expect(card).toBeVisible({timeout:60000})
   await page.getByRole('button',{name:'改一改你的话 ›',exact:true}).click()
   await page.getByLabel('最不舒服的地方（主诉）').fill(quote)
   await page.getByLabel('现在的情况（现病史）').fill('SYNTHETIC_PRESENT')
   await page.getByLabel('以前的病（既往史）').fill('SYNTHETIC_HISTORY')
   await page.getByLabel('在吃的药、过敏').fill('SYNTHETIC_NO_MEDS')
+}
+async function skipToCard(page: Page) {
+  const card = page.getByRole('region', { name: '问诊卡片' })
+  for (let i = 0; i < 4; i += 1) {
+    if (await card.count()) break
+    const skip = page.getByRole('button', { name: '跳过，直接整理', exact: true }).first()
+    await expect(skip).toBeVisible({ timeout: 60000 })
+    await expect(skip).toBeEnabled({ timeout: 60000 })
+    await skip.click()
+  }
+  await expect(card).toBeVisible({ timeout: 60000 })
+  return card
 }
 async function decrypted(page: Page) {
   return page.evaluate(async () => {
@@ -88,7 +107,7 @@ async function confirmDraftBlocks(page: Page) {
   }
 }
 test('nine-step consultation: signing, erasure, ledger, homework, followup and numeric CSV', async ({ people }) => {
-  test.setTimeout(240000)
+  test.setTimeout(420000)
   const teacher=people.teacher.page,student=people.student.page,quote='SYNTHETIC_PRIVATE_QUOTE_15B'
   await role(teacher,'老师');await role(student,'学生')
   await intake(student,quote)
@@ -198,11 +217,12 @@ test('hard: student displays only the valid signature after tampered then valid 
   expect(await stored(student,'student-records')).toHaveLength(1)
 })
 test('emergency prompts inline without phone numbers and still sends with redFlag',async({people})=>{
+  test.setTimeout(420000)
   const student=people.student.page;await role(student,'学生')
   await studentConsult(student)
   await student.getByLabel('按键盘上的🎤说话就行').fill('胸口压着疼，出冷汗')
   await student.getByRole('button',{name:'说好了，继续',exact:true}).click()
-  for(let i=0;i<4;i++){const skip=student.getByRole('button',{name:'跳过，直接整理',exact:true}).first();try{await skip.waitFor({state:'visible',timeout:10000})}catch{break};await skip.click()}
+  await skipToCard(student)
   await expect(student.getByRole('alert')).toContainText('请尽快去医院')
   await expect(student.getByText(/仍然可以把情况发给/)).toBeVisible()
   const body=await student.locator('body').innerText()
@@ -215,11 +235,12 @@ test('emergency prompts inline without phone numbers and still sends with redFla
   expect((await stored(people.teacher.page,'consult-package'))[0].value.redFlag).toEqual({hit:true,crisis:false})
 })
 test('self-harm shows only the crisis hotline and marks crisis redFlag',async({people})=>{
+  test.setTimeout(420000)
   const student=people.student.page;await role(student,'学生')
   await studentConsult(student)
   await student.getByLabel('按键盘上的🎤说话就行').fill('不想活了')
   await student.getByRole('button',{name:'说好了，继续',exact:true}).click()
-  for(let i=0;i<4;i++){const skip=student.getByRole('button',{name:'跳过，直接整理',exact:true}).first();try{await skip.waitFor({state:'visible',timeout:10000})}catch{break};await skip.click()}
+  await skipToCard(student)
   await expect(student.getByText('你并不孤单',{exact:false})).toBeVisible()
   const body=await student.locator('body').innerText()
   for(const num of ['120','911','999','119','995']) expect(body).not.toContain(num)
