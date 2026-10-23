@@ -19,3 +19,14 @@
 3. 一份老师改过方子、一份原样签字的医案：检索只给前者；后者只计入认可数。
 4. 模拟模型返回额度超限：自动减材料重试成功；再模拟一次仍超：只用问诊包起草并带提示。
 5. CI 三项全过。
+
+## 完成记录（2026-10-23）
+
+- PR：https://github.com/Jordani-Ho/Aster-Ai/pull/58（分支 `task/V2-19-one-task-page`，头 commit `b60f1c5`，未合并）。
+- 一事一议：五个动作仍各自一次调用；`draftEncounter(pkg, { template, prior, cases }, llm, options?)` 只接收本次材料、返回 `{ encounter, note }`，每次新建 system+user 两条消息，不带上次对话；README 写明，`one-shot.test.ts` 守住。
+- 只向签字学：`teacherCases(store, { forStudent })` 只取老师签过字且 `judgment`/`plan` 有老师亲手内容（`source === 'teacher' && note !== 'ai_accepted'`）的病历，同一 encounter 取最新版本，带改方 `changeReason` 与处方；原样确认只计 `teacherCaseStats`（不接界面）；当前学生自己的病历不进医案。口径来源 `docs/schemas/encounter.md` 第 3 节。
+- 额度上限：`domain/tcm/agent-budget.json`（`maxRequestTokens: 16000` = 常见 32k 上下文一半）+ `drafting/budget.ts` 估算（汉字 1 token、其他 1/3，向上取整）+ `drafting/materials.ts` 裁剪：旧病历从最早减 → 相似医案；问诊包、模板、提示词永远不减。旧病历材料为新增（此前根本没进请求）：同一 encounter 最新版、新→旧。
+- 减了要说：核对页显示「这次的材料：…」（`SignReview.materialNote`），文案含「旧病历只带了最近 N 次」「这次没参考相似医案」等。
+- 额度超限：`core/llm` 新增 `LlmRequestError.status` 与 `isQuotaExceeded`（只认 402/429、不读回复正文）；起草三段降级（上限减半重试 → 只剩问诊包+模板 → 固定文案回退），不带上游原文。改稿/拆四诊/方案/记账没有可减材料，不做额度重试。
+- 已知局限：让智能体“按意见改稿”后只点“就这样”的字段最终也是 `ai_accepted`，会算原样确认、不进医案；要学这类需另存修改记录（B 类 schema），本卡不做。旧病历来源只用老师本机 `teacher-records`，暂不解析问诊包 `pkg.history`。
+- 验证：`app` 58 文件 / 423 测试全过；`tsc --noEmit`、`vite build`、`typecheck:e2e` 通过；浏览器脚本 phone/opening/storefront/abstractor/money 全 PASS；本机真实中继 e2e 28/28 通过；CI 见 PR 检查项。
