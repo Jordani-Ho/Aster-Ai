@@ -67,6 +67,9 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
     let active = true
     void (async () => {
       try {
+        // 试点指标：一次问诊一个键；签字后按这个键保存并让老师评分。
+        startedAt.current = Date.now()
+        metricKey.current = crypto.randomUUID()
         const state = await consultReadiness(store, consult.encounter.id)
         if (active) setReadiness(state)
         if (!state.ready) { setStatus('附件还在路上，到齐后才能起草。'); return }

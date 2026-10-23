@@ -25,6 +25,13 @@ async function backToToday(page:Page){
  for(let guard=0;guard<4;guard+=1){const back=page.locator('.nl-back');if(await back.count()===0)break;await back.first().click();await page.waitForTimeout(120)}
  await expect(page.getByRole('heading',{name:'今天',exact:true})).toBeVisible()
 }
+// V2-16：学生首页的“每日建议”收在折叠里，先展开再断言。
+async function openAdvice(page:Page){
+ const summary=page.getByText('今天的完整建议',{exact:true})
+ if(await summary.count()===0)return
+ const details=summary.locator('..')
+ if(await details.getAttribute('open')===null)await summary.click()
+}
 test('M1-20 four pages: urgent first, three taps to sign, revision stays draft, four 375px screenshots',async({people})=>{
  const teacher=people.teacher.page,student=people.student.page
  await consultations(student)
@@ -100,12 +107,13 @@ test('M1-20 signed care plan reaches student mirror next day with fixed browser 
  await teacher.clock.install({time:fixed})
  await student.clock.install({time:fixed})
  // Wait for the initial cache write before preparing this concurrency case.
+ await openAdvice(student)
  await expect(student.getByRole('region',{name:'每日建议'})).toContainText('SYNTHETIC_DAILY')
  let dailyCalls=0;student.on('request',req=>{if(req.url().includes('/chat/completions')&&req.postData()?.includes('学生每日镜子建议'))dailyCalls++})
  await student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{for(const row of await s.store.list('mirror'))await s.store.delete('mirror',row.key)}finally{s.store.close();s.identity.privateKey.fill(0)};window.dispatchEvent(new Event('aster:data-changed'));window.dispatchEvent(new Event('aster:data-changed'))})
  await expect.poll(()=>student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return (await s.store.list('mirror')).length}finally{s.store.close();s.identity.privateKey.fill(0)}})).toBe(1)
  expect(dailyCalls).toBe(1)
- await student.reload();await expect(student.getByRole('region',{name:'每日建议'})).toContainText('SYNTHETIC_DAILY')
+ await student.reload();await openAdvice(student);await expect(student.getByRole('region',{name:'每日建议'})).toContainText('SYNTHETIC_DAILY')
  expect(dailyCalls).toBe(1)
  await consultations(student)
  await teacher.getByRole('button',{name:/胸痛伴出汗/}).click()
@@ -122,10 +130,12 @@ test('M1-20 signed care plan reaches student mirror next day with fixed browser 
  await expect(teacher.getByText('调养方案已签发，学生明天的建议会参考它。',{exact:true})).toBeVisible()
  expect(calls).toBe(0)
  await expect.poll(async()=>(await plans()).length).toBe(1)
+ await openAdvice(student)
  await expect(student.getByRole('region',{name:'每日建议'})).toContainText('SYNTHETIC_DAILY')
  await expect(student.getByRole('region',{name:'每日建议'})).not.toContainText('SYNTHETIC_PLAN_POINT')
  await student.clock.setSystemTime(nextDay)
  await student.reload()
+ await openAdvice(student)
  await expect(student.getByRole('region',{name:'每日建议'})).toContainText('SYNTHETIC_PLAN_POINT')
  // 老师自己的方案：同一套签字路径，只是收件人是自己；放在“我的馆 → 我的镜子”。
  await backToToday(teacher)
