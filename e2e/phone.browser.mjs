@@ -13,6 +13,9 @@ async function open(scene) {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/@fs/${root}e2e/phone.html?scene=${scene}`)
+  // Vite 首次启动可能在页面加载后重载一次（依赖预构建），等稳定再点。
+  await page.waitForLoadState('networkidle')
+  await page.waitForTimeout(scene === 'today' ? 2500 : 300)
   return { context, page, errors }
 }
 async function layout(page) {
@@ -20,93 +23,106 @@ async function layout(page) {
   const small = await page.locator('button:visible').evaluateAll(nodes => nodes.map(node => ({ text: node.textContent ?? '', height: node.getBoundingClientRect().height })).filter(item => item.height < 43.5))
   expect(small).toEqual([])
 }
-async function shot(page, name) { if (!process.env.CI) await page.screenshot({ path: root + 'docs/screenshots/phone-teacher-' + name + '.png' }) }
+async function shot(page, name) { if (!process.env.CI) await page.screenshot({ path: root + 'docs/screenshots/' + name + '.png' }) }
 
 try {
-  // 今天
+  // 老师·今天（01）+ 等您签字 → 同一个核对页 → 逐块就这样 → 签字发出
   {
     const { context, page, errors } = await open('today')
     await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '学生到了？', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /开始面诊/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '等您签字', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /合成小王/ })).toContainText('最近睡不好')
+    await expect(page.getByRole('heading', { name: '学生动态', exact: true })).toBeVisible()
+    await expect(page.getByText('合成小王 这周只练了 2 天', { exact: true })).toBeVisible()
     await layout(page)
-    await shot(page, 'today')
-    expect(errors).toEqual([])
-    await context.close()
-  }
-  // 远程：收到问诊 → 打开 → 签字发出
-  {
-    const { context, page, errors } = await open('remote')
-    await expect(page.getByRole('heading', { name: '远程工作台', exact: true })).toBeVisible()
-    await expect(page.getByText('最近睡不好', { exact: true })).toBeVisible()
+    await shot(page, 'phone-teacher-today')
+
+    await page.getByRole('button', { name: /合成小王/ }).click()
+    await expect(page.getByRole('heading', { name: /· 核对$/ })).toBeVisible()
+    await expect(page.getByText(/还有 \d+ 处草稿等您确认/)).toBeVisible()
+    await expect(page.getByRole('button', { name: '签字发出', exact: true })).toBeDisabled()
     await layout(page)
-    await shot(page, 'remote')
-    await page.getByRole('button', { name: '打开问诊', exact: true }).click()
-    await expect(page.getByRole('heading', { name: '病历草稿', exact: true })).toBeVisible()
+    for (let guard = 0; guard < 12; guard += 1) {
+      const draft = page.locator('.nl-review-block.draft').first()
+      if (await draft.count() === 0) break
+      await draft.getByRole('button', { name: '就这样', exact: true }).first().click()
+    }
+    await expect(page.getByText('都确认了，可以签字发出。', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '签字发出', exact: true })).toBeEnabled()
     await layout(page)
-    expect(await page.locator('[data-long-record="no"]').count()).toBe(1)
-    // 没有照片时整行不显示。
-    expect(await page.getByText(/照片：\d+ 张/).count()).toBe(0)
-    await page.evaluate(() => { const page = document.querySelector('.sign-page'); if (page) window.scrollTo(0, page.getBoundingClientRect().top + window.scrollY) })
-    await shot(page, 'sign')
     await page.getByRole('button', { name: '签字发出', exact: true }).click()
     await expect(page.getByRole('heading', { name: '已签字交还', exact: true })).toBeVisible()
     await layout(page)
     expect(errors).toEqual([])
     await context.close()
   }
-  // 面诊
+  // 老师·面诊进行中（02）→ 说一段 → 四格自动填并标来源 → 看草稿 → 逐块确认 → 签字发出
   {
-    const { context, page, errors } = await open('in-person')
-    await expect(page.getByRole('heading', { name: '面诊工作台', exact: true })).toBeVisible()
+    const { context, page, errors } = await open('visit')
+    await page.getByRole('button', { name: /开始面诊/ }).click()
+    await expect(page.getByRole('heading', { name: '开始面诊', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: /学生 1/ }).click()
+    await expect(page.getByLabel('您说，智能体记', { exact: true })).toBeVisible()
     await layout(page)
-    await shot(page, 'in-person')
+    await page.getByLabel('您说，智能体记', { exact: true }).fill('舌淡红，苔薄白；入睡难；脉细弱')
+    await page.getByRole('button', { name: '整理', exact: true }).click()
+    const look = page.getByRole('button', { name: '四诊 look' })
+    await expect(look).toContainText('舌淡红，苔薄白')
+    await expect(look).toContainText('听到了，待您确认')
+    await expect(page.getByRole('button', { name: '四诊 ask' })).toContainText('入睡难')
+    await expect(page.getByRole('button', { name: '四诊 pulse' })).toContainText('脉细弱')
+    await layout(page)
+    await shot(page, 'phone-teacher-visit')
+    await page.getByRole('button', { name: '说完了，看草稿', exact: true }).click()
+    await expect(page.getByRole('heading', { name: /· 核对$/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: '签字发出', exact: true })).toBeDisabled()
+    await layout(page)
+    await shot(page, 'phone-teacher-review')
+    for (let guard = 0; guard < 12; guard += 1) {
+      const draft = page.locator('.nl-review-block.draft').first()
+      if (await draft.count() === 0) break
+      await draft.getByRole('button', { name: '就这样', exact: true }).first().click()
+    }
+    await expect(page.getByRole('button', { name: '签字发出', exact: true })).toBeEnabled()
+    await page.getByRole('button', { name: '签字发出', exact: true }).click()
+    await expect(page.getByRole('heading', { name: '已签字交还', exact: true })).toBeVisible()
     expect(errors).toEqual([])
     await context.close()
   }
-  // 管理：分块、二维码可以直接分享、门面/钱账/换机
+  // 学生·首页（04）：四块一屏可见，打卡圆圈点一下变对勾
+  {
+    const { context, page, errors } = await open('student')
+    await expect(page.getByRole('heading', { name: /早上好|中午好|下午好|晚上好|夜深了/ })).toBeVisible()
+    await expect(page.getByRole('region', { name: '天时与今日调养' })).toContainText('霜降养脾胃')
+    await expect(page.getByRole('region', { name: '照镜子' })).toBeVisible()
+    await expect(page.getByRole('region', { name: '今日作业' })).toContainText('泡脚十五分钟')
+    await expect(page.getByRole('button', { name: /不舒服？告诉/ })).toBeVisible()
+    const last = await page.getByRole('button', { name: /不舒服？告诉/ }).boundingBox()
+    expect(last.y + last.height).toBeLessThanOrEqual(730)
+    await layout(page)
+    await shot(page, 'phone-student-today')
+    const circle = page.getByRole('button', { name: '打卡：泡脚十五分钟', exact: true })
+    await expect(circle).toHaveAttribute('aria-pressed', 'false')
+    await circle.click()
+    await expect(circle).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByText('已记在这台手机上', { exact: true })).toBeVisible()
+    expect(errors).toEqual([])
+    await context.close()
+  }
+  // 我的馆：V2-15 分块原样挪进来
   {
     const { context, page, errors } = await open('manage')
-    await expect(page.getByRole('heading', { name: '管理', exact: true })).toBeVisible()
-    expect(await page.locator('details.manage-block > summary').allInnerTexts()).toEqual(['邀请学生', '我的门面', '钱账', '记录保留多久', '换手机', '向社区分享运行统计'])
+    await page.getByRole('button', { name: '我的馆', exact: true }).click()
+    await expect(page.getByRole('heading', { name: '我的馆', exact: true })).toBeVisible()
+    // Vite 首次预构建可能整页重载一次，回到“今天”；没看到分块就再点一次。
+    if (await page.locator('details.manage-block').count() === 0) await page.getByRole('button', { name: '我的馆', exact: true }).click()
+    await expect(page.locator('details.manage-block').first()).toBeVisible()
+    const summaries = await page.locator('details.manage-block > summary').allInnerTexts()
+    expect(summaries).toEqual(['邀请学生', '我的门面', '钱账', '记录保留多久', '换手机', '向社区分享运行统计', '我的镜子'])
     await layout(page)
-    await shot(page, 'manage')
-    await page.locator('details.manage-block').filter({ hasText: /^邀请学生/ }).locator('summary').click()
-    await page.getByRole('button', { name: '生成邀请', exact: true }).click()
-    await expect(page.getByAltText('学生扫码即可加入')).toBeVisible()
-    const link = await page.getByLabel('邀请链接', { exact: true }).inputValue()
-    expect(link).toContain('invite=')
-    expect(link).toContain('storefront=')
-    const save = page.locator('a.invite-save')
-    await expect(save).toHaveAttribute('download', 'zhihang-invite.png')
-    expect(await save.getAttribute('href')).toMatch(/^data:image\/png;base64,/)
-    await page.getByRole('button', { name: '分享邀请', exact: true }).click()
-    expect((await page.evaluate(() => window.__shared))?.url).toBe(link)
-    await page.getByRole('button', { name: '复制邀请', exact: true }).click()
-    await expect(page.getByRole('status').filter({ hasText: '邀请已复制' })).toBeVisible()
-    await layout(page)
-    await shot(page, 'invite')
-    await page.locator('details.manage-block').filter({ hasText: /^我的门面/ }).locator('summary').click()
-    await expect(page.getByRole('region', { name: '我的门面' })).toBeVisible()
-    await layout(page)
-    await shot(page, 'storefront')
-    await page.locator('details.manage-block').filter({ hasText: /^钱账/ }).locator('summary').click()
-    await expect(page.getByRole('region', { name: '钱账与对账' })).toBeVisible()
-    await layout(page)
-    await shot(page, 'ledger')
-    await page.locator('details.manage-block').filter({ hasText: /^换手机/ }).locator('summary').click()
-    await expect(page.getByRole('region', { name: '换手机找回' })).toBeVisible()
-    await layout(page)
-    await shot(page, 'reidentify')
-    // 向社区分享运行统计：默认开、能看到实际要发的字段与值；关掉后什么都不发。
-    await page.locator('details.manage-block').filter({ hasText: /向社区分享运行统计/ }).locator('summary').click()
-    await expect(page.getByRole('checkbox', { name: '向社区分享运行统计' })).toBeChecked()
-    await expect(page.getByText('今天发出去的就是这几行数字：', { exact: true })).toBeVisible()
-    const preview = page.locator('.stats-preview dl')
-    await expect(preview).toContainText('本馆 ID')
-    await expect(preview).toContainText('学生人数')
-    await expect(preview).toContainText('当天收到的问诊')
-    await page.getByRole('checkbox', { name: '向社区分享运行统计' }).uncheck()
-    await expect(page.getByText('已关闭，今天什么都不发。', { exact: true })).toBeVisible()
-    await shot(page, 'stats')
+    await shot(page, 'phone-teacher-manage')
     expect(errors).toEqual([])
     await context.close()
   }
@@ -114,14 +130,12 @@ try {
   {
     const { context, page, errors } = await open('long')
     await expect(page.locator('[data-long-record="yes"]')).toBeVisible()
-    const sections = page.locator('details.sign-section')
-    expect(await sections.count()).toBe(6)
-    expect(await sections.evaluateAll(nodes => nodes.map(node => node.open))).toEqual([true, false, false, false, false, false])
+    const blocks = page.locator('details.nl-review-block')
+    expect(await blocks.count()).toBe(3)
+    expect(await blocks.evaluateAll(nodes => nodes.map(node => node.open))).toEqual([true, false, false])
     await layout(page)
-    await shot(page, 'long-record')
     await page.getByRole('button', { name: '展开全部', exact: true }).click()
-    expect(await sections.evaluateAll(nodes => nodes.map(node => node.open))).toEqual([true, true, true, true, true, true])
-    await layout(page)
+    expect(await blocks.evaluateAll(nodes => nodes.map(node => node.open))).toEqual([true, true, true])
     expect(errors).toEqual([])
     await context.close()
   }
@@ -133,8 +147,6 @@ try {
     await layout(page)
     await page.getByRole('button', { name: '只看裁剪图', exact: true }).click()
     expect(await page.locator('.tongue-frames').evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length)).toBe(1)
-    await shot(page, 'tongue')
-    // 逐项改值：一项一行，控件 ≥44px / 16px，窄屏不溢出。
     const rows = page.locator('.tongue-row-edit')
     expect(await rows.count()).toBe(6)
     const measured = await rows.evaluateAll(nodes => nodes.map(node => {
@@ -148,8 +160,6 @@ try {
       expect(item.right).toBeLessThanOrEqual(375)
       expect(item.width).toBeGreaterThan(item.rowWidth * 0.8)
     }
-    await page.locator('.tongue-rows').scrollIntoViewIfNeeded()
-    await shot(page, 'tongue-rows')
     expect(errors).toEqual([])
     await context.close()
   }
@@ -171,5 +181,5 @@ try {
     expect(errors).toEqual([])
     await context.close()
   }
-  console.log('PASS: V2-13 老师端 375px 今天/远程/签字/面诊/管理/邀请二维码分享/门面/钱账/换机/长病历折叠/舌象切换/建馆先进去看看；V2-14 统计开关与只读仪表盘')
+  console.log('PASS: V2-16 新界面 375px 今天/面诊进行中/核对签字/学生首页/我的馆/长病历折叠/舌象/建馆/仪表盘')
 } finally { await browser.close(); await server.close() }

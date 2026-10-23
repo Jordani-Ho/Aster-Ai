@@ -14,14 +14,14 @@
 - 老师端完整签名病历（V2-05 第 0 步）：签字发送成功后把整份签名事件存进 `teacher-records`（见 `core/records/README.md`），老师端不再只留索引、也不再写 `case-book`/`signed-encounters`；学生索引、起草时的医案检索、改方的 `previousOf`、康币扣费的 `recordHash` 都从这一个集合读，`recordHash` 就是签名事件 id。
 - 签名模块及其依赖不导入 `core/llm`（测试检查），签字路径里不存在模型调用。
 - 老师端本地集合：`teacher-records`（完整医案）、`teacher-students`（认得的学生的公钥名单）、`consult-package`、`attachments`、`in-person-draft`、`teacher-fingerprint`（改稿习惯摘要），登记在 `app/src/core/store/README.md`。
-- 验收测试：`app/src/core/record/record.test.ts`（12 项，合成身份与合成病历）。界面 `app/src/SignEncounterPage.tsx` 用整张卡片及来源标记展示草稿；真人按“签字发出”时由纯函数 acceptDraftForSigning 统一确认 ai_draft（含作业与结果），然后才签字；改稿阶段不确认来源，交还失败可重发；截图 `docs/screenshots/sign-encounter-375.png`。
+- 验收测试：`app/src/core/record/record.test.ts`（12 项，合成身份与合成病历）。界面 `app/src/SignReview.tsx` 把病历拆成判断/方子/作业/医嘱四块（四诊有草稿时多一块“四诊”），草稿是虚线黄框，老师逐块“改一改/就这样”；全部确认后“签字发出”才可点，再由纯函数 acceptDraftForSigning 统一确认 ai_draft（含作业与结果）后签字。`review-model.ts` 的纯逻辑（分块/逐块确认/改方差异）有单测。改稿阶段不确认来源，交还失败可重发；截图 `docs/screenshots/phone-teacher-review.png`。
 
 ## M1-12 面诊记录
 
 - `in-person.ts`：老师端新建 `kind: 'in_person'` 病历（`startInPersonEncounter`）；`recordIntakeField` 由老师代录 intake，非空项来源为 `teacher`、`note` 为 `in_person`，每次录入都过 `core/redflags` 的本地急症红线，命中只提示“请立即安排就医”不阻断（老师在现场判断）。`addInPersonPhoto` 接收 M1-09 `photo.ts` 已处理的 `AttachmentRef`，最多 4 张。
 - 面诊是 `intake` 来源硬规则的唯一例外，且只认 `kind === 'in_person'`：`signEncounter` 与 `verifySignedEncounter` 都按 kind 放行，同样内容改成 `remote_async` 后签不了、学生端也拒收。学生端展示用 `intakeDisplayLabel` 在主诉旁标“老师代录”。
 - 起草复用 M1-10：`inPersonConsultPackage` 把面诊病历转成 `ConsultPackage` 交给 `draftEncounter`（医案检索的案例来自 `teacher-records`）；审改签字与交还复用 M1-11：`signAndHandoverInPerson` 调用 `signEncounter` 后发送，发送成功后把完整签名病历存进 `teacher-records` 并更新改稿习惯摘要；发送失败资料原样保留，老师可在当前会话重发。照片字节存 `attachments` 集合，按保留期限删除。
-- 老师端界面 `app/src/InPersonPage.tsx`：选学生（本机已有签字索引或已收到的问诊）→ 一个输入框逐句代录、固定追问可跳过 → 当面拍照 → 复用 `SignEncounterPage` 改稿与一键签字。截图 `docs/screenshots/in-person-375.png`。
+- 老师端界面 `app/src/VisitPage.tsx`：选学生（本机已有签字索引或已收到的问诊）→ “您说，智能体记”一段话、智能体拆进望闻问切四格（拆出来的格子标“听到了，待您确认”，点格子可改）→ “说完了，看草稿” → 复用 `SignReview.tsx` 逐块确认与一键签字。截图 `docs/screenshots/phone-teacher-visit.png`。
 - 验收测试：`app/src/core/record/in-person.test.ts`（5 项，合成身份与合成病历）。
 - 本机集合：`in-person-draft`（进行中的面诊草稿，含代录原文与附件索引；V2-05 起按老师设定的保留期限删除）。
 - V2 起发不出就保留资料、由老师在当前会话重试，不再有 `record-outbox` 待发集合与多步销毁。

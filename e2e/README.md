@@ -16,6 +16,8 @@ V2-13：`node e2e/phone.browser.mjs` 用真实老师端组件在 375px×812 下�
 
 V2-14：统计字段/隐私扫描、开关与一天一次、仪表盘白名单/30 天分组在 `app/src/core/dashboard/*.test.ts`（合成身份与 fake-indexeddb，不连中继）；`phone.browser.mjs` 增加“管理 → 向社区分享运行统计”的实际字段预览、关掉后不发，以及 `/#dashboard` 只读页无按钮/表单/链接、无钥匙不显示数据；`phone.spec.ts` 在真实应用里再断言一次只读页无操作控件。CI 运行这些用例，不配置仪表盘公钥时各馆完全不发。
 
+V2-16：新界面第一批。`phone.browser.mjs` 换成新外壳场景：老师「今天」（学生到了？/ 等您签字 / 学生动态）→ 点一条远程问诊进「核对」页（草稿虚线黄框、还有 N 处草稿时“签字发出”灰着）→ 逐块「就这样」→「签字发出」；「今天 → 开始面诊」选学生 → 说一段 → 望闻问切四格自动填并标来源 →「说完了，看草稿」→ 逐块确认 → 签字；学生「今天」四块一屏可见、打卡圆圈点一下变对勾；「我的馆」沿用 V2-15 分块；长病历分段折叠；舌象 / 建馆 / 只读仪表盘回归。非 CI 写 `docs/screenshots/{phone-teacher-today,phone-teacher-visit,phone-teacher-review,phone-student-today,phone-teacher-manage}.png`（375px）。`phone.spec.ts` 经真实中继再走一遍“等您签字 → 核对 → 签字”和“面诊 → 四格 → 核对 → 签字”，并断言 375px 不横向滚动、按钮 ≥44px。新增单元测试：`app/src/review-model.test.ts`（分块/逐块确认/改方差异）、`app/src/four-exams.test.ts`（口述拆四诊，只接受原话片段）。
+
 这里只运行合成身份和资料。M1-15a 合并后接入完整九步问诊与四条硬性验收，使用真实编译中继、真实网关和 Chromium；模型与推送为本地替身，不需要 API Key。
 
 ## 一条命令

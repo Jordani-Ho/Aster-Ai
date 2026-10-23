@@ -71,15 +71,15 @@ test('V2-15 全新部署：只看到引导，五步走完后第一位学生用 1
       await expect(student.getByRole('heading', { name: '合成养生馆', exact: true })).toBeVisible()
       await student.getByRole('button', { name: '开始使用', exact: true }).click()
       await connectModel(student)
-      await expect(student.getByRole('heading', { name: '镜子', exact: true })).toBeVisible()
+      await expect(student.locator('[data-page=student-today]')).toBeVisible()
       // 学生连上社区后，老师端引导自动结束。
       await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
 
       // 验收 3（后段）：开馆后管理页按顺序分块、默认折叠。
-      await page.getByRole('button', { name: '管理', exact: true }).click()
+      await page.getByRole('button', { name: '我的馆', exact: true }).click()
       const titles = await page.locator('details.manage-block > summary').allInnerTexts()
-      expect(titles).toEqual(['邀请学生', '我的门面', '钱账', '记录保留多久', '换手机', '向社区分享运行统计'])
-      expect(await page.locator('details.manage-block').evaluateAll(nodes => nodes.map(node => (node as HTMLDetailsElement).open))).toEqual([false, false, false, false, false, false])
+      expect(titles).toEqual(['邀请学生', '我的门面', '钱账', '记录保留多久', '换手机', '向社区分享运行统计', '我的镜子'])
+      expect(await page.locator('details.manage-block').evaluateAll(nodes => nodes.map(node => (node as HTMLDetailsElement).open))).toEqual([false, false, false, false, false, false, false])
     } finally { await studentContext.close() }
   } finally { await teacher.context.close() }
 })
@@ -168,8 +168,8 @@ test('V2-13 建馆第 5 步“先进去看看”：不进邀请也能进工作�
     await expect(page.getByRole('heading', { name: '邀请第一位学生', exact: true })).toBeVisible()
     await page.getByRole('button', { name: '先进去看看', exact: true }).click()
     await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
-    // 以后还能在“管理 → 邀请学生”继续邀请。
-    await page.getByRole('button', { name: '管理', exact: true }).click()
+    // 以后还能在“我的馆 → 邀请学生”继续邀请。
+    await page.getByRole('button', { name: '我的馆', exact: true }).click()
     await page.locator('details.manage-block').filter({ hasText: /^邀请学生/ }).locator('summary').click()
     await page.getByRole('button', { name: '生成邀请', exact: true }).click()
     await expect(page.getByAltText('学生扫码即可加入')).toBeVisible()

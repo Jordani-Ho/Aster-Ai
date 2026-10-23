@@ -11,12 +11,14 @@ import './tongue.css'
 
 // V2-08 拍照入口：一句普通说明放在按钮附近，不弹窗、不要求勾选；“怎么拍更清楚”可选展开。
 // 处理只留舌头框内的裁剪图（长边 ≤512），原图在裁剪后当场清零，不写本机、不发中继。
-export function TongueCapture({ store, modelStore = store, onCaptured, disabled = false, onBusyChange }: {
+export function TongueCapture({ store, modelStore = store, onCaptured, disabled = false, onBusyChange, minimal = false }: {
   store: LocalStore
   modelStore?: LocalStore
   onCaptured: (record: TongueAbstract, at: Date, crop: Uint8Array) => Promise<void>
   disabled?: boolean
   onBusyChange?: (busy: boolean) => void
+  /** V2-16 学生首页“照镜子”只用一个大按钮，说明和帮助收起来。 */
+  minimal?: boolean
 }) {
   const input = useRef<HTMLInputElement>(null), mounted = useRef(true), lock = useRef(false)
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
@@ -51,18 +53,18 @@ export function TongueCapture({ store, modelStore = store, onCaptured, disabled 
     }
   }
   return <div>
-    <p className="tongue-hint">自然光下，关掉美颜，舌头轻松伸出来拍一张。</p>
-    <details className="tongue-help"><summary>怎么拍更清楚</summary><p>让整个舌头在画面里，看清两侧和舌尖。</p></details>
-    <label>居住城市<select aria-label="舌象记录的居住城市" value={city} disabled={busy || disabled} onChange={async event => {
+    {!minimal && <><p className="tongue-hint">自然光下，关掉美颜，舌头轻松伸出来拍一张。</p>
+      <details className="tongue-help"><summary>怎么拍更清楚</summary><p>让整个舌头在画面里，看清两侧和舌尖。</p></details></>}
+    {(!minimal || !city) && <label>居住城市<select aria-label="舌象记录的居住城市" value={city} disabled={busy || disabled} onChange={async event => {
       const value = event.target.value
       try {
         const profile = await loadProfile(store)
         await saveProfile(store, { ...profile, city: { value: value || null, source: 'student' } })
         if (mounted.current) setCity(value)
       } catch { setError('城市未能保存，请重试') }
-    }}><option value="">请选择城市</option>{cities.map(place => <option key={place.nameZh} value={place.nameZh}>{place.nameZh}</option>)}</select></label>
+    }}><option value="">请选择城市</option>{cities.map(place => <option key={place.nameZh} value={place.nameZh}>{place.nameZh}</option>)}</select></label>}
     <input ref={input} type="file" aria-label="选择舌象照片" accept="image/png,image/jpeg,image/webp" capture="environment" hidden onChange={event => void capture(event.currentTarget)} />
-    <button disabled={disabled || busy || !city} onClick={() => input.current?.click()}>{busy ? '正在读取舌象…' : '拍舌象 / 重拍'}</button>
+    <button className={minimal ? 'nl-primary' : undefined} disabled={disabled || busy || !city} onClick={() => input.current?.click()}>{busy ? '正在读取舌象…' : minimal ? '拍今天的舌象' : '拍舌象 / 重拍'}</button>
     {error && <p role="alert">{error}</p>}
   </div>
 }

@@ -156,9 +156,9 @@ describe('V2-08 验收 4：光线偏色“颜色仅供参考”，老师改值�
     expect(tongueColorNote(edited)).toBe('颜色仅供参考')
     expect(edited.features.color).toBe('red')
     // 学生端与老师端都用同一个 TonguePair（同一条提示），两端不会各写一套。
-    for (const page of ['MirrorPage.tsx', 'TeacherInboxPage.tsx']) {
-      expect(readFileSync(new URL('../../' + page, import.meta.url), 'utf8')).toContain("from './TonguePair'")
-    }
+    expect(readFileSync(new URL('../../RemoteReview.tsx', import.meta.url), 'utf8')).toContain("from './TonguePair'")
+    // V2-16 学生首页的“照镜子”用同一份颜色提示；完整对照仍由 TonguePair 提供。
+    expect(readFileSync(new URL('../../StudentToday.tsx', import.meta.url), 'utf8')).toContain('tongueColorNote')
     expect(readFileSync(new URL('../../TonguePair.tsx', import.meta.url), 'utf8')).toContain('tongueColorNote')
   })
 })

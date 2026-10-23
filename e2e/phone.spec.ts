@@ -1,7 +1,7 @@
 import { test, expect, runtime, mockModel } from './fixtures'
 import type { Page } from '@playwright/test'
 
-// V2-13：老师端 375px 手机化。真实中继/网关，模型为本地替身，全部合成数据。
+// V2-16：老师手机端新界面。真实中继/网关，模型为本地替身，全部合成数据。
 async function consultations(page: Page) {
   await page.evaluate(async relay => {
     const a = '/src/core/store/index.ts', b = '/src/core/record/in-person.ts', c = '/src/core/transport/index.ts', d = '/src/core/inbox/index.ts'
@@ -20,26 +20,56 @@ async function assertPhoneLayout(page: Page) {
   const small = await page.locator('button:visible').evaluateAll(nodes => nodes.map(node => ({ text: node.textContent ?? '', height: node.getBoundingClientRect().height })).filter(item => item.height < 43.5))
   expect(small).toEqual([])
 }
+async function confirmBlocks(page: Page) {
+  for (let guard = 0; guard < 12; guard += 1) {
+    const draft = page.locator('.nl-review-block.draft').first()
+    if (await draft.count() === 0) return
+    await draft.getByRole('button', { name: '就这样', exact: true }).first().click()
+  }
+}
 
-test('V2-13 老师手机端：收到问诊到签字发出全程不横向滚动、按钮不小于 44px', async ({ people }) => {
+test('V2-16 老师手机端：等您签字 → 同一核对页逐块确认 → 签字发出，全程不横向滚动、按钮不小于 44px', async ({ people }) => {
   const teacher = people.teacher.page
   await consultations(people.student.page)
-  await expect(teacher.getByRole('button', { name: '远程', exact: true })).toBeVisible()
+  await expect(teacher.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
+  const row = teacher.getByRole('button', { name: /SYNTHETIC_PHONE_CONSULT/ })
+  await expect(row).toBeVisible()
   await assertPhoneLayout(teacher)
-  await teacher.getByRole('button', { name: '远程', exact: true }).click()
-  await expect(teacher.locator('.inbox-card').first()).toContainText('SYNTHETIC_PHONE_CONSULT')
+  await row.click()
+  await expect(teacher.getByRole('heading', { name: /· 核对$/ })).toBeVisible()
+  await expect(teacher.getByText(/还有 \d+ 处草稿等您确认/)).toBeVisible()
+  await expect(teacher.getByRole('button', { name: '签字发出', exact: true })).toBeDisabled()
   await assertPhoneLayout(teacher)
-  await teacher.getByRole('button', { name: '打开问诊', exact: true }).first().click()
-  await expect(teacher.getByRole('heading', { name: '病历草稿', exact: true })).toBeVisible()
-  await assertPhoneLayout(teacher)
+  await confirmBlocks(teacher)
+  await expect(teacher.getByRole('button', { name: '签字发出', exact: true })).toBeEnabled()
   await teacher.getByRole('button', { name: '签字发出', exact: true }).click()
   await expect(teacher.getByRole('heading', { name: '已签字交还', exact: true })).toBeVisible()
   await assertPhoneLayout(teacher)
 })
 
-test('V2-13 老师在手机上生成邀请二维码，链接可直接分享/打开，PWA 主屏幕素材可用', async ({ people, browser }) => {
+test('V2-16 面诊手机端：选学生 → 说一段 → 四格自动填并标来源 → 看草稿 → 逐块确认 → 签字发出', async ({ people }) => {
   const teacher = people.teacher.page
-  await teacher.getByRole('button', { name: '管理', exact: true }).click()
+  await consultations(people.student.page)
+  await teacher.getByRole('button', { name: /开始面诊/ }).click()
+  await teacher.getByRole('button', { name: /学生 1/ }).click()
+  await teacher.getByLabel('您说，智能体记', { exact: true }).fill('舌淡红，苔薄白；入睡难')
+  await teacher.getByRole('button', { name: '整理', exact: true }).click()
+  await expect(teacher.getByRole('button', { name: '四诊 look' })).toContainText('舌淡红，苔薄白')
+  await expect(teacher.getByRole('button', { name: '四诊 ask' })).toContainText('入睡难')
+  await assertPhoneLayout(teacher)
+  await teacher.getByRole('button', { name: '说完了，看草稿', exact: true }).click()
+  await expect(teacher.getByRole('heading', { name: /· 核对$/ })).toBeVisible()
+  await expect(teacher.getByRole('button', { name: '签字发出', exact: true })).toBeDisabled()
+  await assertPhoneLayout(teacher)
+  await confirmBlocks(teacher)
+  await teacher.getByRole('button', { name: '签字发出', exact: true }).click()
+  await expect(teacher.getByRole('heading', { name: '已签字交还', exact: true })).toBeVisible()
+  await assertPhoneLayout(teacher)
+})
+
+test('V2-16 老师在手机上生成邀请二维码，链接可直接分享/打开，PWA 主屏幕素材可用', async ({ people, browser }) => {
+  const teacher = people.teacher.page
+  await teacher.getByRole('button', { name: '我的馆', exact: true }).click()
   await teacher.locator('details.manage-block').filter({ hasText: /^邀请学生/ }).locator('summary').click()
   await teacher.getByRole('button', { name: '生成邀请', exact: true }).click()
   await expect(teacher.getByAltText('学生扫码即可加入')).toBeVisible()

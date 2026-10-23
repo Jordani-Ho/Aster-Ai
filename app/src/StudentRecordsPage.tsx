@@ -73,10 +73,12 @@ export interface StudentRecordsPageProps {
   identity: Identity
   store: LocalStore
   onBack: () => void
+  /** V2-16：挪进“记录”标签时不需要返回按钮。 */
+  embedded?: boolean
 }
 
 // 学生端病历页：只显示 verifySignedEncounter 通过的病历；同一份病历的修订折叠保留。
-export function StudentRecordsPage({ identity, store, onBack }: StudentRecordsPageProps) {
+export function StudentRecordsPage({ identity, store, onBack, embedded = false }: StudentRecordsPageProps) {
   const [groups, setGroups] = useState<GroupedRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -90,9 +92,9 @@ export function StudentRecordsPage({ identity, store, onBack }: StudentRecordsPa
     window.addEventListener('aster:data-changed', refresh)
     return () => { cancelled = true; window.removeEventListener('aster:data-changed', refresh) }
   }, [store, identity])
-  return <main className="records-page">
+  return <main className={embedded ? 'records-page embedded' : 'records-page'}>
     <header className="records-head">
-      <button className="records-back" onClick={onBack}>返回</button>
+      {!embedded && <button className="records-back" onClick={onBack}>返回</button>}
       <h1>我的病历</h1>
       <p>只显示老师本人签过字、签名有效的病历；旧版本折叠保留，不删除。</p>
     </header>

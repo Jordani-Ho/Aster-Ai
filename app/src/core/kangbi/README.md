@@ -8,7 +8,7 @@ V2-10 起一条记录是：`{周期起止 periodStart/periodEnd, practiceDays �
 `teacherNote`/`agentNote` 是 `improve|same|worse|unsure|null`，null 表示未评价，**不是持平**；都不含病历内容、照片或本人感受。
 
 - 观察周期：一位学生跟一位老师，从上次签字到这次签字；第一次从学生加入那天算起。老师端 `teacherObservationWindow` 用本机上次签字的病历（排除本次刚签的），第一次用学生第一次问诊到达本机的时间；学生端 `studentObservationWindow` 用本机收到的上一位老师签字病历，没有就用 `settings/joined-at`（邀请加入时记）。
-- 老师一句在签字页选（`SignEncounterPage` 的四选一），不选记 null。
+- 老师一句在核对签字页选（`SignReview.tsx` 的“和上次比”四选一），不选记 null。
 - 智能体一句由**学生智能体**在发送问诊时算：`domain/tcm/observation-rules.ts` 的 `agentObservation`，规则数值在 `domain/tcm/observation-rules.json`，不看模型。数据不够（有效坚持天数 < 3 或没有坚持率）一律“说不准”；坚持率与舌象方向冲突也“说不准”。结果作为 `PeriodObservation` 随问诊包发给老师（只有计数与一句话）。
 - `recordSignedObservation` 在签字成功后写记录（老师端，远程与面诊都写）。
 

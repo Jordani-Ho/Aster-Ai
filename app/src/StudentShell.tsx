@@ -1,10 +1,12 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
 import type { Wiring } from './core/wiring'
-import { MirrorPage } from './MirrorPage'
 import { ConsultPage } from './ConsultPage'
+import { StudentRecordsPage } from './StudentRecordsPage'
+import { StudentToday } from './StudentToday'
+import { SelfCheck } from './SelfCheck'
 import { LedgerSettings } from './LedgerSettings'
 import { PushSettings } from './PushSettings'
 import { TeacherListSettings } from './TeacherListSettings'
@@ -14,15 +16,15 @@ import type { FamilyMember } from './core/family'
 import { listCheckins, type Assignment } from './core/homework'
 import { adherenceReport } from './core/adherence'
 import { adherenceEnvelope, loadTeachers } from './core/inbox'
-import { effectiveDay } from './core/homework/schedule'
-import './student.css'
-import { observationId, recordObservation } from './core/kangbi'
-import { checkinDay } from './core/homework/schedule'
+import { effectiveDay, checkinDay } from './core/homework/schedule'
 import { useTeacherVenue } from './useTeacherVenue'
 import { venueHeading } from './core/storefront/active'
+import { themeOf } from './core/storefront'
+import { observationId, recordObservation } from './core/kangbi'
+import './student.css'
+import './newui.css'
 
 const HomeworkPage = lazy(() => import('./HomeworkPage').then(module => ({ default: module.HomeworkPage })))
-const StudentRecordsPage = lazy(() => import('./StudentRecordsPage').then(module => ({ default: module.StudentRecordsPage })))
 
 export interface StudentShellProps {
   store: LocalStore
@@ -30,36 +32,33 @@ export interface StudentShellProps {
   llm: LlmClient | null
   stack: Wiring | null
   stackStatus: 'offline' | 'connecting' | 'ready' | 'rejected' | 'invalid-message'
-  /** M1-21 的模型提示（备用模型）与“我的大模型”设置，由 App 传入。 */
   modelNotice?: ReactNode
   modelSettings?: ReactNode
-  /** M1-22 家人子账户：家人清单、当前查看谁（0 = 本人）；业务页用家人的分片存储与身份，设置区仍用根身份。 */
   family?: readonly Pick<FamilyMember, 'account' | 'alias'>[]
   active?: number
   onSwitch?: (account: number) => void
   memberStore?: LocalStore
   memberIdentity?: Identity
   sendConsult?: (pkg: import('./core/record/types').ConsultPackage) => Promise<void>
-  /** M1-23a：把“本周坚持率”小结发给老师的通用发送函数（家人用自己的身份/连接）。 */
   sendEnvelope?: (recipient: string, envelope: import('./core/transport').Envelope) => Promise<unknown>
   onFamilyChanged?: () => void
 }
 
-type Tab = 'mirror' | 'consult' | 'other'
-type OtherView = 'menu' | 'records' | 'homework'
+type Tab = 'today' | 'records' | 'me'
+type Sub = 'consult' | 'homework' | null
 
+// V2-16 新外壳：学生端底部三个标签“今天 / 记录 / 我”。
+// 今天按设计稿重画；记录先把老病历页原样挪进来；我 = 老“其他”（家人、钱账、设置）+ 自评与本人感受。
 export function StudentShell({ store, identity, llm, stack, stackStatus, modelNotice, modelSettings, family = [], active = 0, onSwitch, memberStore: scopedStore, memberIdentity: scopedIdentity, sendConsult, sendEnvelope, onFamilyChanged }: StudentShellProps) {
-  const [tab, setTab] = useState<Tab>('mirror')
-  const [other, setOther] = useState<OtherView>('menu')
-  // 业务页用当前家人的分片存储与身份；设置区（账本/邀请/推送）永远用根身份。
+  const [tab, setTab] = useState<Tab>('today')
+  const [sub, setSub] = useState<Sub>(null)
   const pagesStore = scopedStore ?? store
   const pagesIdentity = scopedIdentity ?? identity
   const activeMember = family.find(member => member.account === active) ?? null
-  // V2-09：当前在用的馆；三页门牌、问诊收件人、方案来源和钱账都跟着它。
   const venue = useTeacherVenue(store)
+  const theme = themeOf(venue.active ? venue.venues[venue.active] : null)
 
   // M1-23a 第 5 条：把本周坚持率小结发给“我的老师”（只有数值，不含原文/身份）。
-  // 打卡后发一次，连接就绪或切换家人时也补发一次；发送失败不影响本机打卡。
   const reportAdherence = () => {
     void (async () => {
       try {
@@ -68,14 +67,12 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
         if (!teacher) return
         const [rows, checkins] = await Promise.all([pagesStore.list('homework'), listCheckins(pagesStore)])
         const assignments = rows.map(row => row.value as unknown as Assignment)
-        // 与打卡同一个日子口径：本地 00:00–00:59 的打卡算前一天。
-        const today=effectiveDay(new Date())
-        if(checkins.some(c=>checkinDay(new Date(c.at))===today)) {
-          const id=await observationId(['practice',pagesIdentity.publicKey,teacher,today])
-          if(!await pagesStore.get('kangbi-observations',id)){
-            // V2-10：单日打卡也算一条极短周期观察；两句话都不填（未评价），本人感受不在这里。
-            const at=new Date().toISOString()
-            await recordObservation(pagesStore,{id,student:pagesIdentity.publicKey,teacher,at,periodStart:at,periodEnd:at,practiceDays:1,teacherMinutes:0,consultations:0,teacherNote:null,agentNote:null,effects:{teacher:null,measurement:null}})
+        const today = effectiveDay(new Date())
+        if (checkins.some(checkin => checkinDay(new Date(checkin.at)) === today)) {
+          const id = await observationId(['practice', pagesIdentity.publicKey, teacher, today])
+          if (!await pagesStore.get('kangbi-observations', id)) {
+            const at = new Date().toISOString()
+            await recordObservation(pagesStore, { id, student: pagesIdentity.publicKey, teacher, at, periodStart: at, periodEnd: at, practiceDays: 1, teacherMinutes: 0, consultations: 0, teacherNote: null, agentNote: null, effects: { teacher: null, measurement: null } })
           }
         }
         await sendEnvelope(teacher, adherenceEnvelope(adherenceReport(assignments, checkins, effectiveDay(new Date()))))
@@ -84,37 +81,58 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   }
   useEffect(() => { if (stackStatus === 'ready') reportAdherence() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pagesStore, stackStatus, active, venue.active])
 
-  if (other === 'records') return <Suspense fallback={<p>正在打开病历…</p>}><StudentRecordsPage identity={pagesIdentity} store={pagesStore} onBack={() => setOther('menu')} /></Suspense>
-  if (other === 'homework') return <Suspense fallback={<p>正在打开今日作业…</p>}><HomeworkPage store={pagesStore} onBack={() => setOther('menu')} onCheckedIn={reportAdherence} /></Suspense>
-
-  return <div className="student-shell">
-    <div className="student-main">
-      <p role="status" className="relay-status">中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : stackStatus === 'rejected' ? '连接未成功，请联系老师' : '尚未连接'}</p>
-      {venue.active && <p className="teacher-venue">{venueHeading(venue)}</p>}
-      {modelNotice}
-      {tab === 'mirror' && <MirrorPage key={active} store={pagesStore} modelStore={store} settingsStore={store} llm={llm} family={family} active={active} onSwitch={onSwitch} member={activeMember} onCheckedIn={reportAdherence} teacher={venue.active} identity={pagesIdentity} />}
-      {tab === 'consult' && <ConsultPage key={active} store={pagesStore} modelStore={store} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} teacher={venue.active} teacherName={venue.call} />}
-      {tab === 'other' && <main className="other-page">
-        <header><p className="eyebrow">知衡 · 学生</p><h1>其他</h1></header>
-        <nav className="other-menu" aria-label="其他">
-          <button onClick={() => setOther('records')}>我的病历</button>
-          <button onClick={() => setOther('homework')}>今日作业</button>
-        </nav>
-        <p role="status" className="other-relay">中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : '尚未连接'}</p>
-        <FamilySettings store={store} identity={identity} send={sendEnvelope} onChanged={onFamilyChanged} />
-        <details><summary>设置</summary>
-          {modelSettings}
-          <LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} members={family} teacher={venue.active} teacherName={venue.call} />
-          <TimeSettings store={store} />
-          <TeacherListSettings store={store} active={venue.active} onSwitch={teacher => void venue.switchTo(teacher)} />
-          <PushSettings identity={identity} />
-        </details>
-      </main>}
+  if (sub === 'consult') {
+    return <div className="nl-shell" style={{ '--nl-bg': theme.background, '--nl-accent': theme.primary } as CSSProperties}>
+      <header className="nl-flow-head">
+        <button type="button" className="nl-back" aria-label="返回" onClick={() => setSub(null)}>‹</button>
+        <div><h1>问诊</h1><small>说给老师听的不舒服</small></div>
+      </header>
+      <ConsultPage key={active} store={pagesStore} modelStore={store} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} teacher={venue.active} teacherName={venue.call} />
     </div>
-    <nav className="tabbar" aria-label="底部标签">
-      <button className={tab === 'mirror' ? 'tab active' : 'tab'} onClick={() => setTab('mirror')}>镜子</button>
-      <button className={tab === 'consult' ? 'tab active' : 'tab'} onClick={() => setTab('consult')}>问诊</button>
-      <button className={tab === 'other' ? 'tab active' : 'tab'} onClick={() => { setTab('other'); setOther('menu') }}>其他</button>
+  }
+  if (sub === 'homework') {
+    return <Suspense fallback={<div className="nl-shell"><p className="nl-page nl-quiet">正在打开今日作业…</p></div>}>
+      <HomeworkPage store={pagesStore} onBack={() => setSub(null)} onCheckedIn={reportAdherence} />
+    </Suspense>
+  }
+
+  const style = { '--nl-bg': theme.background, '--nl-accent': theme.primary, '--nl-accent-deep': theme.primary } as CSSProperties
+  return <div className="nl-shell" style={style}>
+    {modelNotice}
+    {tab === 'today' && <StudentToday
+      store={pagesStore} modelStore={store} settingsStore={store} identity={pagesIdentity} llm={llm}
+      teacher={venue.active} teacherCall={venue.call} teacherName={venue.name}
+      member={activeMember} family={family} active={active} onSwitch={onSwitch}
+      onConsult={() => setSub('consult')} onHomework={() => setSub('homework')} onCheckedIn={reportAdherence} />}
+    {tab === 'records' && <StudentRecordsPage identity={pagesIdentity} store={pagesStore} embedded onBack={() => setTab('today')} />}
+    {tab === 'me' && <main className="nl-page">
+      <h1>我</h1>
+      {venueHeading(venue) && <p className="nl-meta">{venueHeading(venue)}</p>}
+      <SelfCheck store={pagesStore} identity={pagesIdentity} teacher={venue.active} />
+      <FamilySettings store={store} identity={identity} send={sendEnvelope} onChanged={onFamilyChanged} />
+      <details className="nl-section"><summary>设置</summary>
+        {modelSettings}
+        <LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} members={family} teacher={venue.active} teacherName={venue.call} />
+        <TimeSettings store={store} />
+        <TeacherListSettings store={store} active={venue.active} onSwitch={teacher => void venue.switchTo(teacher)} />
+        <PushSettings identity={identity} />
+      </details>
+    </main>}
+    <p role="status" className="nl-status" style={{ padding: '0 20px' }}>中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : stackStatus === 'rejected' ? '连接未成功，请联系老师' : '尚未连接'}</p>
+    <nav className="nl-tabbar" aria-label="学生底部标签">
+      <button type="button" aria-current={tab === 'today' ? 'page' : undefined} onClick={() => setTab('today')}><TodayIcon />今天</button>
+      <button type="button" aria-current={tab === 'records' ? 'page' : undefined} onClick={() => setTab('records')}><RecordsIcon />记录</button>
+      <button type="button" aria-current={tab === 'me' ? 'page' : undefined} onClick={() => setTab('me')}><MeIcon />我</button>
     </nav>
   </div>
+}
+
+function TodayIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" /></svg>
+}
+function RecordsIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16" /><path d="m7 15 4-4 3 3 4-6" /></svg>
+}
+function MeIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.6 3.1-5.8 7-5.8s7 2.2 7 5.8" /></svg>
 }
