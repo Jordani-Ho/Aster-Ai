@@ -11,6 +11,7 @@ import { sendInPersonRecord, listStudentAdherence, type SendEnvelope, type Stude
 import { teacherCases, teacherRecordsOf, type LoadedTeacherRecord } from './core/records/teacher'
 import { loadTeacherTemplate } from './core/drafting/template'
 import { draftEncounter as draftWithModel } from './core/drafting'
+import { priorMaterials } from './core/drafting/materials'
 import { reviseEncounter } from './core/drafting/revise'
 import { recordSignedObservation, type ObservationNote } from './core/kangbi'
 import { formatHeavenTime, heavenNow, heavenStampOf, type HeavenTime } from './core/heaven'
@@ -51,6 +52,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
   const [savedDraft, setSavedDraft] = useState<Encounter | null>(null)
   const [encounter, setEncounter] = useState<Encounter | null>(null)
   const [draft, setDraft] = useState<Encounter | null>(null)
+  const [materialNote, setMaterialNote] = useState<string[]>([])
   const [previous, setPrevious] = useState<LoadedTeacherRecord | null>(null)
   const [utterance, setUtterance] = useState('')
   const [heaven, setHeaven] = useState<HeavenTime | null>(null)
@@ -79,7 +81,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
       const [rows, time] = await Promise.all([teacherRecordsOf(store, student), heavenNow(store)])
       const next = startInPersonEncounter({ teacher: identity.publicKey, student, heaven: heavenStampOf(time) })
       setRecords(rows); setPrevious(rows.at(0) ?? null); setEncounter(next); setHeaven(time); setDraft(null)
-      setComparison(null); setUtterance(''); setStatus(''); setPhase('dictate')
+      setMaterialNote([]); setComparison(null); setUtterance(''); setStatus(''); setPhase('dictate')
       await saveInPersonDraft(store, next)
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
@@ -149,15 +151,22 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
       if (llm) {
         setStatus('正在整理草稿，老师看过整张卡片后签字发出。')
         let draftError = ''
-        const generated = await draftWithModel(inPersonConsultPackage(confirmed), await loadTeacherTemplate(store), await teacherCases(store), llm, { level: 'prescription', onError: text => { draftError = text } })
+        const generated = await draftWithModel(inPersonConsultPackage(confirmed), {
+          template: await loadTeacherTemplate(store),
+          // V2-19：这位学生以前签过字的旧病历（可减）；医案只取老师亲手改过的（可减）。
+          prior: priorMaterials(records),
+          cases: await teacherCases(store, { forStudent: confirmed.student }),
+        }, llm, { level: 'prescription', onError: text => { draftError = text } })
         if (draftError) throw Error(draftError)
+        setMaterialNote(generated.note)
         // 老师自己说、自己确认过的四诊优先于模型从主诉里推的四诊。
         drafted = {
-          ...generated,
-          fourExams: Object.fromEntries(EXAM_ORDER.map(key => [key, confirmed.fourExams[key].value !== null ? confirmed.fourExams[key] : generated.fourExams[key]])) as Encounter['fourExams'],
+          ...generated.encounter,
+          fourExams: Object.fromEntries(EXAM_ORDER.map(key => [key, confirmed.fourExams[key].value !== null ? confirmed.fourExams[key] : generated.encounter.fourExams[key]])) as Encounter['fourExams'],
         }
       } else {
         setStatus('未配置模型：本次没有 AI 草稿，核对四诊后即可签字。')
+        setMaterialNote([])
       }
       apply(confirmed)
       setDraft(drafted); setPhase('review')
@@ -196,6 +205,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
       encounter={draft}
       alias={alias}
       subtitle={llm ? '四诊已记好 · 下面是智能体的草稿' : '四诊已记好 · 核对后签字'}
+      materialNote={materialNote}
       comparison={comparison}
       onComparisonChange={setComparison}
       onSign={final => confirm(final, comparison)}

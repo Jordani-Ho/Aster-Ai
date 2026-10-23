@@ -36,6 +36,8 @@ export interface SignReviewProps {
   encounter: Encounter
   alias: string
   subtitle?: string
+  /** V2-19：这次起草减了材料时的提示行（不悄悄少带），一行没减就不传。 */
+  materialNote?: string[]
   /** 上一次签字的方子（改方时比对“去了什么、加了什么”）。 */
   previousPrescription?: Prescription | null
   previousEventId?: string | null
@@ -50,7 +52,7 @@ export interface SignReviewProps {
 }
 
 export function SignReview({
-  encounter, alias, subtitle, previousPrescription = null, previousEventId = null,
+  encounter, alias, subtitle, materialNote, previousPrescription = null, previousEventId = null,
   comparison = null, onComparisonChange, onSign, onBack, onRevise, extras,
 }: SignReviewProps) {
   const [current, setCurrent] = useState<Encounter>(encounter)
@@ -204,6 +206,8 @@ export function SignReview({
     </header>
     <div className="nl-flow-body">
       {error && <p role="alert" className="nl-danger-strong">{error}</p>}
+      {/* V2-19：减了旧病历或相似医案时说清楚，不悄悄少带。 */}
+      {materialNote && materialNote.length > 0 && <p className="nl-quiet" role="note">这次的材料：{materialNote.join('；')}。</p>}
       {extras && <details className="nl-section"><summary>本次资料（舌象、扣费、方案）</summary>{extras}</details>}
       {longRecord && <div className="nl-fold-actions">
         <p className="nl-quiet">这份病历较长，已分段折叠。点每块标题展开。</p>

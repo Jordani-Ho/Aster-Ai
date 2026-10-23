@@ -281,7 +281,7 @@ it('2 老师起草、签字、填扣费 3：学生病历页、作业、账本余
   expect(consult.encounter.id).toBe(pkg.encounter.id)
   await assertConsultReady(teacherStore, consult.encounter.id)
 
-  const draft = await draftEncounter(draftPackage(consult), template as TeacherTemplate, [], fakeLlm(), { level: 'prescription' })
+  const draft = (await draftEncounter(draftPackage(consult), { template: template as TeacherTemplate }, fakeLlm(), { level: 'prescription' })).encounter
   const final = acceptDraft(draft)
   await completeConsultSigning({
     identity: teacherId, store: teacherStore, consult, final,
@@ -485,7 +485,7 @@ it('invited student opens only their book; teacher first signing opens empty cou
  expect(await teacher.ledger.books()).toHaveLength(0)
  await student.sendConsult(await syntheticPackage(0))
  const consult=await waitFor(async()=>{const rows=await listConsults(teacherStore);return rows[0]??null})
- const draft=await draftEncounter(draftPackage(consult),template as TeacherTemplate,[],fakeLlm(),{level:'prescription'}),final=acceptDraft(draft)
+ const draft=(await draftEncounter(draftPackage(consult),{template:template as TeacherTemplate},fakeLlm(),{level:'prescription'})).encounter,final=acceptDraft(draft)
  const result=await completeConsultSigning({identity:teacherId,store:teacherStore,consult,final,send:teacher.send,ledger:teacher.ledger,charge:3, currency:'CNY'})
  expect(result.chargeError).toBe(null)
  const paired=await waitFor(async()=>{const a=await teacher.ledger.view(teacherPub,studentPub),b=await student.ledger.view(teacherPub,studentPub);return a.balance===-3&&b.balance===-3&&a.code===b.code?true:null})

@@ -1,9 +1,11 @@
 import prompt from '../../../../prompts/teacher/draft-encounter.md?raw'
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
 import { jieqiNames, shichenNames } from '../../../../domain/tcm/templates/types'
-import type { LlmClient } from '../llm'
+import { isQuotaExceeded, type ChatMessage, type LlmClient } from '../llm'
 import type { ConsultPackage, Encounter, Field, Homework, Prescription } from '../record/types'
 import { searchCases, type DraftCase } from './cases'
+import { budgetLimit } from './budget'
+import { fitDraftMaterials, packageOnlyMaterials, type DraftMaterialInput, type PriorMaterial } from './materials'
 import { habitAnchor } from '../homework/schedule'
 
 export type DraftLevel = 'record' | 'pattern' | 'prescription'
@@ -12,6 +14,19 @@ export interface DraftOptions {
   timeoutMs?: number
   /** 界面应显示此安全错误；未提供时错误也会保留在 symptomSummary.note。 */
   onError?: (message: string) => void
+}
+
+/** V2-19：一次起草要带的材料。旧病历与医案可减，模板与问诊包不可减。 */
+export interface DraftMaterials {
+  template: TeacherTemplate
+  prior?: readonly PriorMaterial[]
+  cases?: readonly DraftCase[]
+}
+
+export interface DraftResult {
+  encounter: Encounter
+  /** 减了材料才有提示行（如“旧病历只带了最近 2 次”）；一行不减就是空数组。 */
+  note: string[]
 }
 type ObjectValue = Record<string, unknown>
 const object = (value: unknown): value is ObjectValue => typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -81,22 +96,54 @@ export function homework(raw: unknown): Homework[] {
   })
 }
 
-export async function draftEncounter(pkg: ConsultPackage, template: TeacherTemplate, cases: readonly DraftCase[], llm: LlmClient, options: DraftOptions = {}): Promise<Encounter> {
+// V2-19：每件事一次调用，只带这一位学生、这一件事的材料，不带上一次的对话。
+// 材料先按 domain/tcm/agent-budget.json 的上限裁剪；模型报额度超限时再按同一顺序减两轮，
+// 最后只剩问诊包与老师模板。任何情况下都不把上游错误原文交给界面。
+async function callModel(llm: LlmClient, messages: ChatMessage[], timeoutMs: number): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      llm.complete(messages),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), timeoutMs) }),
+    ])
+  } finally { if (timer !== undefined) clearTimeout(timer) }
+}
+
+export async function draftEncounter(pkg: ConsultPackage, materials: DraftMaterials, llm: LlmClient, options: DraftOptions = {}): Promise<DraftResult> {
   const draft = studentDraft(pkg.encounter)
   const level = options.level ?? 'record'
-  let timer: ReturnType<typeof setTimeout> | undefined
   try {
     const timeoutMs = options.timeoutMs ?? 30_000
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || !['record', 'pattern', 'prescription'].includes(level)) throw new Error('options')
     // 只传本任务所需的资料；不传身份、附件二进制或未经解析的历史签名事件。
-    const payload = {
-      encounter: { profile: draft.profile, intake: draft.intake }, template,
-      cases: searchCases([draft.intake.chiefComplaint.value, draft.intake.presentIllness.value].filter(Boolean).join(' '), cases), level,
+    const limit = budgetLimit()
+    const input: DraftMaterialInput = {
+      prompt,
+      encounter: { profile: draft.profile, intake: draft.intake },
+      template: materials.template,
+      level,
+      prior: [...(materials.prior ?? [])],
+      cases: searchCases([draft.intake.chiefComplaint.value, draft.intake.presentIllness.value].filter(Boolean).join(' '), materials.cases ?? []),
     }
-    const reply = await Promise.race([
-      llm.complete([{ role: 'system', content: prompt }, { role: 'user', content: JSON.stringify(payload) }]),
-      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), timeoutMs) }),
-    ])
+    const fitted = fitDraftMaterials(input)
+    let reply: string
+    let note = fitted.note
+    try {
+      reply = await callModel(llm, fitted.messages, timeoutMs)
+    } catch (error) {
+      if (!isQuotaExceeded(error)) throw error
+      // 额度超限：按同一顺序再减一轮（上限减半），仍超就只用问诊包与模板。
+      try {
+        const reduced = fitDraftMaterials(input, { limit: Math.floor(limit / 2) })
+        reply = await callModel(llm, reduced.messages, timeoutMs)
+        note = reduced.note
+      } catch (again) {
+        if (!isQuotaExceeded(again)) throw again
+        const minimal = packageOnlyMaterials(input)
+        reply = await callModel(llm, minimal.messages, timeoutMs)
+        note = minimal.note
+      }
+    }
     const raw: unknown = JSON.parse(reply)
     if (!object(raw)) throw new Error('shape')
     const exams = object(raw.fourExams) ? raw.fourExams : {}
@@ -113,12 +160,12 @@ export async function draftEncounter(pkg: ConsultPackage, template: TeacherTempl
       draft.plan.advice = field(plan.advice, text)
       draft.plan.homework = homework(plan.homework)
     }
-    return draft
+    return { encounter: draft, note }
   } catch {
     const message = '起草失败：模型不可用、超时或回复格式错误；已保留学生资料，请重试或由老师填写。'
     const fallback = studentDraft(pkg.encounter)
     fallback.judgment.symptomSummary.note = message
     try { options.onError?.(message) } catch { /* 提示界面失败也不能阻断回退。 */ }
-    return fallback
-  } finally { if (timer !== undefined) clearTimeout(timer) }
+    return { encounter: fallback, note: [] }
+  }
 }

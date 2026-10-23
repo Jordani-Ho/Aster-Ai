@@ -2,7 +2,7 @@ import { getEventHash, verifyEvent } from 'nostr-tools/pure'
 import type { StoreValue } from '../store'
 import type { DraftCase } from '../drafting/cases'
 import { nextVersion, SIGNED_ENCOUNTER_KIND, type SignedEncounterEvent } from '../record/sign'
-import type { Encounter } from '../record/types'
+import type { Encounter, Field, Prescription } from '../record/types'
 import { listIdentityLinks } from '../identity/links'
 
 // V2-05 第 0 步：老师端签字发送成功后，把完整签名病历存进 teacher-records。
@@ -165,13 +165,74 @@ export async function teacherStudents(store: RecordReader): Promise<string[]> {
   return canonicalStudents(store, students)
 }
 
-// 起草时的医案检索：把老师本机完整病历投影成只读 DraftCase（不含学生身份），id 用签名事件 id。
-export async function teacherCases(store: RecordReader): Promise<DraftCase[]> {
-  return (await listTeacherRecords(store)).map(record => ({
+// V2-19 只向签字学：同一 encounter 只取最新版本（改过方的那一版才是老师的定稿）。
+function latestVersions(records: readonly LoadedTeacherRecord[]): LoadedTeacherRecord[] {
+  const latest = new Map<string, LoadedTeacherRecord>()
+  for (const record of records) {
+    const current = latest.get(record.encounterId)
+    if (!current || record.version > current.version) latest.set(record.encounterId, record)
+  }
+  return [...latest.values()]
+}
+
+// 病历格式（docs/schemas/encounter.md 第 3 节第 1 条）：老师点“就这样”时来源写 teacher、
+// note 写 ai_accepted；老师亲手改过的字段来源 teacher、不写 ai_accepted。
+// 所以「原样确认」= note === 'ai_accepted'；其余 judgment/plan 字段算老师自己的话。
+// 范围与 modificationLog 一致：只看 judgment 与 plan，四诊常转述学生原话，不当老师的思路学。
+const ACCEPTED_NOTE = 'ai_accepted'
+
+function authoredText(field: Field<string> | undefined): string {
+  if (!field || field.source !== 'teacher' || field.note === ACCEPTED_NOTE) return ''
+  return typeof field.value === 'string' && field.value.trim() !== '' ? field.value : ''
+}
+
+function authoredPrescription(field: Field<Prescription> | undefined): Prescription | null {
+  if (!field || field.source !== 'teacher' || field.note === ACCEPTED_NOTE) return null
+  return field.value ?? null
+}
+
+/** 一份签过字的病历能教给智能体的部分；全是原样确认就返回 null（只计认可）。 */
+export function teacherCaseOf(record: LoadedTeacherRecord): DraftCase | null {
+  const { judgment, plan } = record.encounter
+  const symptomSummary = authoredText(judgment.symptomSummary)
+  const pattern = authoredText(judgment.pattern)
+  const prescription = authoredPrescription(plan.prescription)
+  if (!symptomSummary && !pattern && !prescription) return null
+  return {
     id: record.eventId,
-    symptomSummary: record.encounter.judgment.symptomSummary.value ?? '',
-    pattern: record.encounter.judgment.pattern.value ?? '',
-  }))
+    symptomSummary,
+    pattern,
+    ...(prescription?.changeReason ? { changeReason: prescription.changeReason } : {}),
+    ...(prescription
+      ? {
+        prescription: {
+          items: prescription.items.map(item => ({ herb: item.herb, dose: item.dose })),
+          ...(prescription.method ? { method: prescription.method } : {}),
+          ...(prescription.days ? { days: prescription.days } : {}),
+        },
+      }
+      : {}),
+  }
+}
+
+// 起草时的医案检索：只取老师签了字、且老师亲手改过 judgment/plan 的病历，投影成只读 DraftCase
+// （不含学生身份），id 用签名事件 id。当前这位学生自己的病历不进去（它已作为旧病历带上）。
+export async function teacherCases(store: RecordReader, options: { forStudent?: string } = {}): Promise<DraftCase[]> {
+  return latestVersions(await listTeacherRecords(store))
+    .filter(record => record.student !== options.forStudent)
+    .map(teacherCaseOf)
+    .filter((item): item is DraftCase => item !== null)
+}
+
+/** 「认可」统计：签了字的病历里，有老师亲手内容的算可参考，一字未改就签的只算认可。不接界面。 */
+export async function teacherCaseStats(store: RecordReader): Promise<{ referable: number; accepted: number }> {
+  let referable = 0
+  let accepted = 0
+  for (const record of latestVersions(await listTeacherRecords(store))) {
+    if (teacherCaseOf(record)) referable += 1
+    else accepted += 1
+  }
+  return { referable, accepted }
 }
 
 // 同一份病历的最近一份（按版本号）。

@@ -43,13 +43,31 @@ function requestBody(source: LlmSource, messages: ChatMessage[], stream: boolean
   return JSON.stringify(body)
 }
 
+/** V2-19：带状态码的上游错误；消息保持原样，不带上游回复正文。 */
+export class LlmRequestError extends Error {
+  constructor(public readonly status: number) {
+    super('模型请求失败：HTTP ' + status)
+    this.name = 'LlmRequestError'
+  }
+}
+
+// V2-19：额度超限只认状态码 402（余额不足）和 429（用量/频率超限），不读回复正文。
+// 自家模型的 ModelRequestError 也带 status，这里用鸭子类型同时覆盖两条路径。
+export function isQuotaExceeded(error: unknown): boolean {
+  if (typeof error === 'object' && error !== null) {
+    const status = (error as { status?: unknown }).status
+    if (status === 402 || status === 429) return true
+  }
+  return error instanceof Error && /HTTP (?:402|429)$/.test(error.message)
+}
+
 async function send(source: LlmSource, body: string): Promise<Response> {
   const url = endpoint(source.baseUrl)
   const headers: Record<string, string> = { 'content-type': 'application/json' }
   if (source.kind === 'gateway') headers.authorization = await nip98Authorization(source.secretKey, url, 'POST', body)
   else if (source.kind === 'api-key') headers.authorization = 'Bearer ' + source.apiKey
   const response = await fetch(url, { method: 'POST', headers, body })
-  if (!response.ok) throw new Error('模型请求失败：HTTP ' + response.status)
+  if (!response.ok) throw new LlmRequestError(response.status)
   return response
 }
 

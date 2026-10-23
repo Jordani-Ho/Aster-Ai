@@ -20,7 +20,7 @@ import { parseTongueAbstract, tongueSvg, type TongueFeatures } from '../../../..
 import { localDay } from '../homework/schedule'
 import {
   latestTeacherRecord, listTeacherRecords, revisedEncounter,
-  saveTeacherRecord, teacherCases, teacherContactStudents, teacherStudents, TEACHER_RECORDS,
+  saveTeacherRecord, teacherCases, teacherCaseStats, teacherContactStudents, teacherStudents, TEACHER_RECORDS,
 } from './teacher'
 import {
   RETENTION_DEFAULT_DAYS, effectiveRetentionDays, listTeacherRetentions, loadRetentionDays,
@@ -147,9 +147,9 @@ describe('V2-05 验收 0：老师端完整医案 teacher-records', () => {
     expect(all).toHaveLength(2)
     expect(all.some(record => record.encounter.kind === 'in_person' && record.encounter.intake.chiefComplaint.value === '胸口闷，睡不好')).toBe(true)
 
-    // 起草时的医案检索：从 teacher-records 投影 DraftCase，能搜到上一份。
+    // V2-19 起草时的医案检索：只取老师亲手改过 judgment/plan 的病历；远程那份没有老师亲手写的内容，不进医案。
     const cases = await teacherCases(store)
-    expect(cases).toHaveLength(2)
+    expect(cases).toHaveLength(1)
     const found = searchCases('胸闷', cases)
     expect(found[0].id).toBe(all.find(record => record.encounter.kind === 'in_person')!.eventId)
 
@@ -162,6 +162,53 @@ describe('V2-05 验收 0：老师端完整医案 teacher-records', () => {
     expect(revised.version).toBe(2)
     expect(revised.supersedes).toBe(previous!.eventId)
     expect(revised.plan.prescription.value).toMatchObject({ previousOf: previous!.eventId, changeReason: '改方' })
+  })
+
+  it('V2-19 只向签字学：改过的进医案（带加减理由），原样确认只计认可，伪造签名不进', async () => {
+    const teacher = createIdentity()
+    const student = createIdentity()
+    const store = await newStore(teacher, 'teacher')
+    // 老师亲手改过判断和方子：来源 teacher、不带 ai_accepted，方子写了加减理由。
+    const edited = remoteEncounter(teacher.publicKey, student.publicKey, { id: 'e'.repeat(32) })
+    edited.judgment = {
+      ...edited.judgment,
+      symptomSummary: { value: 'SYNTHETIC_EDITED', source: 'teacher' },
+      pattern: { value: 'SYNTHETIC_PATTERN', source: 'teacher' },
+    }
+    edited.plan = {
+      ...edited.plan,
+      prescription: { value: { items: [{ herb: '合成药', dose: '3g' }], days: 3, changeReason: '睡不实，加合成药' }, source: 'teacher' },
+    }
+    expect(await saveTeacherRecord(store, signEncounter(edited, teacher.privateKey))).not.toBeNull()
+    // 一字未改就签：AI 草稿全部点“就这样”，note 都是 ai_accepted。
+    const accepted = acceptAll({
+      ...remoteEncounter(teacher.publicKey, student.publicKey, { id: 'f'.repeat(32), createdAt: '2026-10-17T00:00:00.000Z' }),
+      judgment: {
+        symptomSummary: { value: '合成摘要', source: 'ai_draft' },
+        pattern: { value: '合成证候', source: 'ai_draft' },
+        mechanism: { value: null, source: 'unknown' },
+        rationale: { value: null, source: 'unknown' },
+      },
+    })
+    expect(await saveTeacherRecord(store, signEncounter(accepted, teacher.privateKey))).not.toBeNull()
+
+    const cases = await teacherCases(store)
+    expect(cases).toHaveLength(1)
+    expect(cases[0]).toMatchObject({
+      symptomSummary: 'SYNTHETIC_EDITED',
+      pattern: 'SYNTHETIC_PATTERN',
+      changeReason: '睡不实，加合成药',
+      prescription: { items: [{ herb: '合成药', dose: '3g' }], days: 3 },
+    })
+    // 原样确认只计入认可数，不当作老师思路学进去。
+    expect(await teacherCaseStats(store)).toEqual({ referable: 1, accepted: 1 })
+    // 当前这位学生自己的病历不重复进医案（它已作为旧病历带上）。
+    expect(await teacherCases(store, { forStudent: student.publicKey })).toEqual([])
+    // 签好字又被改过的内容不是老师的签字：重算 id 对不上，进不了 teacher-records，也就进不了医案。
+    const signedEdited = signEncounter(remoteEncounter(teacher.publicKey, student.publicKey, { id: '9'.repeat(32) }), teacher.privateKey)
+    const tampered = { ...signedEdited, content: signedEdited.content.replace('睡不着', '被改过的内容') }
+    expect(await saveTeacherRecord(store, tampered)).toBeNull()
+    expect(await teacherCases(store)).toHaveLength(1)
   })
 
   it('老师端只认自己签的完整病历；学生、面诊索引按公钥去重', async () => {
