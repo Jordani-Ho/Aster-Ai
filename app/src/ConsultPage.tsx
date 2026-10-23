@@ -18,8 +18,6 @@ import type { FamilyMember } from './core/family'
 import { MemberSwitcher } from './MemberSwitcher'
 import { listCheckins } from './core/homework'
 import { listSelfRatings, listStressRatings, last14DayTrend } from './core/mirror/trend'
-import { detectRegion, type RedFlagResult } from './core/redflags'
-import { RedFlagAlert } from './RedFlagAlert'
 import { uiError } from './core/onboarding/ui'
 import { TongueCapture } from './TongueCapture'
 import { TonguePair } from './TonguePair'
@@ -42,14 +40,6 @@ const CARD_LABELS: Record<IntakeKey, string> = {
 
 function message(cause: unknown): string {
   return uiError(cause, '操作失败，请重试')
-}
-
-// 急症横幅只说学生自己提到的症状词：去掉持续时间词和互相包含的重复词，最多三个。
-function matchedWordsText(result: RedFlagResult): string {
-  const durations = new Set(result.category?.durationWords ?? [])
-  const words = [...new Set(result.matched)].filter(word => !durations.has(word))
-  const kept = words.filter(word => !words.some(other => other !== word && other.includes(word)))
-  return kept.length > 0 ? kept.slice(0, 3).join('、') : '这些情况'
 }
 
 export interface ConsultPageProps {
@@ -82,7 +72,6 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
-  const region = detectRegion(navigator.language)
 
   useEffect(() => {
     void loadTeachers(store).then(setTeachers).catch(() => {})
@@ -94,8 +83,6 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
   const memberOption = member && profile ? { member: { age: profile.age.value } } : undefined
   const teacher = venueTeacher ?? teachers[0] ?? ''
   const call = (teacherName || '').trim() || '老师'
-  const emergency: RedFlagResult | null = session?.emergency ?? null
-  const crisis = Boolean(emergency?.actions.includes('crisis'))
 
   const apply = (next: IntakeSession, notice = '') => {
     setSession(next)
@@ -204,6 +191,7 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
       {onBack ? <button type="button" className="nl-back" aria-label="返回" onClick={onBack}>‹</button> : <span className="nl-back-placeholder" />}
       <div><h1>{title}</h1><small>{subtitle}</small></div>
     </header>
+    <p className="cf-firstaid">急症请立即去医院或拨打当地急救电话，别等老师回复。</p>
     <div className="cf-body">
       {family.length > 0 && <MemberSwitcher members={family} active={active} onChange={account => onSwitch?.(account)} />}
       {error && <p role="alert" className="nl-danger-strong">{error}</p>}
@@ -235,13 +223,6 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
       </>}
 
       {step === 'card' && session && <>
-        {emergency && (crisis
-          ? <div className="cf-emergency"><RedFlagAlert result={emergency} region={region} /></div>
-          : <div className="cf-emergency" role="alert">
-            <h2>⚠ 请尽快去医院</h2>
-            <p>你提到{matchedWordsText(emergency)}。<br />别等老师回复再去。</p>
-          </div>)}
-        {emergency && <p className="cf-emergency-note">仍然可以把情况发给{call}。</p>}
         <p className="cf-desc">这是按你的话整理的，<br />看看有没有说错、漏掉的。</p>
         <section className="cf-card" aria-label="问诊卡片">
           <div className="cf-card-head"><h2>问诊卡片</h2><span className="cf-tag">草稿 · 待你核对</span></div>
@@ -285,7 +266,7 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
         <button type="button" className="nl-primary" disabled={busy || answerText.trim() === ''} onClick={() => void organize(true)}>补充好了，整理卡片</button>
         <button type="button" className="op-link-button" disabled={busy} onClick={() => void organize(false)}>跳过，直接整理</button>
       </>}
-      {step === 'card' && <button type="button" className="nl-primary" disabled={busy} onClick={() => void sendPackage()}>{emergency ? `仍发给${call}` : `发给${call}`}</button>}
+      {step === 'card' && <button type="button" className="nl-primary" disabled={busy} onClick={() => void sendPackage()}>发给{call}</button>}
     </footer>
   </main>
 }

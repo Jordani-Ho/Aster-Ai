@@ -26,13 +26,33 @@ async function layout(page) {
   expect(small).toEqual([])
 }
 async function shot(page, name) { if (!process.env.CI) await page.screenshot({ path: root + 'docs/screenshots/' + name + '.png' }) }
+const FIRST_AID = '急症请立即去医院或拨打当地急救电话，别等老师回复。'
+const HOTLINE_WORDS = ['心理援助热线', '24小时热线', '热线', '12356']
+const PHONE_NUMBERS = ['120', '911', '999', '119', '995', '988']
+async function expectNoHotline(page) {
+  const body = await page.locator('body').innerText()
+  for (const word of HOTLINE_WORDS) expect(body).not.toContain(word)
+  for (const number of PHONE_NUMBERS) expect(body).not.toContain(number)
+  expect(await page.locator('.redflag-notice').count()).toBe(0)
+}
+// 整理后可能先出追问，也可能直接到卡片；两种都往下走。
 async function skipToCard(page) {
-  for (let guard = 0; guard < 6; guard += 1) {
-    const skip = page.getByRole('button', { name: '跳过，直接整理', exact: true })
-    try { await skip.waitFor({ state: 'visible', timeout: 4000 }) } catch { break }
-    await skip.click()
+  const card = page.getByRole('region', { name: '问诊卡片' })
+  const skip = page.getByRole('button', { name: '跳过，直接整理', exact: true }).first()
+  for (let guard = 0; guard < 5; guard += 1) {
+    let state = 'none'
+    for (let tick = 0; tick < 120 && state === 'none'; tick += 1) {
+      if (await card.count()) state = 'card'
+      else if (await skip.count()) state = 'skip'
+      else await page.waitForTimeout(250)
+    }
+    if (state === 'card') return card
+    if (state === 'none') break
+    await skip.click({ timeout: 5000 }).catch(() => {})
+    await page.waitForTimeout(300)
   }
-  await expect(page.getByRole('region', { name: '问诊卡片' })).toBeVisible()
+  await expect(card).toBeVisible()
+  return card
 }
 
 try {
@@ -185,22 +205,39 @@ try {
     expect(errors).toEqual([])
     await context.close()
   }
-  // 10d 急症：顶部“请尽快去医院”，只提醒、不拦截，仍能发出
+  // 10d 急症：顶部那句常驻提示，不弹窗、不拦截、无电话号码，仍能发出
   {
     const { context, page, errors } = await open('consult')
     await page.getByRole('button', { name: /不舒服？告诉/ }).click()
+    await expect(page.getByText(FIRST_AID, { exact: true })).toBeVisible()
     await page.getByLabel('按键盘上的🎤说话就行', { exact: true }).fill('胸口闷，还一直冒冷汗')
     await page.getByRole('button', { name: '说好了，继续', exact: true }).click()
     await skipToCard(page)
-    await expect(page.getByRole('alert')).toContainText('请尽快去医院')
-    await expect(page.getByText(/别等老师回复再去/)).toBeVisible()
-    await expect(page.getByText(/仍然可以把情况发给/)).toBeVisible()
-    const body = await page.locator('body').innerText()
-    for (const number of ['120', '911', '999', '119', '995', '988']) expect(body).not.toContain(number)
-    const send = page.getByRole('button', { name: /^仍发给/ })
+    await expect(page.getByText(FIRST_AID, { exact: true })).toBeVisible()
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    await expectNoHotline(page)
+    const send = page.getByRole('button', { name: /^发给/ })
     await expect(send).toBeEnabled()
     await layout(page)
     await shot(page, 'phone-student-consult-emergency')
+    await send.click()
+    await expect(page.getByRole('heading', { name: '已发给老师', exact: true })).toBeVisible()
+    expect(errors).toEqual([])
+    await context.close()
+  }
+  // 说自伤/轻生的话：和平常一样，只有顶端那句常驻提示，照常能发出，没有任何热线号码
+  {
+    const { context, page, errors } = await open('consult')
+    await page.getByRole('button', { name: /不舒服？告诉/ }).click()
+    await expect(page.getByText(FIRST_AID, { exact: true })).toBeVisible()
+    await page.getByLabel('按键盘上的🎤说话就行', { exact: true }).fill('心里难受、不想活')
+    await page.getByRole('button', { name: '说好了，继续', exact: true }).click()
+    await skipToCard(page)
+    await expect(page.getByText(FIRST_AID, { exact: true })).toBeVisible()
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    await expectNoHotline(page)
+    const send = page.getByRole('button', { name: /^发给/ })
+    await expect(send).toBeEnabled()
     await send.click()
     await expect(page.getByRole('heading', { name: '已发给老师', exact: true })).toBeVisible()
     expect(errors).toEqual([])

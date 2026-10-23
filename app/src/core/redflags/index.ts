@@ -1,8 +1,8 @@
 import { matchCategory, redFlagDocument } from './rules'
-import type { EmergencyContact, RedFlagAction, RedFlagCategory, RedFlagDocument } from './rules'
+import type { RedFlagAction, RedFlagCategory, RedFlagDocument } from './rules'
 import { normalizeText } from './normalize'
 
-export type { EmergencyContact, RedFlagAction, RedFlagCategory, RedFlagDocument } from './rules'
+export type { RedFlagAction, RedFlagCategory, RedFlagDocument } from './rules'
 export { durationMinutes, matchedWords, redFlagDocument, SUPPORTED_RULES, validateDocument } from './rules'
 export { COVERED_SIMPLIFIED, normalizeText, TRADITIONAL_TO_SIMPLIFIED } from './normalize'
 
@@ -13,7 +13,7 @@ export interface RedFlagResult {
   category: RedFlagCategory | null
   matched: string[]
   source: 'local' | 'model' | 'none'
-  // 同时命中的动作类型（急症在前、自伤在后）；界面据此决定显示几个号码。
+  // 同时命中的动作类型（急症在前、自伤在后）；界面只用于常驻就医提示，不显示电话号码。
   actions: RedFlagAction[]
 }
 
@@ -67,51 +67,4 @@ export async function checkWithModel(
   const category = document.categories.find(item => item.id === verdict.categoryId)
   if (!category) return local
   return { hit: true, category, matched: [], source: 'model', actions: [category.action] }
-}
-
-// 把浏览器语言标签映射成清单里的地区代码；识别不出时返回 null，界面显示通用提示。
-export function detectRegion(locale?: string | null): string | null {
-  const tag = String(locale ?? '').trim().toLowerCase().replace(/_/g, '-')
-  if (tag === '') return null
-  if (tag.startsWith('zh-tw') || tag.startsWith('zh-hant-tw')) return 'TW'
-  if (tag.startsWith('zh-hk') || tag.startsWith('zh-mo')) return 'HK'
-  if (tag.startsWith('zh')) return 'CN'
-  if (tag.startsWith('en-sg')) return 'SG'
-  if (tag.startsWith('en-us')) return 'US'
-  return null
-}
-
-// 只返回清单里 verified 为 true 的号码；未核实或地区未知时返回 null，界面不得编造号码。
-export function getContact(
-  region: string | null | undefined,
-  action: RedFlagAction,
-  document: RedFlagDocument = redFlagDocument,
-): EmergencyContact | null {
-  if (region === null || region === undefined) return null
-  const key = String(region).trim().toUpperCase()
-  const entry = document.contacts[key]
-  if (!entry) return null
-  const contact = entry[action]
-  return contact && contact.verified ? contact : null
-}
-
-export interface AlertContact {
-  action: RedFlagAction
-  contact: EmergencyContact
-}
-
-// 界面要显示的号码：按“急救在前、心理援助在后”的顺序，只包含有已核实号码的动作。
-export function contactsForAlert(
-  result: RedFlagResult,
-  region: string | null | undefined,
-  document: RedFlagDocument = redFlagDocument,
-): AlertContact[] {
-  if (!result.hit) return []
-  const contacts: AlertContact[] = []
-  for (const action of ['emergency', 'crisis'] as const) {
-    if (!result.actions.includes(action)) continue
-    const contact = getContact(region, action, document)
-    if (contact) contacts.push({ action, contact })
-  }
-  return contacts
 }

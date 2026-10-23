@@ -28,8 +28,15 @@
 ## 完成记录（2026-10-22）
 
 - 分支 `task/V2-17-new-ui-second`；页面：`TeacherStudentsPage`（06+07）、`TeacherManagement` 重画（08）、`OpeningGuide`（05a–05e）、`StorefrontWelcome`（09）、`ConsultPage`（10a–10d）、`StudentRecordsHome`（11）、`StudentMe`（12），`TeacherShell`/`StudentShell` 接上；`TeacherCarePlan` 签发后写本机 `care-plan-snapshot` 供 07 显示当前方案（只存本机、不进协议）。
-- 单元测试：新增 `teacher-students.test.ts`（排序/搜索/最近来过/本周三档）与 `records-trend.test.ts`（近四周趋势）共 6 项；`app` 59 文件 / 434 测试全过。
-- 浏览器验收：`phone.browser.mjs` 覆盖 05a–05e 逐页截图与完整建馆、06→07→开始面诊、09→问诊三步→急症只提醒不拦截且仍能发出、11、12，并保留 V2-16 回归，15 张 375px 截图写入 `docs/screenshots/`；`opening.browser.mjs`、`storefront.browser.mjs`、`abstractor.browser.mjs`、`money.browser.mjs` 全 PASS；`e2e` typecheck、environment/deployment 合同测试通过。
-- 真实中继 Playwright：本机 WSL 装 Rust 1.90 后编译 relay，28 条用例全过（environment 4、flow 4、model 4、money 1、onboarding 3、opening 4、phone 5、teacher 3）。修复了 CI 暴露的一处真实回归：我的馆→钱账明细没把 `llm` 传给 `LedgerSettings`，「生成记账草稿」一直灰着；同时给问诊三步 e2e 的“跳过，直接整理”加了显式等可用与超时，避免慢机上误判。
-- 与稿子的已知差异（均为数据口径）：名单没有逐日打卡，只能按学生上报的周汇总显示“本周还没打卡 / 本周 X/7”，不逐日推断；07 当前方案取本机签发快照，core 不存学生方案正文；急症横幅只列出学生自己提到的症状词，不出现电话号码。
+- 单元测试：新增 `teacher-students.test.ts`（排序/搜索/最近来过/本周三档）与 `records-trend.test.ts`（近四周趋势）共 6 项。
+- 浏览器验收：`phone.browser.mjs` 覆盖 05a–05e 逐页截图与完整建馆、06→07→开始面诊、09→问诊三步、11、12，并保留 V2-16 回归，15 张 375px 截图写入 `docs/screenshots/`；`opening.browser.mjs`、`storefront.browser.mjs`、`abstractor.browser.mjs`、`money.browser.mjs` 全 PASS；`e2e` typecheck、environment/deployment 合同测试通过。
+- 真实中继 Playwright：本机 WSL 装 Rust 1.90 后编译 relay，28 条用例全过（environment 4、flow 4、model 4、money 1、onboarding 3、opening 4、phone 5、teacher 3）。修复了 CI 暴露的一处真实回归：我的馆→钱账明细没把 `llm` 传给 `LedgerSettings`，「生成记账草稿」一直灰着；同时给问诊三步 e2e 的“跳过，直接整理”加了显式等待，避免慢机上误判。
+- 与稿子的已知差异（均为数据口径）：名单没有逐日打卡，只能按学生上报的周汇总显示“本周还没打卡 / 本周 X/7”，不逐日推断；07 当前方案取本机签发快照，core 不存学生方案正文。
 - CI：本机真实中继 28 条全过；CI app/gateway/e2e 三件套全绿（e2e 含真实中继 28 条）。
+
+## 审核回改（2026-10-23，心理援助热线也删掉）
+
+- 问诊三步顶端常驻一句「急症请立即去医院或拨打当地急救电话，别等老师回复。」，不管是否命中；命中急症/自伤都不弹窗、不拦截，发送按钮照常「发给X老师」。
+- 删除 `app/src/RedFlagAlert.tsx`、`.redflag-*`、`.cf-emergency*` 样式、`contactsForAlert`/`getContact`/`detectRegion` 及其单元测试；老师面诊页的自伤热线分支一并删除。`domain/tcm/red-flags.json` 的规则与联系方式数据属于已审 C 类数据，保留但不再被任何界面/代码读取。
+- 用例：`e2e/flow.spec.ts` 的「emergency wording only shows the standing hint…」与「self-harm wording looks normal…」；`e2e/phone.browser.mjs` 的 10d 与自伤场景。断言常驻提示存在、无 `role=alert`、无 `.redflag-notice`、全页无「心理援助热线/24小时热线/热线/12356」与常见急救号码、发送可用且能发出（问诊包仍带 redFlag）。
+- grep 证据：`git grep -n "RedFlagAlert\|contactsForAlert\|getContact\|detectRegion" -- app/src e2e` 为空；`git grep -n "心理援助热线\|24小时热线\|仍发给\|你并不孤单" -- app/src` 为空（测试里只保留“不得出现”的断言字符串）。

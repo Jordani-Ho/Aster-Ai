@@ -99,11 +99,7 @@
 .cf-bubble { background: #e9efe8; border-radius: 16px; padding: 14px 16px; margin: 12px 0 20px; font-size: 17px; line-height: 1.8; color: #2f3d35; }
 .cf-question-card { background: #fffdf8; border: 1px solid #e6e0d2; border-radius: 18px; padding: 18px; margin: 8px 0 4px; }
 .cf-question-card h2 { font-size: 25px; margin: 0 0 6px; }
-.cf-emergency { background: #fdf4e3; border: 1px solid #e0c27a; border-radius: 18px; padding: 18px; margin: 10px 0; color: #6b4a16; }
-.cf-emergency h2 { font-size: 25px; margin: 0 0 10px; color: #8a5a1f; }
-.cf-emergency p { margin: 4px 0; font-size: 17px; line-height: 1.7; }
-.cf-emergency .redflag-notice { background: transparent; border: 0; padding: 0; margin: 0; }
-.cf-emergency-note { color: #56645b; font-size: 16px; margin: 6px 0 14px; }
+.cf-firstaid { margin: 12px 20px 0; padding: 10px 14px; border-radius: 14px; background: #fdf7ea; color: #6b4a16; font-size: 16px; line-height: 1.6; }
 .cf-card { background: #fffdf8; border: 1px solid #e6e0d2; border-radius: 20px; padding: 18px; margin: 16px 0; }
 .cf-card[aria-label="问诊卡片"] { border: 1.5px dashed #c9a94d; background: #fdf9ec; }
 .cf-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import redFlagDocument from '../../../../domain/tcm/red-flags.json'
-import { check, checkWithModel, contactsForAlert, detectRegion, getContact, redFlagCategories, validateDocument } from './index'
+import { check, checkWithModel, redFlagCategories, validateDocument } from './index'
 
 interface Samples { hit: string[]; miss: string[] }
 
@@ -133,7 +132,7 @@ describe('M1-04 急症红线引擎', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it('同时命中急救与自伤时优先显示危机提示', () => {
+  it('同时命中急救与自伤时按自伤类标记', () => {
     const result = check('胸口痛，还冒冷汗，真的不想活了')
     expect(result.hit).toBe(true)
     expect(result.category?.action).toBe('crisis')
@@ -163,45 +162,6 @@ describe('M1-04 急症红线引擎', () => {
     const invented = await checkWithModel('最近心里堵得慌', async () => ({ hit: true, categoryId: 'RF-99' }))
     expect(invented.hit).toBe(false)
   })
-
-  it('按地区显示的急救电话与清单一致', () => {
-    const contacts = redFlagDocument.contacts as unknown as Record<string, Record<string, { number: string; verified: boolean } | undefined>>
-    for (const [region, entry] of Object.entries(contacts)) {
-      if (region.startsWith('_')) continue
-      for (const action of ['emergency', 'crisis'] as const) {
-        const expected = entry[action]
-        const actual = getContact(region.toLowerCase(), action)
-        if (expected?.verified) {
-          expect(actual?.number, region + ' ' + action).toBe(expected.number)
-        } else {
-          expect(actual, region + ' ' + action).toBeNull()
-        }
-      }
-    }
-  })
-
-  it('未核实的号码不显示，未知地区不编造号码', () => {
-    const document = {
-      version: 1,
-      categories: [],
-      contacts: { XX: { emergency: { number: '000', verified: false, checked: '2026-10-16', source: 'https://example.com' } } },
-    } as unknown as Parameters<typeof getContact>[2]
-    expect(getContact('XX', 'emergency', document)).toBeNull()
-    expect(getContact('ZZ', 'emergency')).toBeNull()
-    expect(getContact(null, 'crisis')).toBeNull()
-  })
-
-  it('识别常见地区代码', () => {
-    expect(detectRegion('zh-CN')).toBe('CN')
-    expect(detectRegion('zh-TW')).toBe('TW')
-    expect(detectRegion('zh-Hant-TW')).toBe('TW')
-    expect(detectRegion('zh-HK')).toBe('HK')
-    expect(detectRegion('en-US')).toBe('US')
-    expect(detectRegion('en-SG')).toBe('SG')
-    expect(detectRegion('en-GB')).toBeNull()
-    expect(detectRegion(undefined)).toBeNull()
-  })
-
 
   it('繁体输入先转简体再匹配，空白不影响匹配', () => {
     const traditional: [string, string][] = [
@@ -234,25 +194,15 @@ describe('M1-04 急症红线引擎', () => {
     expect(check('胸口闷', document).hit).toBe(false)
   })
 
-  it('同时命中急救与自伤时两个号码都显示，急救在前', () => {
+  it('同时命中急救与自伤时 actions 保留两类，界面不显示号码', () => {
     const result = check('胸口痛，还冒冷汗，真的不想活了')
     expect(result.actions).toEqual(['emergency', 'crisis'])
-    const contacts = contactsForAlert(result, 'CN')
-    expect(contacts.map(item => item.action)).toEqual(['emergency', 'crisis'])
-    expect(contacts.map(item => item.contact.number)).toEqual(['120', '12356'])
   })
 
-  it('只命中自伤时只显示心理援助热线', () => {
+  it('只命中自伤时标记 crisis，不生成任何号码提示', () => {
     const result = check('我真的不想活了')
+    expect(result.hit).toBe(true)
     expect(result.actions).toEqual(['crisis'])
-    const contacts = contactsForAlert(result, 'CN')
-    expect(contacts.map(item => item.contact.number)).toEqual(['12356'])
-  })
-
-  it('地区未知时不编造号码', () => {
-    const result = check('我真的不想活了')
-    expect(contactsForAlert(result, null)).toEqual([])
-    expect(contactsForAlert(result, 'ZZ')).toEqual([])
   })
 
 

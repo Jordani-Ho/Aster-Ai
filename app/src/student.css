@@ -16,16 +16,6 @@
   margin: 10px 0;
 }
 
-.redflag-notice {
-  border: 1px solid #e0b23a;
-  background: #fff7e6;
-  border-radius: 10px;
-  padding: 10px 12px;
-  margin: 8px 0;
-}
-.redflag-notice p { margin: 4px 0; }
-.redflag-hotline { font-size: 16px; }
-
 .chat { padding: 8px 0; }
 .bubble { max-width: 85%; padding: 10px 12px; border-radius: 12px; margin: 6px 0; }
 .bubble.student { margin-left: auto; background: #e8f5ef; }
