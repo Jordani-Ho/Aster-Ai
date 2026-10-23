@@ -38,7 +38,15 @@ try {
     const dynamic = page.getByText('合成小王 这周只练了 2 天', { exact: true })
     if (await dynamic.count() === 0) {
       await page.waitForTimeout(1500)
-      if (await dynamic.count() === 0) console.log('DEBUG-TODAY', JSON.stringify({ body: (await page.locator('body').innerText()).slice(0, 1000), rows: await page.evaluate(async () => { const p = '/src/core/store/index.ts', s = await (await import(p)).resumeStore(); try { return { adherence: await s.store.list('student-adherence'), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, now: new Date().toString() } } finally { s.store.close(); s.identity.privateKey.fill(0) } }) }))
+      if (await dynamic.count() === 0) {
+        console.log('DEBUG-TODAY-BODY', JSON.stringify((await page.locator('body').innerText()).slice(0, 1200)))
+        console.log('DEBUG-TODAY-ROWS', JSON.stringify(await page.evaluate(async () => {
+          const p = '/src/core/store/index.ts'
+          const s = await (await import(p)).resumeStore({ name: 'v216-teacher-today' })
+          try { return { adherence: await s.store.list('student-adherence'), consults: (await s.store.list('consult-package')).length, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, now: new Date().toString() } }
+          finally { s.store.close(); s.identity.privateKey.fill(0) }
+        })))
+      }
     }
     await expect(dynamic).toBeVisible()
     await layout(page)
