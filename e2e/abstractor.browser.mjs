@@ -18,7 +18,12 @@ try {
  const upload=async()=>{await page.locator('input[type=file]').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:png});await expect(page.locator('input[type=file]')).toHaveValue('')}
  await expect(page.locator('[data-page=student-today]')).toBeVisible()
  const mirrorSvg=page.locator('.nl-mirror-frame svg')
- await upload();await expect(mirrorSvg).toHaveCount(1)
+ await upload()
+ {
+  await page.waitForTimeout(4000)
+  if (await mirrorSvg.count() !== 1) console.log('DEBUG-UPLOAD', JSON.stringify({ alert: await page.getByRole('alert').allInnerTexts(), body: (await page.locator('body').innerText()).slice(0, 1200) }))
+ }
+ await expect(mirrorSvg).toHaveCount(1)
  await page.reload();await expect(mirrorSvg).toHaveCount(1)
  failure=true;await upload();await expect(page.getByRole('alert')).toContainText('重新拍');await expect(mirrorSvg).toHaveCount(1)
  failure=false;await page.getByText('切换家人',{exact:true}).click();await expect(mirrorSvg).toHaveCount(0)
