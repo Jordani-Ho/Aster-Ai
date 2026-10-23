@@ -76,6 +76,9 @@ const ledgerPanel = <LedgerSettings managed flat identity={teacher.identity} sto
 const status = <><p role="status">中继：已连接</p></>
 const now = new Date()
 const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-')
+// 学生动态按“本周小结”过滤；用本周一，避免跨时区/跨零点时 weekStart 比今天晚。
+const weekday = (now.getDay() + 6) % 7
+const weekStart = (() => { const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekday); return [monday.getFullYear(), String(monday.getMonth() + 1).padStart(2, '0'), String(monday.getDate()).padStart(2, '0')].join('-') })()
 
 function remoteEncounter(): Encounter {
   const encounter = startInPersonEncounter({ teacher: teacher.identity.publicKey, student: student.publicKey, id: 'a'.repeat(32), now: new Date('2026-10-22T02:00:00.000Z') })
@@ -94,7 +97,7 @@ async function seedRemote() {
     receivedAt: new Date('2026-10-22T02:05:00.000Z').toISOString(), sender: student.publicKey, droppedHistory: 0,
   })
   await teacher.store.put('student-adherence', student.publicKey, {
-    student: student.publicKey, weekStart: today, weeklyRate: 0.3, streak: 0, practiceDays: 2, scheduled: 7, done: 2,
+    student: student.publicKey, weekStart, weeklyRate: 0.3, streak: 0, practiceDays: 2, scheduled: 7, done: 2,
     receivedAt: new Date().toISOString(),
   })
 }

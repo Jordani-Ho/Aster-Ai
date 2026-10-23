@@ -35,7 +35,12 @@ try {
     await expect(page.getByRole('heading', { name: '等您签字', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: /合成小王/ })).toContainText('最近睡不好')
     await expect(page.getByRole('heading', { name: '学生动态', exact: true })).toBeVisible()
-    await expect(page.getByText('合成小王 这周只练了 2 天', { exact: true })).toBeVisible()
+    const dynamic = page.getByText('合成小王 这周只练了 2 天', { exact: true })
+    if (await dynamic.count() === 0) {
+      await page.waitForTimeout(1500)
+      if (await dynamic.count() === 0) console.log('DEBUG-TODAY', JSON.stringify({ body: (await page.locator('body').innerText()).slice(0, 1000), rows: await page.evaluate(async () => { const p = '/src/core/store/index.ts', s = await (await import(p)).resumeStore(); try { return { adherence: await s.store.list('student-adherence'), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, now: new Date().toString() } } finally { s.store.close(); s.identity.privateKey.fill(0) } }) }))
+    }
+    await expect(dynamic).toBeVisible()
     await layout(page)
     await shot(page, 'phone-teacher-today')
 
