@@ -24,3 +24,11 @@
 2. 老师：全新部署走完建馆五步；从“学生”进一位学生，点“开始面诊”能直接开始。
 3. 学生：从邀请链接进馆 → 首页 → “不舒服？告诉老师”→ 三步发出；说到急症信号时出现提醒、仍能发出。
 4. 旧页面组件（旧管理页、旧邀请首屏、旧问诊页、旧“其他”页）在代码里搜不到。
+
+## 完成记录（2026-10-22）
+
+- 分支 `task/V2-17-new-ui-second`；页面：`TeacherStudentsPage`（06+07）、`TeacherManagement` 重画（08）、`OpeningGuide`（05a–05e）、`StorefrontWelcome`（09）、`ConsultPage`（10a–10d）、`StudentRecordsHome`（11）、`StudentMe`（12），`TeacherShell`/`StudentShell` 接上；`TeacherCarePlan` 签发后写本机 `care-plan-snapshot` 供 07 显示当前方案（只存本机、不进协议）。
+- 单元测试：新增 `teacher-students.test.ts`（排序/搜索/最近来过/本周三档）与 `records-trend.test.ts`（近四周趋势）共 6 项；`app` 59 文件 / 434 测试全过。
+- 浏览器验收：`phone.browser.mjs` 覆盖 05a–05e 逐页截图与完整建馆、06→07→开始面诊、09→问诊三步→急症只提醒不拦截且仍能发出、11、12，并保留 V2-16 回归，15 张 375px 截图写入 `docs/screenshots/`；`opening.browser.mjs`、`storefront.browser.mjs`、`abstractor.browser.mjs`、`money.browser.mjs` 全 PASS；`e2e` typecheck、environment/deployment 合同测试通过。
+- 与稿子的已知差异（均为数据口径）：名单没有逐日打卡，只能按学生上报的周汇总显示“本周还没打卡 / 本周 X/7”，不逐日推断；07 当前方案取本机签发快照，core 不存学生方案正文；急症横幅只列出学生自己提到的症状词，不出现电话号码。
+- 留待 CI：本机无法跑真实中继 Playwright 套件（WSL 无 Rust 1.90），`flow/teacher/phone/money/onboarding/opening/model` spec 已按新界面选择器更新，等 CI 验证。
