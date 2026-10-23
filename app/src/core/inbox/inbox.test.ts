@@ -431,9 +431,11 @@ it('9 已登记老师正常显示并进作业；已发出的问诊包会自动�
   expect(await listReceivedRecords(studentStore, studentId)).toHaveLength(1)
 })
 
-it('6 375px 截图：学生病历页、老师问诊箱', () => {
+it('6 375px 截图：学生病历页、老师今天/核对签字', () => {
   expect(existsSync(new URL('../../../../docs/screenshots/student-records-375.png', import.meta.url))).toBe(true)
-  expect(existsSync(new URL('../../../../docs/screenshots/teacher-inbox-375.png', import.meta.url))).toBe(true)
+  // V2-16：老师问诊箱并入“今天 → 等您签字”，截图改交新界面。
+  expect(existsSync(new URL('../../../../docs/screenshots/phone-teacher-today.png', import.meta.url))).toBe(true)
+  expect(existsSync(new URL('../../../../docs/screenshots/phone-teacher-review.png', import.meta.url))).toBe(true)
   expect(existsSync(new URL('../../records.css', import.meta.url))).toBe(true)
   expect(existsSync(new URL('../../inbox.css', import.meta.url))).toBe(true)
 })

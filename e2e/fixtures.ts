@@ -54,7 +54,7 @@ export const test=base.extend<{people:{teacher:Person;student:Person};seedLedger
    await teacher.page.getByRole('button',{name:'我是老师',exact:true}).click();await connectModel(teacher.page)
    // V2-15：第一次进来走建馆引导，开馆后拿到第一位学生的 1 小时邀请。
    const link=await openCommunity(teacher.page)
-   await student.page.goto(link);await expect(student.page.getByRole('button',{name:'开始使用',exact:true})).toBeVisible();await student.page.getByRole('button',{name:'开始使用',exact:true}).click();await connectModel(student.page);await expect(student.page.getByRole('heading',{name:'镜子',exact:true})).toBeVisible()
+   await student.page.goto(link);await expect(student.page.getByRole('button',{name:'开始使用',exact:true})).toBeVisible();await student.page.getByRole('button',{name:'开始使用',exact:true}).click();await connectModel(student.page);await expect(student.page.locator('[data-page=student-today]')).toBeVisible()
    // 学生连上社区后老师才认得他；建馆引导自动结束，进入正常首页。
    await expect(teacher.page.getByRole('heading',{name:'今天',exact:true})).toBeVisible()
    setActors(await actualActor(teacher.page),await actualActor(student.page))

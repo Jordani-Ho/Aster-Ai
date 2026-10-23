@@ -36,7 +36,7 @@ heavenLine(stamp, display)         // 老师起草页那一行，如 '学生那�
 
 - 学生点“确认发送”时取一次 heaven 放进 `ConsultPackage` 与 `Encounter`；老师签字时原样沿用，不重新取（面诊在老师开始面诊时取一次）。
 - 老师起草页顶部按老师自己的 `timeDisplay` 显示一行（`heavenLine`）：`shichen` → `戌时`，`clock` → `19:00–21:00`，`both` → `戌时（19:00–21:00）`，后面接节气与城市。没有 heaven 的旧病历不显示这一行，照常验签打开。
-- 家人：城市在家人设置里单独设（存家人分片的 `profile.city`），记录按家人的城市算时辰；时间显示方式与照镜子时辰沿用管理人自己的设置（`MirrorPage` 的 `settingsStore`）。
+- 家人：城市在家人设置里单独设（存家人分片的 `profile.city`），记录按家人的城市算时辰；时间显示方式与照镜子时辰沿用管理人自己的设置（`StudentShell` 用根存储传 `settingsStore`）。
 
 ## 边界
 

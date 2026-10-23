@@ -7,7 +7,9 @@ test('two automatically generated contexts persist isolated identities without v
   expect(await person.page.locator('body').innerText()).not.toMatch(/密钥|公钥|npub|十六进制/)
   const key=()=>person.page.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return s.identity.publicKey}finally{s.store.close();s.identity.privateKey.fill(0)}})
   const first=await key();expect(first).toMatch(/^[0-9a-f]{64}$/);keys.push(first)
-  await person.page.reload();await expect(person.page.getByRole('heading',{name:person===people.teacher?'今天':'镜子',exact:true})).toBeVisible()
+  await person.page.reload()
+  if (person === people.teacher) await expect(person.page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
+  else await expect(person.page.locator('[data-page=student-today]')).toBeVisible()
   expect(await key()).toBe(first)
  }
  expect(keys[0]).not.toBe(keys[1])

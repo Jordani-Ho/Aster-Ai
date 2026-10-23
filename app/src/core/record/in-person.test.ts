@@ -164,9 +164,11 @@ describe('M1-12 面诊记录验收', () => {
   })
 
   it('5 界面 375px 可用，截图产物在 docs/screenshots', () => {
-    const css = readFileSync(new URL('../../in-person.css', import.meta.url), 'utf8')
-    expect(css).toContain('max-width: 375px')
-    expect(existsSync(new URL('../../../../docs/screenshots/in-person-375.png', import.meta.url))).toBe(true)
+    // V2-16：面诊页重画后统一走 newui.css（480 上限、窄屏不横向滚动）。
+    const css = readFileSync(new URL('../../newui.css', import.meta.url), 'utf8')
+    expect(css).toContain('max-width: 480px')
+    expect(css).toContain('.nl-exams')
+    expect(existsSync(new URL('../../../../docs/screenshots/phone-teacher-visit.png', import.meta.url))).toBe(true)
   })
 })
 

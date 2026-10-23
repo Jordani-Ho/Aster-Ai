@@ -26,8 +26,17 @@ const TONGUE_REPLY = { color: 'pink', coatingColor: 'white', coatingThickness: '
 
 const steps = []
 const findings = []
+let moneyOk = false
 const check = (name, detail = '') => { steps.push({ name, detail }); console.log('STEP ' + name + (detail ? ' · ' + detail : '')) }
 const shot = async (page, name) => page.screenshot({ path: root + 'docs/screenshots/selftest-' + name + '.png' })
+// V2-16：核对页的草稿要逐块“就这样”才能签字。
+const confirmDraft = async page => {
+  for (let guard = 0; guard < 12; guard += 1) {
+    const draft = page.locator('.nl-review-block.draft').first()
+    if (await draft.count() === 0) return
+    await draft.getByRole('button', { name: '就这样', exact: true }).first().click()
+  }
+}
 
 async function mockModel(context) {
   await context.route('https://api.moonshot.cn/v1/chat/completions', async route => {
@@ -105,10 +114,10 @@ try {
   await expect(student.getByRole('button', { name: '开始使用', exact: true })).toBeVisible({ timeout: 20000 })
   await student.getByRole('button', { name: '开始使用', exact: true }).click()
   await connectModel(student)
-  await expect(student.getByRole('heading', { name: '镜子', exact: true })).toBeVisible({ timeout: 20000 })
+  await expect(student.locator('[data-page=student-today]')).toBeVisible({ timeout: 20000 })
   await connected(student)
   await shot(student, '03-student-mirror')
-  check('学生打开邀请首屏、开始使用、接入模型、进入镜子')
+  check('学生打开邀请首屏、开始使用、接入模型、进入学生首页')
 
   // 学生连上社区后，老师端建馆引导自动结束，进入正常首页。
   await expect(teacher.getByRole('heading', { name: '今天', exact: true })).toBeVisible({ timeout: 30000 })
@@ -116,16 +125,16 @@ try {
   await shot(teacher, '01-teacher-home')
   check('第一位学生加入后，老师端自动进入首页')
 
-  // 1. 拍舌象
+  // 1. 拍舌象（学生今天 → 照镜子）
   await student.getByLabel('舌象记录的居住城市').selectOption('北京市')
   await student.getByLabel('选择舌象照片').setInputFiles(TONGUE)
-  await expect(student.locator('figure svg').first()).toBeVisible({ timeout: 30000 })
+  await expect(student.locator('.nl-mirror-frame svg').first()).toBeVisible({ timeout: 30000 })
   await expect(student.getByText(/原图已从应用内清除/)).toBeVisible({ timeout: 20000 })
   await shot(student, '04-tongue')
   check('学生拍舌象：只留裁剪图与候选特征，原图清除')
 
   // 2. 发问诊
-  await student.getByRole('button', { name: '问诊', exact: true }).click()
+  await student.getByRole('button', { name: /不舒服？告诉/ }).click()
   await student.getByLabel('按键盘上的🎤说话就行').fill('最近睡不好，想请老师看看')
   await student.getByRole('button', { name: '发送', exact: true }).click()
   for (let i = 0; i < 3; i += 1) {
@@ -142,42 +151,34 @@ try {
   await shot(student, '05-consult-sent')
   check('学生发问诊、确认卡片、发给老师')
 
-  // 3. 老师起草签字
-  await teacher.getByRole('button', { name: '今天', exact: true }).click()
-  await expect(teacher.getByText(/份待处理问诊/)).toBeVisible({ timeout: 30000 })
-  await teacher.getByRole('button', { name: '远程', exact: true }).click()
-  const consultCard = teacher.getByRole('article').filter({ hasText: '最近睡不好' })
-  const openConsult = consultCard.getByRole('button', { name: '打开问诊', exact: true })
-  await expect(openConsult).toBeVisible({ timeout: 40000 })
-  await expect(openConsult).toBeEnabled({ timeout: 40000 })
-  await openConsult.click()
-  await expect(teacher.getByRole('heading', { name: '病历草稿', exact: true })).toBeVisible({ timeout: 30000 })
+  // 3. 老师起草签字：今天 → 等您签字 → 核对页
+  const consultRow = teacher.getByRole('button', { name: /最近睡不好/ })
+  await expect(consultRow).toBeVisible({ timeout: 40000 })
+  await consultRow.click()
+  await expect(teacher.getByRole('heading', { name: /· 核对$/ })).toBeVisible({ timeout: 30000 })
   await teacher.getByRole('button', { name: '改善', exact: true }).click()
+  await confirmDraft(teacher)
   await teacher.getByRole('button', { name: '签字发出', exact: true }).click()
   await expect(teacher.getByRole('heading', { name: '已签字交还', exact: true })).toBeVisible({ timeout: 30000 })
   await shot(teacher, '06-signed')
-  await teacher.getByRole('button', { name: '返回问诊箱', exact: true }).click()
-  check('老师打开问诊、选“和上次比 改善”、签字发出')
+  await teacher.getByRole('button', { name: '返回今天', exact: true }).click()
+  check('老师打开问诊、逐块确认草稿、选“和上次比 改善”、签字发出')
 
   // 4. 学生收到病历、打卡
-  await student.getByRole('button', { name: '其他', exact: true }).click()
-  await student.getByRole('button', { name: '我的病历', exact: true }).click()
+  await student.getByRole('button', { name: '记录', exact: true }).click()
   await expect(student.getByRole('heading', { name: '我的病历', exact: true })).toBeVisible()
   await expect(student.getByText('SYNTHETIC_PATTERN', { exact: false }).first()).toBeVisible({ timeout: 30000 })
   await shot(student, '07-student-record')
-  await student.getByRole('button', { name: '返回', exact: true }).click()
-  await student.getByRole('button', { name: '今日作业', exact: true }).click()
-  await expect(student.getByRole('heading', { name: '今日作业', exact: true })).toBeVisible()
-  const checkin = student.getByRole('button', { name: '已完成', exact: true }).first()
+  await student.getByRole('button', { name: '今天', exact: true }).click()
+  const checkin = student.getByRole('button', { name: /打卡：/ }).first()
   await expect(checkin).toBeVisible({ timeout: 20000 })
   await checkin.click()
-  await expect(student.getByRole('button', { name: '今日已完成 ✓', exact: true }).first()).toBeVisible({ timeout: 20000 })
+  await expect(checkin).toHaveAttribute('aria-pressed', 'true', { timeout: 20000 })
   await shot(student, '08-homework-checkin')
-  await student.getByRole('button', { name: '返回', exact: true }).click()
   check('学生收到签字病历与作业，完成打卡')
 
   // 5. 老师说一句话记账、学生看余额（V2-12：第一次确认时自动建账）
-  await teacher.getByRole('button', { name: '管理', exact: true }).click()
+  await teacher.getByRole('button', { name: '我的馆', exact: true }).click()
   await teacher.locator('summary').filter({ hasText: /^钱账$/ }).click()
   await teacher.getByRole('button', { name: '立即对账', exact: true }).click()
   const currencySelect = teacher.getByLabel('钱账币种', { exact: true })
@@ -190,15 +191,16 @@ try {
   await teacher.getByRole('button', { name: '确认入账', exact: true }).click()
   await expect(teacher.getByText(/已记入钱账/)).toBeVisible({ timeout: 20000 })
   await shot(teacher, '09-money-teacher')
-  await student.getByRole('button', { name: '其他', exact: true }).click()
+  await student.getByRole('button', { name: '我', exact: true }).click()
   await student.locator('summary').filter({ hasText: /^设置$/ }).click()
   await student.locator('summary').filter({ hasText: /^钱账与对账$/ }).click()
   await expect(student.getByText(/钱账余额：.*100\.00/)).toBeVisible({ timeout: 30000 })
   await shot(student, '10-money-student')
+  moneyOk = true
   check('老师一句话记账（真人确认入账），学生看到余额 100.00')
 
   // 6. 老师改门面、学生看到
-  await teacher.getByRole('button', { name: '管理', exact: true }).click()
+  await teacher.getByRole('button', { name: '我的馆', exact: true }).click()
   await teacher.locator('details.manage-block').filter({ hasText: /^我的门面/ }).locator('summary').click()
   const venue = teacher.locator('section[aria-label="我的门面"]')
   await venue.getByLabel('馆名', { exact: true }).fill('阿慈养生馆')
@@ -207,14 +209,14 @@ try {
   await expect(teacher.getByText(/已用这个样子/)).toBeVisible({ timeout: 20000 })
   await shot(teacher, '11-storefront-teacher')
   // 学生在线时会直接收到新门面；再刷新一次确认已缓存。
-  await expect(student.locator('.teacher-venue')).toContainText('阿慈养生馆', { timeout: 30000 })
+  await expect(student.getByText(/阿慈养生馆 · 阿慈老师/)).toBeVisible({ timeout: 30000 })
   await student.reload()
-  await expect(student.locator('.teacher-venue')).toContainText('阿慈养生馆', { timeout: 30000 })
+  await expect(student.getByText(/阿慈养生馆 · 阿慈老师/)).toBeVisible({ timeout: 30000 })
   await shot(student, '12-storefront-student')
   check('老师改门面“用这个样子”，学生页首看到新馆名')
 
-  // 7. 清空学生浏览器 + 换机找回
-  await teacher.getByRole('button', { name: '管理', exact: true }).click()
+  // 7. 清空学生浏览器 + 换机找回（换手机块里生成链接；待认回也在同一个块里）
+  await teacher.getByRole('button', { name: '我的馆', exact: true }).click()
   await teacher.locator('details.manage-block').filter({ hasText: /^换手机/ }).locator('summary').click()
   const recoverSection = teacher.locator('section[aria-label="换手机找回"]')
   await recoverSection.getByLabel(/你的称呼/).fill('阿慈')
@@ -237,7 +239,8 @@ try {
   await shot(recovered, '14-recover-request')
   check('学生清空浏览器后打开换机链接、发“我是原来的小王”请求')
 
-  await teacher.getByRole('button', { name: '今天', exact: true }).click()
+  await teacher.getByRole('button', { name: '我的馆', exact: true }).click()
+  await teacher.locator('details.manage-block').filter({ hasText: /^换手机/ }).locator('summary').click()
   const prompt = teacher.locator('section[aria-label="换手机认回请求"]')
   await expect(prompt).toBeVisible({ timeout: 30000 })
   await expect(prompt.getByText(/说他换了手机，是他吗？/)).toBeVisible()
@@ -254,13 +257,12 @@ try {
   await recovered.getByRole('button', { name: '先继续用', exact: true }).click()
   // 新设备还没接入模型：先按内测手册接入自己的模型，再继续。
   await connectModel(recovered)
-  await expect(recovered.getByRole('heading', { name: '镜子', exact: true })).toBeVisible({ timeout: 20000 })
-  await recovered.getByRole('button', { name: '其他', exact: true }).click()
-  await recovered.getByRole('button', { name: '我的病历', exact: true }).click()
+  await expect(recovered.locator('[data-page=student-today]')).toBeVisible({ timeout: 20000 })
+  await recovered.getByRole('button', { name: '记录', exact: true }).click()
   await expect(recovered.getByText('SYNTHETIC_PATTERN', { exact: false }).first()).toBeVisible({ timeout: 30000 })
   await shot(recovered, '16-recovered-records')
-  await recovered.getByRole('button', { name: '返回', exact: true }).click()
   if (moneyOk) {
+    await recovered.getByRole('button', { name: '我', exact: true }).click()
     await recovered.locator('summary').filter({ hasText: /^设置$/ }).click()
     await recovered.locator('summary').filter({ hasText: /^钱账与对账$/ }).click()
     await expect(recovered.getByText(/钱账余额：.*100\.00/)).toBeVisible({ timeout: 30000 })
@@ -268,7 +270,7 @@ try {
   check('学生认回后旧病历回来' + (moneyOk ? '、余额仍是 100.00' : '（钱账入口见 finding，余额未验）'))
 
   // 8. 加家人 + 代家人问诊
-  await recovered.getByRole('button', { name: '其他', exact: true }).click()
+  await recovered.getByRole('button', { name: '我', exact: true }).click()
   const familyDetails = recovered.locator('details').filter({ has: recovered.getByText('添加家人', { exact: true }) })
   await familyDetails.locator('summary').click()
   await familyDetails.getByLabel('称呼', { exact: true }).fill('爸爸')
@@ -277,10 +279,10 @@ try {
   await familyDetails.getByRole('button', { name: '添加家人', exact: true }).click()
   await expect(familyDetails.locator('li').filter({ hasText: '爸爸' }).first()).toBeVisible({ timeout: 20000 })
   await shot(recovered, '17-family-added')
-  await recovered.getByRole('button', { name: '镜子', exact: true }).click()
+  await recovered.getByRole('button', { name: '今天', exact: true }).click()
   await recovered.getByRole('button', { name: '爸爸', exact: true }).click()
   await shot(recovered, '18-family-switch')
-  await recovered.getByRole('button', { name: '问诊', exact: true }).click()
+  await recovered.getByRole('button', { name: /不舒服？告诉/ }).click()
   await recovered.getByLabel('按键盘上的🎤说话就行').fill('替爸爸问一下最近胃口不好')
   await recovered.getByRole('button', { name: '发送', exact: true }).click()
   for (let i = 0; i < 3; i += 1) {
@@ -294,20 +296,18 @@ try {
   await shot(recovered, '19-family-consult')
   check('学生添加家人爸爸、切到家人、代家人发问诊')
 
-  await teacher.getByRole('button', { name: '远程', exact: true }).click()
-  const familyCard = teacher.getByRole('article').filter({ hasText: '胃口不好' })
-  const openFamily = familyCard.getByRole('button', { name: '打开问诊', exact: true })
-  await expect(openFamily).toBeVisible({ timeout: 40000 })
-  await expect(openFamily).toBeEnabled({ timeout: 40000 })
-  await openFamily.click()
-  await expect(teacher.getByRole('heading', { name: '病历草稿', exact: true })).toBeVisible({ timeout: 30000 })
+  await teacher.getByRole('button', { name: '今天', exact: true }).click()
+  const familyRow = teacher.getByRole('button', { name: /胃口不好/ })
+  await expect(familyRow).toBeVisible({ timeout: 40000 })
+  await familyRow.click()
+  await expect(teacher.getByRole('heading', { name: /· 核对$/ })).toBeVisible({ timeout: 30000 })
+  await confirmDraft(teacher)
   await teacher.getByRole('button', { name: '签字发出', exact: true }).click()
   await expect(teacher.getByRole('heading', { name: '已签字交还', exact: true })).toBeVisible({ timeout: 30000 })
   await teacher.getByRole('button', { name: '跳过评分', exact: true }).click().catch(() => {})
   check('老师收到代家人问诊并签字交还')
 
-  await recovered.getByRole('button', { name: '其他', exact: true }).click()
-  await recovered.getByRole('button', { name: '我的病历', exact: true }).click()
+  await recovered.getByRole('button', { name: '记录', exact: true }).click()
   await expect(recovered.getByText('替爸爸问：胃口不好', { exact: false }).first()).toBeVisible({ timeout: 30000 })
   await shot(recovered, '20-family-record')
   check('学生切到家人能看到这份病历')

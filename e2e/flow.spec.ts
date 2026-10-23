@@ -4,17 +4,34 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { Page } from '@playwright/test'
 test.use({ seedLedger: true })
+// V2-16 新外壳：老师 今天/学生/我的馆；学生 今天/记录/我。
 async function settings(page: Page) {
-  const manage=page.getByRole('button',{name:'管理',exact:true});if(await manage.count())await manage.click()
+  const manage = page.getByRole('button', { name: '我的馆', exact: true })
+  if (await manage.count()) await manage.click()
+  const me = page.getByRole('button', { name: '我', exact: true })
+  if (await me.count()) await me.click()
   const summary = page.locator('summary').filter({ hasText: /^设置$/ })
   if (await summary.locator('..').getAttribute('open') === null) await summary.click()
 }
-async function role(page:Page,value:'老师'|'学生') {await expect(page.getByRole('heading',{name:value==='老师'?'今天':'镜子',exact:true})).toBeVisible();await expect(page.getByText('中继：已连接',{exact:true})).toBeVisible()}
-// 学生端三页：其他页内的入口。
-async function studentOther(page: Page) { await page.getByRole('button',{name:'其他',exact:true}).click() }
-async function studentSettings(page: Page) { await studentOther(page); await settings(page) }
-async function studentRecords(page: Page) { await studentOther(page); await page.getByRole('button',{name:'我的病历',exact:true}).click() }
-async function studentHomework(page: Page) { await studentOther(page); await page.getByRole('button',{name:'今日作业',exact:true}).click() }
+async function role(page: Page, value: '老师' | '学生') {
+  if (value === '老师') await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
+  else await expect(page.locator('[data-page=student-today]')).toBeVisible()
+  await expect(page.getByText('中继：已连接', { exact: true })).toBeVisible()
+}
+async function studentTab(page: Page, name: '今天' | '记录' | '我') {
+  const back = page.locator('.nl-back')
+  if (await back.count()) await back.first().click()
+  await page.getByRole('button', { name, exact: true }).click()
+}
+async function studentOther(page: Page) { await studentTab(page, '我') }
+async function studentRecords(page: Page) {
+  await studentTab(page, '记录')
+  await expect(page.getByRole('heading', { name: '我的病历', exact: true })).toBeVisible()
+}
+async function studentConsult(page: Page) {
+  await studentTab(page, '今天')
+  await page.getByRole('button', { name: /不舒服？告诉/ }).click()
+}
 async function stored(page: Page, collection: string) {
   return page.evaluate(async name => {
     const module='/src/core/store/index.ts', { resumeStore }=await import(module), session=await resumeStore()
@@ -32,7 +49,7 @@ async function book(page: Page) {
   }, {teacher:actors.teacher.pubkey,student:actors.student.pubkey})
 }
 async function intake(page: Page, quote: string) {
-  await page.getByRole('button',{name:'问诊',exact:true}).click()
+  await studentConsult(page)
   await page.getByLabel('按键盘上的🎤说话就行').fill(quote)
   await page.getByRole('button',{name:'发送',exact:true}).click()
   for(let i=0;i<3;i++) { const skip=page.getByRole('button',{name:'跳过',exact:true}).first(); try { await skip.waitFor({state:'visible',timeout:10000}) } catch { break } await skip.click() }
@@ -52,11 +69,18 @@ async function decrypted(page: Page) {
     } finally {db.close()}
   })
 }
+// 核对页：草稿必须逐块“就这样”才能签字。
+async function confirmDraftBlocks(page: Page) {
+  for (let guard = 0; guard < 12; guard += 1) {
+    const draft = page.locator('.nl-review-block.draft').first()
+    if (await draft.count() === 0) return
+    await draft.getByRole('button', { name: '就这样', exact: true }).first().click()
+  }
+}
 test('nine-step consultation: signing, erasure, ledger, homework, followup and numeric CSV', async ({ people }) => {
   test.setTimeout(240000)
   const teacher=people.teacher.page,student=people.student.page,quote='SYNTHETIC_PRIVATE_QUOTE_15B'
   await role(teacher,'老师');await role(student,'学生')
-  await teacher.getByRole('button',{name:'远程',exact:true}).click()
   await intake(student,quote)
   const png=await readFile('app/src/core/abstractor/fixtures/tongue.png')
   await student.route('https://model.synthetic.example/v1/chat/completions',async route=>{
@@ -70,21 +94,27 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   await expect(student.locator('input[type=file]')).toHaveValue('')
   await student.getByRole('button',{name:'发给老师',exact:true}).click()
   await expect(student.getByRole('heading',{name:'已发给老师',exact:true})).toBeVisible()
-  await expect(teacher.getByRole('heading',{name:quote,exact:true})).toBeVisible()
+  // V2-16：等您签字的远程问诊出现在老师“今天”里。
+  const remoteRow = teacher.getByRole('button', { name: new RegExp(quote) })
+  await expect(remoteRow).toBeVisible()
   expect(await stored(teacher,'attachments')).toHaveLength(1)
   const received=JSON.stringify(await stored(teacher,'consult-package'))
   expect(received).not.toContain(png.toString('base64'));expect(received).toContain('tongues')
   // V2-08：附件通道里只有舌头裁剪图，原图字节没有离开学生本机。
   const crop=await stored(teacher,'attachments')
   expect(JSON.stringify(crop)).not.toContain(png.toString('base64'))
-  await teacher.getByRole('button',{name:'打开问诊',exact:true}).click()
+  await remoteRow.click()
+  await expect(teacher.getByRole('heading', { name: /· 核对$/ })).toBeVisible()
+  await teacher.getByText('本次资料（舌象、扣费、方案）', { exact: true }).click()
   await expect(teacher.locator('figure svg')).toHaveCount(1)
   await expect(teacher.getByText('SYNTHETIC_SUMMARY',{exact:true})).toBeVisible()
+  await teacher.getByText('让智能体按一句话改草稿', { exact: true }).click()
   await teacher.getByRole('textbox',{name:'说说怎么改'}).fill('SYNTHETIC_REVISE_SUMMARY')
   await teacher.getByRole('button',{name:'按意见改稿',exact:true}).click()
   await expect(teacher.getByText('SYNTHETIC_FINAL_SUMMARY',{exact:true})).toBeVisible()
-  await expect(teacher.getByText('AI 草稿',{exact:true}).first()).toBeVisible()
+  await expect(teacher.getByText(/草稿 · 智能体整理/).first()).toBeVisible()
   await teacher.getByLabel('本次扣费（可选，CNY）',{exact:true}).fill('3')
+  await confirmDraftBlocks(teacher)
   await teacher.getByRole('button',{name:'签字发出',exact:true}).click()
   await expect(teacher.getByRole('heading',{name:'已签字交还',exact:true})).toBeVisible()
   await expect(teacher.getByRole('dialog',{name:'像不像我评分'})).toBeVisible()
@@ -93,25 +123,21 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   await studentRecords(student)
   await expect(student.getByText('证候：SYNTHETIC_PATTERN',{exact:true})).toBeVisible()
   await expect(student.getByText('SYNTHETIC_HOMEWORK',{exact:true})).toBeVisible()
-  await student.getByRole('button',{name:'返回',exact:true}).click()
-  await studentHomework(student)
-  await student.getByRole('button',{name:'已完成',exact:true}).click()
-  // 按钮上的“今日已完成”与打卡用同一个 checkinDay（本地 00:00–00:59 归前一天），任何时刻都该变成已完成。
-  await expect(student.getByRole('button',{name:'今日已完成 ✓',exact:true})).toBeDisabled()
-  await student.getByRole('button',{name:'返回',exact:true}).click()
+  await studentTab(student,'今天')
+  const circle = student.getByRole('button', { name: '打卡：SYNTHETIC_HOMEWORK', exact: true })
+  await circle.click()
+  await expect(circle).toHaveAttribute('aria-pressed','true')
   const records=await stored(student,'student-records'),assignments=await stored(student,'homework')
   expect(records).toHaveLength(1);expect(assignments).toHaveLength(1)
   expect(JSON.stringify(records)).not.toContain('ai_draft')
   await test.step('V2-01 hard: raw consult stays until retention; student received the signed record',async()=>{
-    await teacher.getByRole('button',{name:'返回首页',exact:true}).click()
+    await teacher.getByRole('button',{name:'返回今天',exact:true}).click()
     await teacher.reload();await expect(teacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible()
     await expect(teacher.getByText('中继：已连接',{exact:true})).toBeVisible()
-    await teacher.getByRole('button',{name:'远程',exact:true}).click()
-    await expect(teacher.locator('.inbox-card').first()).toBeVisible()
+    // 签过字的问诊不再列在“等您签字”，但原文按保留期限留在本机。
+    await expect(teacher.getByText('现在没有等您签字的问诊。学生发给您之后会出现在这里。',{exact:true})).toBeVisible()
     await expect.poll(async()=> (await stored(teacher,'consult-package')).length).toBe(1)
-    // V2-01：签字只发送、不再多步销毁；原文保留，由 V2-05 保留期限统一删除。
     expect(JSON.stringify(await decrypted(teacher))).toContain(quote)
-    await teacher.getByRole('button',{name:'返回',exact:true}).click()
   })
   // V2-01：账本余额/对账码由 ledger 自己的测试覆盖；本 e2e 只验证完整问诊链路（签字/病历/作业/CSV）。
   await test.step('hard: teacher and student both have a ledger book on file',async()=>{
@@ -159,7 +185,7 @@ test('hard: student displays only the valid signature after tampered then valid 
 })
 test('emergency prompts inline without phone numbers and still sends with redFlag',async({people})=>{
   const student=people.student.page;await role(student,'学生')
-  await student.getByRole('button',{name:'问诊',exact:true}).click()
+  await studentConsult(student)
   await student.getByLabel('按键盘上的🎤说话就行').fill('胸口压着疼，出冷汗')
   await student.getByRole('button',{name:'发送',exact:true}).click()
   await expect(student.getByText('您说的情况需要尽快去医院，请不要耽误',{exact:true})).toBeVisible()
@@ -173,7 +199,7 @@ test('emergency prompts inline without phone numbers and still sends with redFla
 })
 test('self-harm shows only the crisis hotline and marks crisis redFlag',async({people})=>{
   const student=people.student.page;await role(student,'学生')
-  await student.getByRole('button',{name:'问诊',exact:true}).click()
+  await studentConsult(student)
   await student.getByLabel('按键盘上的🎤说话就行').fill('不想活了')
   await student.getByRole('button',{name:'发送',exact:true}).click()
   await expect(student.getByText('你并不孤单',{exact:false})).toBeVisible()
