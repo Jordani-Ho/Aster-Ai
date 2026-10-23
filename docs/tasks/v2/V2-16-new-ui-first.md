@@ -37,3 +37,11 @@
 4. 学生首页四块一屏内看得到（作业多时作业区内部滚动）；打卡圆圈点一下变成对勾。
 5. 每页交一张 375px 截图，和 `docs/design/` 里的稿子放在一起对比，PR 里并排贴出。
 6. 旧导航和这几页的旧组件在代码里搜不到。
+
+## 完成记录
+
+- 合并请求：https://github.com/Jordani-Ho/Aster-Ai/pull/55（未合并，等审核）
+- 结果：老师端「今天 / 学生 / 我的馆」、学生端「今天 / 记录 / 我」三个标签；按 01–04 设计稿重画老师今天、面诊进行中、核对签字、学生首页；旧的顶层导航与这四页旧组件整块删除。核对页逐块“改一改/就这样”，草稿没确认完“签字发出”点不了；改方自动写“去了什么/加了什么”并要求一句理由。学生首页四块在 375×812 一屏内，打卡圆圈点一下变对勾。
+- 验证：app typecheck / 57 文件 428 测试 / build；typecheck:e2e、deployment 合同测试；phone / abstractor / opening / storefront / money 浏览器验收全过；真实中继 e2e 见 CI。
+- 截图：`docs/screenshots/phone-teacher-today.png`、`phone-teacher-visit.png`、`phone-teacher-review.png`、`phone-student-today.png`（375px，PR 里与设计稿并排）。
+- 没做：学生 / 记录 / 我 与 学生 标签的新样子（下一批）；应用内语音识别；真机 iOS/Android 验证。
