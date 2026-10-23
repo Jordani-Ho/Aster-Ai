@@ -32,4 +32,4 @@
 - 浏览器验收：`phone.browser.mjs` 覆盖 05a–05e 逐页截图与完整建馆、06→07→开始面诊、09→问诊三步→急症只提醒不拦截且仍能发出、11、12，并保留 V2-16 回归，15 张 375px 截图写入 `docs/screenshots/`；`opening.browser.mjs`、`storefront.browser.mjs`、`abstractor.browser.mjs`、`money.browser.mjs` 全 PASS；`e2e` typecheck、environment/deployment 合同测试通过。
 - 真实中继 Playwright：本机 WSL 装 Rust 1.90 后编译 relay，28 条用例全过（environment 4、flow 4、model 4、money 1、onboarding 3、opening 4、phone 5、teacher 3）。修复了 CI 暴露的一处真实回归：我的馆→钱账明细没把 `llm` 传给 `LedgerSettings`，「生成记账草稿」一直灰着；同时给问诊三步 e2e 的“跳过，直接整理”加了显式等可用与超时，避免慢机上误判。
 - 与稿子的已知差异（均为数据口径）：名单没有逐日打卡，只能按学生上报的周汇总显示“本周还没打卡 / 本周 X/7”，不逐日推断；07 当前方案取本机签发快照，core 不存学生方案正文；急症横幅只列出学生自己提到的症状词，不出现电话号码。
-- CI：本机真实中继 28 条已全过；CI 再跑一次 app/gateway/e2e 三件套做最终确认。
+- CI：本机真实中继 28 条全过；CI app/gateway/e2e 三件套全绿（e2e 含真实中继 28 条）。
