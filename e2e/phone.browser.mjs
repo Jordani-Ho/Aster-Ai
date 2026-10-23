@@ -13,6 +13,9 @@ async function open(scene) {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/@fs/${root}e2e/phone.html?scene=${scene}`)
+  // Vite 首次启动可能在页面加载后重载一次（依赖预构建），等稳定再点。
+  await page.waitForLoadState('networkidle')
+  await page.waitForTimeout(scene === 'today' ? 2500 : 300)
   return { context, page, errors }
 }
 async function layout(page) {

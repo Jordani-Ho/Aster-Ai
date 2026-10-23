@@ -9,19 +9,22 @@ const browser=await chromium.launch({headless:true})
 try {
  const page=await browser.newPage({viewport:{width:375,height:812}})
  const errors=[];page.on('pageerror',e=>errors.push(e.message))
+ let navigations=0;page.on('framenavigated',frame=>{if(frame===page.mainFrame())navigations++})
  const png=await readFile(new URL('../app/src/core/abstractor/fixtures/tongue.png',import.meta.url)), image=png.toString('base64')
  const features={color:'pale',coatingColor:'white',coatingThickness:'thin',shape:'wide',teeth:[],cracks:[],confidence:0.7,box:{x:0.2,y:0.2,width:0.6,height:0.6},lightingNote:false}
  let failure=false,requests=0
  await page.route('https://synthetic.invalid/**',async route=>{requests++;await route.fulfill({status:failure?500:200,contentType:'application/json',body:JSON.stringify({choices:[{message:{content:JSON.stringify(features)}}]})})})
  await page.route('https://geocoding-api.open-meteo.com/**',route=>route.fulfill({status:200,body:'{}'}))
  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/@fs/${root}e2e/abstractor.html`)
+ // Vite 首次启动可能在页面加载后重载一次（依赖预构建），等它稳定再操作，否则上传会被重载打断。
+ await page.waitForLoadState('networkidle');await page.waitForTimeout(2500)
  const upload=async()=>{await page.locator('input[type=file]').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:png});await expect(page.locator('input[type=file]')).toHaveValue('')}
  await expect(page.locator('[data-page=student-today]')).toBeVisible()
  const mirrorSvg=page.locator('.nl-mirror-frame svg')
  await upload()
  {
   await page.waitForTimeout(12000)
-  if (await mirrorSvg.count() !== 1) console.log('DEBUG-UPLOAD', JSON.stringify({ alert: await page.getByRole('alert').allInnerTexts(), files: await page.locator('input[type=file]').count(), errors, body: (await page.locator('body').innerText()).slice(0, 1200) }))
+  if (await mirrorSvg.count() !== 1) console.log('DEBUG-UPLOAD', JSON.stringify({ navigations, alert: await page.getByRole('alert').allInnerTexts(), files: await page.locator('input[type=file]').count(), errors, body: (await page.locator('body').innerText()).slice(0, 1200) }))
  }
  await expect(mirrorSvg).toHaveCount(1)
  await page.reload();await expect(mirrorSvg).toHaveCount(1)
