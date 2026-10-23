@@ -69,7 +69,10 @@ async function mockModel(context) {
 }
 
 async function connectModel(page) {
-  if (await page.getByRole('heading', { name: '让它帮您打理馆', exact: true }).isVisible().catch(() => false)) {
+  const guide = page.getByRole('heading', { name: '让它帮您打理馆', exact: true })
+  const student = page.getByRole('heading', { name: '接入您的大模型', exact: true })
+  await expect(guide.or(student)).toBeVisible({ timeout: 20000 })
+  if (await guide.isVisible()) {
     await page.getByRole('button', { name: '其他', exact: true }).click()
     await page.getByLabel('接口地址', { exact: true }).fill('https://api.moonshot.cn/v1')
     await page.getByLabel('模型名称', { exact: true }).fill('synthetic-kimi')
@@ -78,7 +81,7 @@ async function connectModel(page) {
     await expect(page.getByRole('heading', { name: '先登记您这位老师', exact: true })).toBeVisible({ timeout: 20000 })
     return
   }
-  await expect(page.getByRole('heading', { name: '接入您的大模型', exact: true })).toBeVisible({ timeout: 20000 })
+  await expect(student).toBeVisible({ timeout: 20000 })
   await page.getByLabel('选择服务商', { exact: true }).selectOption('kimi')
   await page.getByLabel('接入凭证', { exact: true }).fill('SYNTHETIC_KIMI_KEY')
   await page.getByRole('button', { name: '测试连接', exact: true }).click()

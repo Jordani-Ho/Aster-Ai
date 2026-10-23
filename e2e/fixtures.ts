@@ -13,7 +13,9 @@ export async function mockModel(context:BrowserContext){
 }
 export async function connectModel(page:Page){
  // V2-17：老师第一次进来是五步建馆引导（第 1 步接模型）；学生仍是“接入您的大模型”。
- if(await page.getByRole('heading',{name:'让它帮您打理馆',exact:true}).isVisible().catch(()=>false)){
+ const guide=page.getByRole('heading',{name:'让它帮您打理馆',exact:true}),student=page.getByRole('heading',{name:'接入您的大模型',exact:true})
+ await expect(guide.or(student)).toBeVisible()
+ if(await guide.isVisible()){
   await page.getByRole('button',{name:'其他',exact:true}).click()
   await page.getByLabel('接口地址',{exact:true}).fill('https://model.synthetic.example/v1')
   await page.getByLabel('模型名称',{exact:true}).fill('synthetic-fixture')
@@ -22,7 +24,7 @@ export async function connectModel(page:Page){
   await expect(page.getByRole('heading',{name:'先登记您这位老师',exact:true})).toBeVisible()
   return
  }
- await expect(page.getByRole('heading',{name:'接入您的大模型',exact:true})).toBeVisible()
+ await expect(student).toBeVisible()
  await page.getByLabel('选择服务商',{exact:true}).selectOption('other')
  await page.getByLabel('接口地址',{exact:true}).fill('https://model.synthetic.example/v1')
  await page.getByLabel('模型名称',{exact:true}).fill('synthetic-fixture')
