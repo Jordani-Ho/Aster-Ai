@@ -31,5 +31,6 @@
 | [V2-14](V2-14-community-dashboard.md) | 社区仪表盘：每个馆只交统计数，我们只看不改 | DeepSeek | V2-13 |
 | [V2-15](V2-15-open-the-hall.md) | 建馆：老师第一次进来，一步一步开馆（排在 V2-13 之前） | DeepSeek | V2-12 |
 | [V2-16](V2-16-new-ui-first.md) | 新界面第一批：老师今天、面诊、核对签字、学生首页 | DeepSeek | 设计稿 docs/design/ |
+| [V2-17](V2-17-new-ui-second.md) | 新界面第二批：建馆、学生、我的馆，进馆、问诊、记录、我 | DeepSeek | V2-16 |
 
 第二批（地基合并后再展开）：自我调整（表层配置化）、门面、物流（本地资源）、观察。
