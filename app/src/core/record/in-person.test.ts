@@ -57,9 +57,7 @@ function forgedWithKind(content: Encounter): SignedEncounterEvent {
 
 describe('M1-12 面诊记录验收', () => {
   it('1 面诊 intake 为老师代录时可以签字；同样的病历把 kind 改成 remote_async 就签不了', () => {
-    const recorded = recordIntakeField(fresh(), 'chiefComplaint', '最近睡不好')
-    expect(recorded.redFlag).toBeNull()
-    const encounter = recorded.encounter
+    const encounter = recordIntakeField(fresh(), 'chiefComplaint', '最近睡不好')
     expect(encounter.kind).toBe('in_person')
     expect(encounter.intake.chiefComplaint).toEqual({ value: '最近睡不好', source: 'teacher', note: 'in_person' })
     const signed = signEncounter(encounter, teacherKey)
@@ -77,7 +75,7 @@ describe('M1-12 面诊记录验收', () => {
   })
 
   it('2 学生端接受面诊病历并在主诉旁标“老师代录”；改成 remote_async 的签名病历被拒收', () => {
-    const encounter = recordIntakeField(fresh(), 'chiefComplaint', '最近睡不好').encounter
+    const encounter = recordIntakeField(fresh(), 'chiefComplaint', '最近睡不好')
     const signed = signEncounter(encounter, teacherKey)
     const received = verifySignedEncounter(signed, { student, teacher })
     expect(received.kind).toBe('in_person')
@@ -94,27 +92,25 @@ describe('M1-12 面诊记录验收', () => {
     expect(intakeDisplayLabel(withStudent, 'history')).toBe('学生陈述')
   })
 
-  it('3 老师录入急症文字：显示就医提示，但记录可以继续', () => {
+  it('3 老师录入急症样文字：照常记录，不做任何急症判断', () => {
     const first = recordIntakeField(fresh(), 'chiefComplaint', '胸口压着疼，出冷汗')
-    expect(first.redFlag?.hit).toBe(true)
-    expect(first.encounter.intake.chiefComplaint).toEqual({
+    expect(first.intake.chiefComplaint).toEqual({
       value: '胸口压着疼，出冷汗',
       source: 'teacher',
       note: 'in_person',
     })
-    // 老师在现场判断，记录不被阻断：继续录入下一项，之前的内容仍在。
-    const second = recordIntakeField(first.encounter, 'medsAllergies', '无')
-    expect(second.redFlag).toBeNull()
-    expect(second.encounter.intake.chiefComplaint.value).toContain('胸口')
-    expect(second.encounter.intake.medsAllergies).toEqual({ value: '无', source: 'teacher', note: 'in_person' })
+    // 记录不被阻断：继续录入下一项，之前的内容仍在。
+    const second = recordIntakeField(first, 'medsAllergies', '无')
+    expect(second.intake.chiefComplaint.value).toContain('胸口')
+    expect(second.intake.medsAllergies).toEqual({ value: '无', source: 'teacher', note: 'in_person' })
     // 清空一项回到未知，不留老师来源。
-    const cleared = recordIntakeField(second.encounter, 'chiefComplaint', '   ')
-    expect(cleared.encounter.intake.chiefComplaint).toEqual({ value: null, source: 'unknown' })
+    const cleared = recordIntakeField(second, 'chiefComplaint', '   ')
+    expect(cleared.intake.chiefComplaint).toEqual({ value: null, source: 'unknown' })
   })
 
   it('4 签字发送成功后照片与代录草稿仍在本机；未送达时同样保留，可直接再试', async () => {
     const store = new MemoryStore()
-    const encounter = addInPersonPhoto(recordIntakeField(fresh(), 'chiefComplaint', 'SYNTHETIC_CHIEF').encounter, PHOTO)
+    const encounter = addInPersonPhoto(recordIntakeField(fresh(), 'chiefComplaint', 'SYNTHETIC_CHIEF'), PHOTO)
     await store.put(IN_PERSON_COLLECTIONS.attachments, PHOTO.id, new Uint8Array([1, 2, 3]))
     await saveInPersonDraft(store, encounter)
     expect((await loadInPersonDraft(store))?.id).toBe(encounter.id)
@@ -137,7 +133,7 @@ describe('M1-12 面诊记录验收', () => {
 
     // 未送达：错误原样上抛，资料和草稿都保留，也没有暂存。
     const offline = new MemoryStore()
-    const retryEncounter = addInPersonPhoto(recordIntakeField(fresh(), 'chiefComplaint', 'SYNTHETIC_RETRY').encounter, PHOTO)
+    const retryEncounter = addInPersonPhoto(recordIntakeField(fresh(), 'chiefComplaint', 'SYNTHETIC_RETRY'), PHOTO)
     await offline.put(IN_PERSON_COLLECTIONS.attachments, PHOTO.id, new Uint8Array([1, 2, 3]))
     await saveInPersonDraft(offline, retryEncounter)
     await expect(signAndHandoverInPerson({
@@ -179,9 +175,9 @@ it('V2-05：面诊“已有学生”只从 teacher-records 读，并按学生公
   await store.put('consult-package', 'first', { encounter: fresh() })
   expect(await knownStudents(store)).toEqual([])
   // 签字医案进来后按学生公钥去重（同一学生两份只算一个）。
-  const first = signEncounter(recordIntakeField(fresh(), 'chiefComplaint', 'SYNTHETIC_KNOWN').encounter, teacherKey)
+  const first = signEncounter(recordIntakeField(fresh(), 'chiefComplaint', 'SYNTHETIC_KNOWN'), teacherKey)
   await saveTeacherRecord(store, first)
   const other = startInPersonEncounter({ teacher, student: otherStudent, now, id: 'b'.repeat(32) })
-  await saveTeacherRecord(store, signEncounter(recordIntakeField(other, 'chiefComplaint', 'SYNTHETIC_OTHER').encounter, teacherKey))
+  await saveTeacherRecord(store, signEncounter(recordIntakeField(other, 'chiefComplaint', 'SYNTHETIC_OTHER'), teacherKey))
   expect(await knownStudents(store)).toEqual([student, otherStudent].sort())
 })

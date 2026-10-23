@@ -21,6 +21,7 @@ import { listSelfRatings, listStressRatings, last14DayTrend } from './core/mirro
 import { uiError } from './core/onboarding/ui'
 import { TongueCapture } from './TongueCapture'
 import { TonguePair } from './TonguePair'
+import { CareReminder } from './CareReminder'
 import { buildPeriodObservation } from './core/kangbi'
 import './newui.css'
 import './student.css'
@@ -191,7 +192,7 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
       {onBack ? <button type="button" className="nl-back" aria-label="返回" onClick={onBack}>‹</button> : <span className="nl-back-placeholder" />}
       <div><h1>{title}</h1><small>{subtitle}</small></div>
     </header>
-    <p className="cf-firstaid">急症请立即去医院或拨打当地急救电话，别等老师回复。</p>
+    <CareReminder />
     <div className="cf-body">
       {family.length > 0 && <MemberSwitcher members={family} active={active} onChange={account => onSwitch?.(account)} />}
       {error && <p role="alert" className="nl-danger-strong">{error}</p>}

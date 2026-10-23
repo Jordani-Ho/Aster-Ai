@@ -3,13 +3,13 @@ import { parseTongueAbstract, type TongueAbstract } from '../../../../domain/tcm
 import { parsePeriodObservation } from '../../../../domain/tcm/observation'
 import type { LlmClient } from '../llm'
 import { isHeavenStamp } from '../heaven/stamp'
-import { check, type RedFlagResult } from '../redflags'
 import type { AttachmentRef, ConsultPackage, Encounter, Field } from '../record/types'
 import { emptyFields, missingFocuses, organizeIntake, MAX_ROUNDS, INTAKE_KEYS, type FollowupQuestion, type IntakeFields, type IntakeKey } from './followup'
 import { MAX_PHOTOS, assertPhotoCount, type PhotoResult } from './photo'
 
-// 学生采集流程：说话 → 本地急症筛查 → 整理与追问 → 确认页核对 → 明确点“确认发送”才调用 send。
+// 学生采集流程：说话 → 整理与追问 → 确认页核对 → 明确点“确认发送”才调用 send。
 // 点之前没有任何数据离开手机；模型只用学生原话做摘取，确认发送的代码路径不调用模型。
+// V2-18：采集流程不判断急症/心理状况，只在问诊页顶端常驻一句就医提醒。
 
 export type IntakePhase = 'collecting' | 'confirm' | 'sent'
 export interface FocusRecord { status: 'answered' | 'skipped'; text?: string }
@@ -27,7 +27,6 @@ export interface IntakeSession {
   fields: IntakeFields
   questions: FollowupQuestion[]
   round: number
-  emergency: RedFlagResult | null
   phase: IntakePhase
   reviewed: boolean
   usedFallback: boolean
@@ -76,14 +75,7 @@ export function emptyProfile(): Encounter['profile'] {
   }
 }
 
-// 问诊包上的急症标记：只给老师端看，不进 Encounter schema（M1-19）。
-export interface RedFlagMark { hit: boolean; crisis: boolean }
-
-function redFlagMark(result: RedFlagResult | null): RedFlagMark | null {
-  if (!result || !result.hit) return null
-  return { hit: true, crisis: result.actions.includes('crisis') }
-}
-
+// 问诊包不再带急症标记（V2-18）。
 export function startSession(options: { student: string; teacher: string; template: TeacherTemplate; now?: Date; id?: string }): IntakeSession {
   const { student, teacher, template } = options
   if (!HEX64.test(student) || !HEX64.test(teacher)) throw new Error('公钥格式无效')
@@ -104,7 +96,6 @@ export function startSession(options: { student: string; teacher: string; templa
     fields: emptyFields(),
     questions: [],
     round: 0,
-    emergency: null,
     phase: 'collecting',
     reviewed: false,
     usedFallback: false,
@@ -112,15 +103,14 @@ export function startSession(options: { student: string; teacher: string; templa
   }
 }
 
-// 每说一句都先过本地急症筛查；命中只记录标记（M1-19 起不再阻断），发送前仍会再查一遍。
+// 每说一句只记录原话（V2-18：不做任何急症/心理判断）。
 export function addUtterance(state: IntakeSession, text: string): IntakeSession {
   if (state.phase !== 'collecting') throw new Error('这次采集已经进入确认页')
   const value = text.trim()
   if (value === '') throw new Error('这句话还是空的')
   if (value.length > 2000) throw new Error('一次说得太长了，请分几次说')
-  const result = check(value)
   const texts = [...state.texts, value]
-  return { ...state, texts, emergency: result.hit ? result : state.emergency, reviewed: false }
+  return { ...state, texts, reviewed: false }
 }
 
 function assertFocus(state: IntakeSession, focus: string): void {
@@ -133,10 +123,9 @@ export function answerFocus(state: IntakeSession, focus: string, text: string): 
   const value = text.trim()
   if (value === '') throw new Error('回答还是空的')
   if (value.length > 2000) throw new Error('一次说得太长了，请分几次说')
-  const result = check(value)
   const answers = { ...state.answers, [focus]: { status: 'answered' as const, text: value } }
   const questions = state.questions.filter(question => question.focus !== focus)
-  return { ...state, answers, questions, emergency: result.hit ? result : state.emergency, reviewed: false }
+  return { ...state, answers, questions, reviewed: false }
 }
 
 export function skipFocus(state: IntakeSession, focus: string): IntakeSession {
@@ -196,9 +185,7 @@ export function updateField(state: IntakeSession, key: IntakeKey, value: string)
   const trimmed = value.trim()
   if (trimmed.length > 2000) throw new Error('这一项太长了，请精简一下')
   const fields = { ...state.fields, [key]: textField(trimmed === '' ? null : trimmed) }
-  // 学生在确认页改写的文字同样过本地急症红线；命中只记录标记，不阻断（M1-19）。
-  const result = check(trimmed)
-  return { ...state, fields, emergency: result.hit ? result : state.emergency }
+  return { ...state, fields }
 }
 
 export function addPhoto(state: IntakeSession, photo: PhotoResult): IntakeSession {
@@ -230,16 +217,6 @@ export function canConfirm(state: IntakeSession): ConfirmCheck {
   return { ok: true }
 }
 
-// 急症提示点“我已知晓”后可以重新开始一次采集。
-export function restartAfterEmergency(state: IntakeSession, now: Date = new Date()): IntakeSession {
-  return startSession({
-    student: state.student,
-    teacher: state.teacher,
-    template: { id: state.templateId, name: '', recordOrder: [], focus: state.focusOrder, notes: '' },
-    now,
-  })
-}
-
 export interface HistoryCandidate { id: string; teacher: string; createdAt: string; eventJson: string }
 
 function isHistoryCandidate(value: unknown): value is HistoryCandidate {
@@ -269,15 +246,6 @@ export function buildConsultPackage(
 ): ConsultPackage {
   const checkResult = canConfirm(state)
   if (!checkResult.ok) throw new Error(checkResult.reason)
-  // 纵深防御：发送前把 intake 全部字段再过一遍急症红线，命中就标记，不阻断（M1-19）。
-  let redFlag: RedFlagMark | null = redFlagMark(state.emergency)
-  for (const key of INTAKE_KEYS) {
-    const value = state.fields[key].value
-    if (value !== null && value !== '') {
-      const hit = check(value)
-      if (hit.hit) redFlag = { hit: true, crisis: (redFlag?.crisis ?? false) || hit.actions.includes('crisis') }
-    }
-  }
   for (const candidate of history) {
     if (candidate.teacher !== state.teacher) throw new Error('附带的病历不是这位老师的')
   }
@@ -328,7 +296,6 @@ export function buildConsultPackage(
     history: history.map(candidate => candidate.eventJson),
     attachments: attachments.map(item => ({ ref: { ...item.ref }, data: item.data })),
     ...(heaven ? { heaven: { ...heaven } } : {}),
-    ...(redFlag ? { redFlag } : {}),
     ...(trend ? { trend } : {}),
   }
   // M1-22：家人代管问诊时带上代管人公钥与代管证明，只走传输元数据，不改病历 schema。

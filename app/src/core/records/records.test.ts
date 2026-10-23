@@ -133,7 +133,7 @@ describe('V2-05 验收 0：老师端完整医案 teacher-records', () => {
     expect(charges[0].currency).toBe('CNY')
 
     // 面诊：代录后签字发送成功，也存一份完整病历。
-    let inPerson = recordIntakeField(startInPersonEncounter({ teacher: teacher.publicKey, student: student.publicKey, now: NOW, id: 'b'.repeat(32) }), 'chiefComplaint', '胸口闷，睡不好').encounter
+    let inPerson = recordIntakeField(startInPersonEncounter({ teacher: teacher.publicKey, student: student.publicKey, now: NOW, id: 'b'.repeat(32) }), 'chiefComplaint', '胸口闷，睡不好')
     inPerson = {
       ...inPerson,
       judgment: { ...inPerson.judgment, symptomSummary: { value: '胸闷失眠', source: 'teacher' }, pattern: { value: '肝郁', source: 'teacher' } },

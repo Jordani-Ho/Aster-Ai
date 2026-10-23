@@ -32,13 +32,16 @@ async function openAdvice(page:Page){
  const details=summary.locator('..')
  if(await details.getAttribute('open')===null)await summary.click()
 }
-test('M1-20 four pages: urgent first, three taps to sign, revision stays draft, four 375px screenshots',async({people})=>{
+test('M1-20 four pages: time order, three taps to sign, revision stays draft, four 375px screenshots',async({people})=>{
  const teacher=people.teacher.page,student=people.student.page
  await consultations(student)
- // 急症排最前：等您签字第一条就是“胸痛伴出汗”，并标急症。
- const urgent=teacher.getByRole('button',{name:/胸痛伴出汗/})
- await expect(urgent).toBeVisible()
- await expect(urgent).toContainText('急症')
+ // V2-18：收件箱只按学生提交时间排序；先提交的 SYNTHETIC_NORMAL 在前，后提交的在后面，不标急症。
+ const normalRow=teacher.getByRole('button',{name:/SYNTHETIC_NORMAL/})
+ const urgentRow=teacher.getByRole('button',{name:/胸痛伴出汗/})
+ await expect(normalRow).toBeVisible()
+ await expect(urgentRow).toBeVisible()
+ expect((await normalRow.boundingBox())!.y).toBeLessThan((await urgentRow.boundingBox())!.y)
+ expect(await teacher.getByText('急症',{exact:true}).count()).toBe(0)
  await picture(teacher,'today')
  await teacher.getByRole('button',{name:'我的馆',exact:true}).click()
  await picture(teacher,'manage')

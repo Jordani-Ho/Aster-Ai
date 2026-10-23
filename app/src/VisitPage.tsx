@@ -13,7 +13,6 @@ import { loadTeacherTemplate } from './core/drafting/template'
 import { draftEncounter as draftWithModel } from './core/drafting'
 import { reviseEncounter } from './core/drafting/revise'
 import { recordSignedObservation, type ObservationNote } from './core/kangbi'
-import type { RedFlagResult } from './core/redflags'
 import { formatHeavenTime, heavenNow, heavenStampOf, type HeavenTime } from './core/heaven'
 import { EXAM_KEYS, splitFourExams, type ExamKey } from './four-exams'
 import { confirmHeardExams, setExamDraft } from './review-model'
@@ -55,7 +54,6 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
   const [previous, setPrevious] = useState<LoadedTeacherRecord | null>(null)
   const [utterance, setUtterance] = useState('')
   const [heaven, setHeaven] = useState<HeavenTime | null>(null)
-  const [redFlag, setRedFlag] = useState<RedFlagResult | null>(null)
   const [editingExam, setEditingExam] = useState<ExamKey | null>(null)
   const [examText, setExamText] = useState('')
   const [status, setStatus] = useState('')
@@ -116,17 +114,13 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
         if (added.length === 0) continue
         next = setExamDraft(next, key, added.join('；'))
       }
-      // 老师代录：第一句作主诉，后面的补进现病史；每一项都过本地急症红线，只提示不阻断。
+      // 老师代录：第一句作主诉，后面的补进现病史（V2-18：不做急症判断）。
       const chief = next.intake.chiefComplaint.value
       if (chief === null || chief === '') {
-        const result = recordIntakeField(next, 'chiefComplaint', text)
-        next = result.encounter
-        if (result.redFlag) setRedFlag(result.redFlag)
+        next = recordIntakeField(next, 'chiefComplaint', text)
       } else {
         const prior = next.intake.presentIllness.value
-        const result = recordIntakeField(next, 'presentIllness', prior ? prior + '\n' + text : text)
-        next = result.encounter
-        if (result.redFlag) setRedFlag(result.redFlag)
+        next = recordIntakeField(next, 'presentIllness', prior ? prior + '\n' + text : text)
       }
       apply(next, usedModel ? '已把这一段拆进四格，逐格确认后可改。' : '模型暂不可用，已按关键词拆进四格，可逐格修改。')
       setUtterance('')
@@ -236,11 +230,6 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
           {lastHomework && <p>作业：{lastHomework}</p>}
           {report && <p className="nl-quiet">这周练习 {report.practiceDays} 天{report.streak > 0 ? ' · 已连续 ' + report.streak + ' 天' : ''}</p>}
         </details>}
-        {redFlag && <section role="alert" className="nl-card">
-          <h2>请尽快去医院</h2>
-          <p className="nl-quiet">这段描述命中了本地急症红线{redFlag.matched.length > 0 ? '：' + redFlag.matched.join('、') : ''}。老师在现场，记录可以继续，由老师判断。</p>
-          <button type="button" onClick={() => setRedFlag(null)}>我已知晓</button>
-        </section>}
 
         <section className="nl-listen" aria-label="口述记录">
           <div className="nl-listen-head"><span className="nl-listen-dot" aria-hidden="true" />正在听 · 您说，智能体记</div>
