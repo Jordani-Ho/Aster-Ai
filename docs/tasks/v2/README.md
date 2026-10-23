@@ -33,5 +33,6 @@
 | [V2-16](V2-16-new-ui-first.md) | 新界面第一批：老师今天、面诊、核对签字、学生首页 | DeepSeek | 设计稿 docs/design/ |
 | [V2-17](V2-17-new-ui-second.md) | 新界面第二批：建馆、学生、我的馆，进馆、问诊、记录、我 | DeepSeek | V2-16 |
 | [V2-18](V2-18-remind-not-judge.md) | 就医提醒常在，社区不判断急症 | DeepSeek | V2-17 |
+| [V2-19](V2-19-one-task-one-page.md) | 老师智能体：一事一议，只向签字学习，额度有上限 | DeepSeek | V2-18 |
 
 第二批（地基合并后再展开）：自我调整（表层配置化）、门面、物流（本地资源）、观察。
