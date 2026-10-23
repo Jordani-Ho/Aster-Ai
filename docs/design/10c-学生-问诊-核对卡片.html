@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>核对问诊卡片 · 知衡设计稿</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:390px;min-height:844px;background:#faf8f3;color:#1f2a24;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.55}
+body{--brand:#2f5d4a;--soft:#edf3ef;--line:#e4ded2;--muted:#657069}
+.student{--brand:#2f5d4a;--soft:#edf3ef}
+.phone{position:relative;width:390px;height:844px;overflow:hidden;background:#faf8f3}
+.content{padding:27px 20px 105px}
+.detail .content{padding:0 16px 122px}
+.onboard .content{padding:22px 22px 165px}
+.no-nav .content{padding-bottom:120px}
+.eyebrow{font-size:14px;color:var(--muted);margin:0 0 7px}
+.title,h1{font-family:"Songti SC","STSong","SimSun",serif;font-size:30px;line-height:1.3;letter-spacing:.5px;margin:0 0 9px;font-weight:700}
+h2{font-size:20px;line-height:1.4;margin:0;font-weight:700}
+h3{font-size:17px;margin:0;font-weight:600}
+p{margin:0}
+small,.small{font-size:13px}
+.muted{color:var(--muted)}
+.icon{width:22px;height:22px;vertical-align:middle;flex-shrink:0}
+.row{display:flex;align-items:center;gap:12px}
+.between{justify-content:space-between}
+.grow{flex:1;min-width:0}
+.stack{display:flex;flex-direction:column;gap:12px}
+.gap8{gap:8px}
+.section{margin-top:22px}
+.section.tight{margin-top:16px}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px}
+.card{background:white;border:1px solid var(--line);border-radius:18px;padding:17px}
+.card.soft{background:var(--soft);border-color:transparent}
+.card.draft{background:#fffaf0;border:1px dashed #c9a153}
+.card+.card{margin-top:10px}
+.badge{display:inline-flex;align-items:center;font-size:12px;border-radius:22px;padding:4px 10px;white-space:nowrap;background:var(--soft);color:var(--brand);font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-weight:400}
+.badge.draft{background:#fcf1d7;color:#906e25}
+.badge.neutral{background:#f1eee7;color:#657069}
+.badge.chosen{background:white;border:1px solid #b7c9bc}
+.avatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--soft);color:var(--brand);font-weight:600;font-size:20px;flex-shrink:0}
+.avatar.blue{background:#edf3f8;color:#2e5d78}
+.avatar.pink{background:#f5eee8;color:#8c6c55}
+.list-row{display:flex;align-items:center;gap:12px;min-height:72px;padding:14px 0;border-bottom:1px solid #eee9df;color:inherit;text-decoration:none}
+.list-row:first-child{padding-top:0}
+.list-row:last-child{padding-bottom:0;border-bottom:0}
+.list-row .icon{color:#8c938d;width:18px}
+.list-row p{font-size:14px;color:var(--muted);margin-top:3px}
+.list-card{padding:16px}
+.list-card .list-row{min-height:76px}
+.btn{min-height:48px;border-radius:16px;border:1px solid #cbc5b7;display:flex;align-items:center;justify-content:center;gap:9px;padding:11px 16px;background:white;color:#1f2a24;font:inherit;font-size:17px;text-decoration:none;width:100%;cursor:pointer}
+.btn.primary{background:var(--brand);color:white;border-color:var(--brand);font-weight:600}
+.btn.text{border:0;background:transparent;color:var(--brand);font-size:15px}
+.btn.small{font-size:14px;min-height:44px;padding:9px 12px;border-radius:14px}
+.footer{position:absolute;bottom:0;left:0;right:0;background:white;border-top:1px solid var(--line);padding:16px 20px 22px}
+.footer .btn+.btn{margin-top:6px}
+.nav{position:absolute;bottom:0;left:0;width:100%;height:80px;background:white;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-around;padding-bottom:7px}
+.nav a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);font-size:13px;min-height:58px;min-width:88px;text-decoration:none}
+.nav .active{color:var(--brand);font-weight:600}
+.nav .icon{width:23px;height:23px}
+.topbar{display:flex;align-items:center;gap:13px;background:white;border-bottom:1px solid var(--line);padding:19px 18px 16px;margin:0 -16px 18px}
+.topbar .back{color:inherit;min-height:44px;min-width:34px;display:grid;place-items:center;text-decoration:none}
+.topbar h1{font-size:22px;margin:0 0 2px;letter-spacing:0}
+.topbar p{font-size:13px;color:var(--muted)}
+.backline{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;color:var(--muted);font-size:13px}
+.backline a{color:inherit;display:flex;align-items:center;min-height:44px;text-decoration:none}
+.progress{display:flex;gap:6px;margin-bottom:28px}
+.progress i{height:4px;flex:1;border-radius:6px;background:#e7e3d8}
+.progress i.done{background:var(--brand)}
+.intro{margin-top:8px;color:var(--muted);font-size:15px;line-height:1.8}
+.field{margin-top:16px}
+.field label{font-size:14px;display:block;margin-bottom:6px}
+.input,input,textarea{display:block;width:100%;border:1px solid #d6d0c4;border-radius:14px;background:white;color:#1f2a24;padding:13px 14px;font:inherit;min-height:48px}
+.input .icon{float:right;color:#879089}
+textarea{resize:none;line-height:1.8}
+.note{font-size:13px;color:var(--muted);line-height:1.8;margin-top:10px}
+.divider{height:1px;background:var(--line);margin:16px 0}
+.num{font-size:30px;font-weight:600;line-height:1.4;font-variant-numeric:tabular-nums}
+.nums{display:flex;gap:22px}
+.nums>div{flex:1}
+.nums label{font-size:13px;color:var(--muted)}
+.nums strong{display:block;font-size:23px;margin-top:3px}
+.thin-line{border-top:1px solid var(--line);padding-top:13px;margin-top:13px}
+.textlink{color:var(--brand);font-size:14px;text-decoration:none;min-height:44px;display:inline-flex;align-items:center;gap:4px}
+.hero{background:var(--brand);border-radius:22px;padding:23px;color:white}
+.hero h2{font-size:22px}
+.hero .muted{color:#dfebe3}
+.pill-row{display:flex;gap:8px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;justify-content:center;min-height:44px;border:1px solid var(--line);border-radius:24px;padding:9px 16px;font-size:14px;background:white}
+.pill.active{background:var(--soft);border-color:#becfc2;color:var(--brand);font-weight:600}
+.search{border:1px solid var(--line);border-radius:16px;padding:12px 14px;background:white;display:flex;gap:8px;align-items:center;min-height:48px;font-size:15px;color:var(--muted)}
+.chart{display:block;width:100%;height:98px}
+.chart text{font:11px "Microsoft YaHei",sans-serif;fill:#748078}
+.days{display:flex;justify-content:space-between;margin:16px 0 2px}
+.day{display:flex;flex-direction:column;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+.dot{width:28px;height:28px;border-radius:50%;background:#f0eee7;display:grid;place-items:center}
+.dot.on{background:var(--soft);color:var(--brand)}
+.dot .icon{width:16px;height:16px}
+.balance{font-size:27px;letter-spacing:.2px;font-weight:600}
+.balance small{font-size:14px;font-weight:400}
+.setting{background:white;border:1px solid var(--line);border-radius:18px;margin-top:14px;padding:0 16px}
+.setting summary{display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none;min-height:66px}
+.setting summary::-webkit-details-marker{display:none}
+.setting summary .icon{width:18px}
+.setting[open] summary .icon{transform:rotate(90deg)}
+.setting .list-row{min-height:48px;font-size:14px}
+.warning{border:1px solid #d6b98a;border-radius:18px;background:#fff6e5;padding:17px}
+.warning h2{font-size:21px;color:#805725}
+.warning p{font-size:14px;color:#765e3d;margin-top:6px}
+.bubble{background:var(--soft);border-radius:18px 18px 3px 18px;padding:15px 17px;font-size:16px;max-width:91%;margin-left:auto}
+.assistant{background:white;border:1px solid var(--line);border-radius:3px 18px 18px 18px;padding:17px}
+.check-row{display:flex;gap:8px;align-items:center;color:var(--brand);font-size:14px;margin-top:10px}
+.check-row .icon{width:18px;height:18px}
+.brandmark{width:78px;height:78px;border-radius:24px;background:var(--soft);color:var(--brand);display:grid;place-items:center}
+.brandmark .icon{width:40px;height:40px}
+.preview{border:1px solid #d6dfd8;border-radius:18px;padding:17px;background:#faf8f3}
+.preview h3{font-family:"SimSun",serif;font-size:22px}
+.preview .btn{min-height:44px;font-size:14px;margin-top:16px}
+.caption{font-size:12px;color:var(--muted);margin-bottom:8px}
+.qr{width:142px;height:142px;display:block;margin:16px auto 10px;border:10px solid white;background:white}
+.center{text-align:center}
+.text-end{text-align:right}
+.currency{font-variant-numeric:tabular-nums}
+.group-label{font-size:13px;color:var(--muted);margin:19px 0 7px}
+.tongue{width:70px;height:76px;display:block;margin:5px auto}
+.tongue-cell{background:#f6f2e9;border-radius:13px;padding:9px 5px;text-align:center;font-size:12px;color:var(--muted)}
+.triple{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.current-outline{outline:1px solid #aec4b4;outline-offset:-1px}
+.timeline{border-left:2px solid #e5e1d5;padding-left:15px;margin-left:4px}
+.timeline>div{position:relative;padding:0 0 17px}
+.timeline>div:before{content:'';position:absolute;width:7px;height:7px;border-radius:50%;background:#a8bdae;left:-19px;top:7px}
+.timeline>div:last-child{padding-bottom:0}
+.timeline p{font-size:13px;color:var(--muted);margin-top:3px}
+.summary-grid{display:grid;grid-template-columns:64px 1fr;gap:12px;font-size:15px}
+.summary-grid dt{color:var(--muted)}
+.summary-grid dd{margin:0}
+.next-head{margin:18px 0 12px;font-size:13px;color:var(--muted)}
+.swatch{height:32px;width:32px;border:4px solid white;box-shadow:0 0 0 1px #c4cdbf;border-radius:50%;background:#2f5d4a}
+.mini-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.push-down{margin-top:25px}
+
+h2{font-family:"Songti SC","STSong","SimSun",serif}
+.input,input,textarea,.btn.small{border-radius:16px}
+.content{height:764px;overflow-y:auto;scrollbar-width:none;padding-bottom:22px}
+.detail .content{height:755px;padding-bottom:22px}
+.onboard .content{height:755px;padding-bottom:22px}
+.phone:has(.footer .btn+.btn) .content{height:701px}
+</style>
+</head>
+<body class="student">
+<div class="phone detail no-nav">
+<main class="content">
+<header class="topbar">
+<a class="back" href="10b-学生-问诊-追问.html" aria-label="返回">
+<svg class="icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<path d="m14 5-7 7 7 7"/>
+</svg>
+</a>
+<div>
+<h1>看一眼，再发出</h1>
+<p>发给阿慈老师</p>
+</div>
+</header>
+<p class="muted" style="margin:5px 0 17px">这是按你的话整理的，<br>看看有没有说错、漏掉的。</p>
+<div class="card draft">
+<div class="mini-head">
+<h2>问诊卡片</h2>
+<span class="badge draft">草稿 · 待你核对</span>
+</div>
+<p class="small muted" style="margin-bottom:16px">本人 · 10月22日 · 巳时 · 北京</p>
+<dl class="summary-grid">
+<dt>主诉</dt>
+<dd>睡不好，白天没精神</dd>
+<dt>持续</dt>
+<dd>约两周</dd>
+<dt>补充</dt>
+<dd>夜里醒两三次，醒后难再入睡</dd>
+<dt>在用药</dt>
+<dd>未提供</dd>
+</dl>
+<div class="thin-line">
+<a class="textlink" href="10a-学生-问诊-说一说.html">改一改你的话 <svg class="icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<path d="m9 5 7 7-7 7"/>
+</svg>
+</a>
+</div>
+</div>
+<div class="card row between" style="margin-top:16px">
+<div>
+<h3>这次的舌象</h3>
+<p class="small muted">还没拍 · 可稍后补充</p>
+</div>
+<a class="textlink" href="#">去拍 <svg class="icon " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<path d="m9 5 7 7-7 7"/>
+</svg>
+</a>
+</div>
+<p class="note" style="padding:0 3px">还没发出。点下面的按钮，阿慈老师才会收到。</p>
+</main>
+<footer class="footer">
+<a class="btn primary" href="#">发给阿慈老师</a>
+</footer>
+</div>
+</body>
+</html>
