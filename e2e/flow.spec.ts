@@ -64,18 +64,25 @@ async function waitCardOrSkip(page: Page) {
   await expect.poll(async () => (await card.count()) + (await skip.count()), { timeout: 60000, intervals: [200, 500, 1000] }).toBeGreaterThan(0)
   return { card, skip }
 }
+// 页面可能在“追问→卡片”之间自己切换，点击失败不算错：下一轮再看卡片或跳过。
+async function advanceToCard(page: Page) {
+  const { card, skip } = await waitCardOrSkip(page)
+  for (let i = 0; i < 5; i += 1) {
+    if (await card.count()) return card
+    if (await skip.count()) {
+      await skip.click({ timeout: 5000 }).catch(() => {})
+      await page.waitForTimeout(300)
+    }
+    await waitCardOrSkip(page)
+  }
+  await expect(card).toBeVisible({ timeout: 60000 })
+  return card
+}
 async function intake(page: Page, quote: string) {
   await studentConsult(page)
   await page.getByLabel('按键盘上的🎤说话就行').fill(quote)
   await page.getByRole('button',{name:'说好了，继续',exact:true}).click()
-  const { card, skip } = await waitCardOrSkip(page)
-  for(let i=0;i<4;i++) {
-    if(await card.count()) break
-    await expect(skip).toBeEnabled({timeout:60000})
-    await skip.click()
-    await waitCardOrSkip(page)
-  }
-  await expect(card).toBeVisible({timeout:60000})
+  await advanceToCard(page)
   await page.getByRole('button',{name:'改一改你的话 ›',exact:true}).click()
   await page.getByLabel('最不舒服的地方（主诉）').fill(quote)
   await page.getByLabel('现在的情况（现病史）').fill('SYNTHETIC_PRESENT')
@@ -83,15 +90,7 @@ async function intake(page: Page, quote: string) {
   await page.getByLabel('在吃的药、过敏').fill('SYNTHETIC_NO_MEDS')
 }
 async function skipToCard(page: Page) {
-  const { card, skip } = await waitCardOrSkip(page)
-  for (let i = 0; i < 4; i += 1) {
-    if (await card.count()) break
-    await expect(skip).toBeEnabled({ timeout: 60000 })
-    await skip.click()
-    await waitCardOrSkip(page)
-  }
-  await expect(card).toBeVisible({ timeout: 60000 })
-  return card
+  return advanceToCard(page)
 }
 async function decrypted(page: Page) {
   return page.evaluate(async () => {
