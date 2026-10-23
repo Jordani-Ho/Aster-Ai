@@ -129,8 +129,10 @@ try {
     const { context, page, errors } = await open('manage')
     await page.getByRole('button', { name: '我的馆', exact: true }).click()
     await expect(page.getByRole('heading', { name: '我的馆', exact: true })).toBeVisible()
+    // Vite 首次预构建可能整页重载一次，回到“今天”；没看到分块就再点一次。
+    if (await page.locator('details.manage-block').count() === 0) await page.getByRole('button', { name: '我的馆', exact: true }).click()
+    await expect(page.locator('details.manage-block').first()).toBeVisible()
     const summaries = await page.locator('details.manage-block > summary').allInnerTexts()
-    if (summaries.length === 0) console.log('DEBUG-MANAGE', JSON.stringify({ body: (await page.locator('body').innerText()).slice(0, 1200), html: (await page.content()).slice(0, 2500) }))
     expect(summaries).toEqual(['邀请学生', '我的门面', '钱账', '记录保留多久', '换手机', '向社区分享运行统计', '我的镜子'])
     await layout(page)
     await shot(page, 'phone-teacher-manage')

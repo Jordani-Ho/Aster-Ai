@@ -54,7 +54,9 @@ const stubLlm: LlmClient = {
 }
 
 const teacher = await node('v216-teacher-' + scene)
-const student = createIdentity()
+// 合成学生也要可恢复：页面被 Vite 重载时不能换一个新身份，否则学生会话里会多出一行不一样的坚持小结。
+const partner = await node('v216-student-' + scene)
+const student = partner.identity
 await teacher.store.put('settings', 'role', { role: 'teacher' })
 // 建馆场景故意不预置学生；其他场景都需要一位合成学生。
 if (scene !== 'opening') await rememberTeacherStudent(teacher.store, student.publicKey)
@@ -104,6 +106,11 @@ async function seedRemote() {
 
 async function seedStudent() {
   await addTeacher(teacher.store, teacher.identity.publicKey)
+  // 学生这边也要有馆名/老师称呼，页首才和设计稿一样（同一份门面，换成本机收到的版本）。
+  const { makeStorefrontEvent, saveReceivedStorefront } = await import('../app/src/core/storefront')
+  const { saveActiveTeacher } = await import('../app/src/core/storefront/active')
+  await saveReceivedStorefront(teacher.store, makeStorefrontEvent(teacher.identity, { name: '合成养生馆', displayName: '合成阿慈', emblem: 'leaf', theme: 'warm', intro: '一起照顾日常作息。', welcome: '从每天照镜子开始。' }), teacher.identity.publicKey)
+  await saveActiveTeacher(teacher.store, teacher.identity.publicKey, [teacher.identity.publicKey])
   const profile = await loadProfile(teacher.store)
   await saveProfile(teacher.store, { ...profile, alias: { value: '合成小王', source: 'student' }, city: { value: '北京市', source: 'student' } })
   await teacher.store.put('care-plans', teacher.identity.publicKey, {
