@@ -57,17 +57,23 @@ async function book(page: Page) {
     finally { await sync.close();session.store.close();session.identity.privateKey.fill(0) }
   }, {teacher:actors.teacher.pubkey,student:actors.student.pubkey})
 }
+// 问诊三步：说一说之后可能先追问（点跳过），也可能直接进卡片；两种都要能走。
+async function waitCardOrSkip(page: Page) {
+  const card = page.getByRole('region', { name: '问诊卡片' })
+  const skip = page.getByRole('button', { name: '跳过，直接整理', exact: true }).first()
+  await expect.poll(async () => (await card.count()) + (await skip.count()), { timeout: 60000, intervals: [200, 500, 1000] }).toBeGreaterThan(0)
+  return { card, skip }
+}
 async function intake(page: Page, quote: string) {
   await studentConsult(page)
   await page.getByLabel('按键盘上的🎤说话就行').fill(quote)
   await page.getByRole('button',{name:'说好了，继续',exact:true}).click()
-  const card = page.getByRole('region',{name:'问诊卡片'})
+  const { card, skip } = await waitCardOrSkip(page)
   for(let i=0;i<4;i++) {
     if(await card.count()) break
-    const skip=page.getByRole('button',{name:'跳过，直接整理',exact:true}).first()
-    await expect(skip).toBeVisible({timeout:60000})
     await expect(skip).toBeEnabled({timeout:60000})
     await skip.click()
+    await waitCardOrSkip(page)
   }
   await expect(card).toBeVisible({timeout:60000})
   await page.getByRole('button',{name:'改一改你的话 ›',exact:true}).click()
@@ -77,13 +83,12 @@ async function intake(page: Page, quote: string) {
   await page.getByLabel('在吃的药、过敏').fill('SYNTHETIC_NO_MEDS')
 }
 async function skipToCard(page: Page) {
-  const card = page.getByRole('region', { name: '问诊卡片' })
+  const { card, skip } = await waitCardOrSkip(page)
   for (let i = 0; i < 4; i += 1) {
     if (await card.count()) break
-    const skip = page.getByRole('button', { name: '跳过，直接整理', exact: true }).first()
-    await expect(skip).toBeVisible({ timeout: 60000 })
     await expect(skip).toBeEnabled({ timeout: 60000 })
     await skip.click()
+    await waitCardOrSkip(page)
   }
   await expect(card).toBeVisible({ timeout: 60000 })
   return card
