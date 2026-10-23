@@ -10,7 +10,7 @@ import { StorefrontWelcome } from '../app/src/StorefrontWelcome'
 import { createIdentity } from '../app/src/core/identity'
 import { openStore, resumeStore } from '../app/src/core/store'
 import { createLedgerSync } from '../app/src/core/ledger/sync'
-import { startInPersonEncounter } from '../app/src/core/record/in-person'
+import { knownStudents, startInPersonEncounter } from '../app/src/core/record/in-person'
 import { signEncounter } from '../app/src/core/record/sign'
 import { markHallOpened, saveGuide } from '../app/src/core/hall'
 import { publishStorefront, makeStorefrontEvent, saveReceivedStorefront, saveStorefrontDraft } from '../app/src/core/storefront'
@@ -83,6 +83,16 @@ const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), S
 const weekday = (now.getDay() + 6) % 7
 const weekStart = (() => { const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekday); return [monday.getFullYear(), String(monday.getMonth() + 1).padStart(2, '0'), String(monday.getDate()).padStart(2, '0')].join('-') })()
 const daysAgoDate = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 10, 0, 0)
+// 合成数据用确定性 id：页面被 Vite 重载、数据被重新种一遍时覆盖同一份，不翻倍。
+function seedHex(label: string): string {
+  let out = ''
+  for (let round = 0; round < 4; round += 1) {
+    let hash = 2166136261 ^ round
+    for (let index = 0; index < label.length; index += 1) { hash ^= label.charCodeAt(index); hash = Math.imul(hash, 16777619) >>> 0 }
+    out += hash.toString(16).padStart(8, '0')
+  }
+  return out.slice(0, 32)
+}
 
 const STOREFRONT = { name: '合成养生馆', displayName: '合成阿慈', emblem: 'leaf' as const, theme: 'warm' as const, intro: '一起照顾日常作息，慢慢练成适合自己的习惯。', welcome: '从每天照镜子开始。' }
 
@@ -105,8 +115,8 @@ async function publishHall() {
   }
 }
 
-function encounterFor(studentKey: string, patch: { alias: string; gender: 'male' | 'female'; age: number; city: string; at: Date; pattern: string; managedBy?: string }): Encounter {
-  const encounter = startInPersonEncounter({ teacher: teacher.identity.publicKey, student: studentKey, now: patch.at })
+function encounterFor(studentKey: string, patch: { alias: string; gender: 'male' | 'female'; age: number; city: string; at: Date; pattern: string; managedBy?: string; id?: string }): Encounter {
+  const encounter = startInPersonEncounter({ teacher: teacher.identity.publicKey, student: studentKey, now: patch.at, ...(patch.id ? { id: patch.id } : {}) })
   encounter.kind = 'remote_async'
   encounter.profile.alias = { value: patch.alias, source: 'student' }
   encounter.profile.gender = { value: patch.gender, source: 'student' }
@@ -141,10 +151,10 @@ async function seedRoster(): Promise<string[]> {
     await rememberTeacherStudent(teacher.store, person.identity.publicKey)
     if (seed.alias === '小王') {
       for (const days of [30, 14, seed.daysAgo]) {
-        await saveTeacherRecord(teacher.store, signEncounter(encounterFor(person.identity.publicKey, { ...seed, at: daysAgoDate(days) }), teacher.identity.privateKey))
+        await saveTeacherRecord(teacher.store, signEncounter(encounterFor(person.identity.publicKey, { ...seed, at: daysAgoDate(days), id: seedHex('roster-' + scene + '-' + seed.alias + '-' + days) }), teacher.identity.privateKey))
       }
     } else {
-      await saveTeacherRecord(teacher.store, signEncounter(encounterFor(person.identity.publicKey, { ...seed, at: daysAgoDate(seed.daysAgo) }), teacher.identity.privateKey))
+      await saveTeacherRecord(teacher.store, signEncounter(encounterFor(person.identity.publicKey, { ...seed, at: daysAgoDate(seed.daysAgo), id: seedHex('roster-' + scene + '-' + seed.alias) }), teacher.identity.privateKey))
     }
     if (seed.report) {
       await teacher.store.put('student-adherence', person.identity.publicKey, {
@@ -158,10 +168,12 @@ async function seedRoster(): Promise<string[]> {
       })
     }
   }
-  await ledger.open(teacher.identity.publicKey, keys[0])
-  await ledger.record(teacher.identity.publicKey, keys[0], { type: 'topup', currency: 'CNY', amount: 12000, at: daysAgoDate(3).toISOString() })
-  await ledger.open(teacher.identity.publicKey, keys[1])
-  await ledger.record(teacher.identity.publicKey, keys[1], { type: 'topup', currency: 'CNY', amount: 100000, at: daysAgoDate(3).toISOString() })
+  if ((await teacher.store.list('ledger-index')).length === 0) {
+    await ledger.open(teacher.identity.publicKey, keys[0])
+    await ledger.record(teacher.identity.publicKey, keys[0], { type: 'topup', currency: 'CNY', amount: 12000, at: daysAgoDate(3).toISOString() })
+    await ledger.open(teacher.identity.publicKey, keys[1])
+    await ledger.record(teacher.identity.publicKey, keys[1], { type: 'topup', currency: 'CNY', amount: 100000, at: daysAgoDate(3).toISOString() })
+  }
   return keys
 }
 
@@ -179,7 +191,7 @@ async function studentWorkspace(kind: 'consult' | 'records' | 'me', sstore = tea
   const homework = { id: 'h'.repeat(32), title: '泡脚十五分钟', detail: '水温到微微出汗。', schedule: { kind: 'daily' as const, time: '21:00' }, durationDays: 60, source: 'teacher' as const }
   await sstore.put('homework', homework.id, { homework, startsOn: [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate() - 40).padStart(2, '0')].join('-') })
   for (const days of [35, 33, 32, 28, 27, 21, 20, 19, 14, 13, 12, 7, 6, 5, 4, 2]) {
-    await sstore.put('checkins', crypto.randomUUID(), { homeworkId: homework.id, at: new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 9, 0, 0).toISOString() })
+    await sstore.put('checkins', seedHex('checkin-' + kind + '-' + days), { homeworkId: homework.id, at: new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 9, 0, 0).toISOString() })
   }
   const { tongueSvg } = await import('../domain/tcm/tongue')
   const colours = [
@@ -194,7 +206,7 @@ async function studentWorkspace(kind: 'consult' | 'records' | 'me', sstore = tea
   }
   if (kind === 'records') {
     for (const [index, pattern] of ['心脾两虚', '气血两虚'].entries()) {
-      const encounter = encounterFor(sidentity.publicKey, { alias: '合成小王', gender: 'male', age: 34, city: '北京', at: daysAgoDate(20 - index * 10), pattern })
+      const encounter = encounterFor(sidentity.publicKey, { alias: '合成小王', gender: 'male', age: 34, city: '北京', at: daysAgoDate(20 - index * 10), pattern, id: seedHex('student-record-' + index) })
       const signed = signEncounter(encounter, teacher.identity.privateKey)
       await sstore.put('student-records', signed.id, { id: signed.id, teacher: teacher.identity.publicKey, createdAt: encounter.createdAt, eventJson: JSON.stringify(signed), version: encounter.version })
     }
@@ -264,7 +276,7 @@ async function seedStudentHome() {
   const second = { id: 'd'.repeat(32), title: '按揉神门穴', detail: '每次两分钟。', schedule: { kind: 'habit' as const, anchor: '躺下后' }, durationDays: 7, source: 'teacher' as const }
   await teacher.store.put('homework', first.id, { homework: first, startsOn: today })
   await teacher.store.put('homework', second.id, { homework: second, startsOn: today })
-  await teacher.store.put('checkins', crypto.randomUUID(), { homeworkId: second.id, at: new Date().toISOString() })
+  await teacher.store.put('checkins', seedHex('habit-checkin'), { homeworkId: second.id, at: new Date().toISOString() })
   const features = { color: 'pink', coatingColor: 'white', coatingThickness: 'thin', shape: 'standard', teeth: [], cracks: [], confidence: 0.8 }
   const { tongueSvg } = await import('../domain/tcm/tongue')
   const crop = await tongueCrop()
@@ -282,23 +294,30 @@ function OpeningScene({ preset }: { preset: typeof modelPreset | null }) {
 
 async function main() {
   let roster: string[] = []
-  if (!openScene && scene !== 'welcome' && scene !== 'opening') await publishHall()
-
-  if (scene === 'open2') await saveGuide(teacher.store, { step: 2, firstInvite: null })
-  if (scene === 'open3') await saveGuide(teacher.store, { step: 3, firstInvite: null })
-  if (scene === 'open4') await saveGuide(teacher.store, { step: 4, firstInvite: null })
-  if (scene === 'open5') {
-    await markHallOpened(teacher.store)
-    await saveGuide(teacher.store, { step: 5, firstInvite: { link: 'https://phone.synthetic.invalid/#invite=synthetic', createdAt: Date.now(), expiresAt: Date.now() + 3600_000 } })
-  }
-  if (scene === 'open2' || scene === 'open3' || scene === 'open4' || scene === 'open5') {
-    await saveStorefrontDraft(teacher.store, { ...STOREFRONT, name: scene === 'open2' ? '' : STOREFRONT.name, intro: scene === 'open2' ? '' : STOREFRONT.intro })
-  }
-  if (scene === 'students' || scene === 'hall') roster = await seedRoster()
   const ownStudentScene = studentScene && scene !== 'student'
-  if (ownStudentScene) await studentWorkspace(scene === 'records' ? 'records' : scene === 'me' ? 'me' : 'consult', partner.store, partner.identity)
-  if (scene === 'student') await seedStudentHome()
-  if (scene === 'today' || scene === 'visit') await seedRemote()
+  // Vite 首次启动可能整页重载一次；合成数据只种一次，否则病历/账本会翻倍。
+  const seeded = Boolean(await teacher.store.get('settings', 'v217-seeded'))
+  if (!seeded) {
+    if (!openScene && scene !== 'welcome' && scene !== 'opening') await publishHall()
+
+    if (scene === 'open2') await saveGuide(teacher.store, { step: 2, firstInvite: null })
+    if (scene === 'open3') await saveGuide(teacher.store, { step: 3, firstInvite: null })
+    if (scene === 'open4') await saveGuide(teacher.store, { step: 4, firstInvite: null })
+    if (scene === 'open5') {
+      await markHallOpened(teacher.store)
+      await saveGuide(teacher.store, { step: 5, firstInvite: { link: 'https://phone.synthetic.invalid/#invite=synthetic', createdAt: Date.now(), expiresAt: Date.now() + 3600_000 } })
+    }
+    if (scene === 'open2' || scene === 'open3' || scene === 'open4' || scene === 'open5') {
+      await saveStorefrontDraft(teacher.store, { ...STOREFRONT, name: scene === 'open2' ? '' : STOREFRONT.name, intro: scene === 'open2' ? '' : STOREFRONT.intro })
+    }
+    if (scene === 'students' || scene === 'hall') roster = await seedRoster()
+    if (ownStudentScene) await studentWorkspace(scene === 'records' ? 'records' : scene === 'me' ? 'me' : 'consult', partner.store, partner.identity)
+    if (scene === 'student') await seedStudentHome()
+    if (scene === 'today' || scene === 'visit') await seedRemote()
+    await teacher.store.put('settings', 'v217-seeded', 1)
+  } else if (scene === 'students' || scene === 'hall') {
+    roster = await knownStudents(teacher.store)
+  }
 
   const cropped = await tongueCrop()
   const tongueFeatures = { color: 'pink', coatingColor: 'white', coatingThickness: 'thin', shape: 'standard', teeth: [], cracks: [], confidence: 0.8 }
