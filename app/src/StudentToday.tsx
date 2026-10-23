@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { LocalStore } from './core/store'
 import type { Identity } from './core/identity'
 import type { LlmClient } from './core/llm'
@@ -67,6 +67,8 @@ export function StudentToday({
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // 刚拍完的舌象不能被“读本机旧记录”的异步结果覆盖（CI 上两者会抢）。
+  const captured = useRef(false)
 
   const calendarToday = localDay(now)
   const today = effectiveDay(now)
@@ -126,6 +128,7 @@ export function StudentToday({
           if (prior) { current = await loadTongue(store, prior); label = prior === localDay(new Date(Date.now() - 86400000)) ? '昨天' : prior.slice(5) }
         }
         if (cancelled) return
+        if (captured.current) return
         setRecord(current); setRecordLabel(label)
         if (current?.crop && latestCrop && latestCrop.id === current.crop.id) {
           const blob = new Blob([latestCrop.data.slice().buffer as ArrayBuffer], { type: 'image/jpeg' })
@@ -195,6 +198,7 @@ export function StudentToday({
       {record && <p className="nl-quiet">{tongueColorNote(record) ? tongueColorNote(record) + ' · ' : ''}仅供自己对照</p>}
       <TongueCapture store={store} modelStore={modelStore} minimal onCaptured={async (next, at, crop) => {
         await saveTongue(store, next, at, crop)
+        captured.current = true
         setRecord(next); setRecordLabel('今天')
         const blob = new Blob([crop.slice().buffer as ArrayBuffer], { type: 'image/jpeg' })
         setCropUrl(previous => { if (previous) URL.revokeObjectURL(previous); return URL.createObjectURL(blob) })
