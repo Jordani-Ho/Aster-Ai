@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { OpeningGuide } from '../app/src/OpeningGuide'
 import { TeacherManagement } from '../app/src/TeacherManagement'
-import { LedgerSettings } from '../app/src/LedgerSettings'
 import { createIdentity } from '../app/src/core/identity'
 import { openStore, resumeStore } from '../app/src/core/store'
 import { loadPersonalModel, type PersonalModel } from '../app/src/core/llm/personal'
@@ -10,8 +9,8 @@ import { markHallOpened, loadGuide, saveGuide } from '../app/src/core/hall'
 import { publishStorefront } from '../app/src/core/storefront'
 import { rememberTeacherStudent } from '../app/src/core/records/teacher'
 
-// V2-15 建馆浏览器验收：真实组件 + fake 网关/模型路由，不连中继、不调真实模型。
-// 场景：guide（五步引导）/ manage（开馆后的管理页分块）。
+// V2-17 建馆浏览器验收：真实组件 + fake 网关/模型路由，不连中继、不调真实模型。
+// 场景：guide（五步引导）/ manage（开馆后的“我的馆”）。
 const params = new URLSearchParams(location.search)
 const scene = params.get('scene') ?? 'guide'
 const NAME = params.get('name') ?? 'opening-' + scene
@@ -37,8 +36,7 @@ if (scene === 'manage') {
     store={session.store}
     llm={null}
     gateway="https://opening.synthetic.invalid"
-    ledgerPanel={<LedgerSettings managed flat identity={session.identity} store={session.store} />}
-    settings={<details><summary>设置</summary><p>合成设置</p></details>}
+    settings={<details><summary>模型与偏好设置</summary><p>合成设置</p></details>}
   />)
 } else {
   function Harness() {

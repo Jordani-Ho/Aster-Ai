@@ -6,15 +6,18 @@ import { SignReview } from '../app/src/SignReview'
 import { TonguePair } from '../app/src/TonguePair'
 import { OpeningGuide } from '../app/src/OpeningGuide'
 import { CommunityDashboard } from '../app/src/CommunityDashboard'
-import { LedgerSettings } from '../app/src/LedgerSettings'
+import { StorefrontWelcome } from '../app/src/StorefrontWelcome'
 import { createIdentity } from '../app/src/core/identity'
 import { openStore, resumeStore } from '../app/src/core/store'
 import { createLedgerSync } from '../app/src/core/ledger/sync'
 import { startInPersonEncounter } from '../app/src/core/record/in-person'
+import { signEncounter } from '../app/src/core/record/sign'
 import { markHallOpened, saveGuide } from '../app/src/core/hall'
-import { publishStorefront } from '../app/src/core/storefront'
-import { rememberTeacherStudent } from '../app/src/core/records/teacher'
+import { publishStorefront, makeStorefrontEvent, saveReceivedStorefront, saveStorefrontDraft } from '../app/src/core/storefront'
+import { saveActiveTeacher } from '../app/src/core/storefront/active'
+import { rememberTeacherStudent, saveTeacherRecord } from '../app/src/core/records/teacher'
 import { addTeacher } from '../app/src/core/inbox'
+import { addFamilyMember, loadFamilyMembers } from '../app/src/core/family'
 import { saveTongue } from '../app/src/core/tongue'
 import { loadProfile, saveProfile } from '../app/src/core/intake/session'
 import type { LlmClient } from '../app/src/core/llm'
@@ -22,10 +25,13 @@ import type { Wiring } from '../app/src/core/wiring'
 import type { TongueAbstract } from '../domain/tcm/tongue'
 import type { Encounter } from '../app/src/core/record/types'
 
-// V2-16 新界面浏览器验收：真实组件 + 合成数据；不连中继、不调真实模型。
-// 场景：today / visit / student / manage / long / opening / dashboard / tongue。
-const scene = new URLSearchParams(location.search).get('scene') ?? 'today'
+// V2-17 新界面第二批浏览器验收：真实组件 + 合成数据；不连中继、不调真实模型。
+// 场景：open1–open5 / opening / students / hall / welcome / consult / records / me，
+// 以及 V2-16 的 today / visit / student / long / tongue / dashboard。
+const scene = new URLSearchParams(location.search).get('scene') ?? 'open1'
 const gateway = 'https://phone.synthetic.invalid'
+const openScene = /^open[1-5]$/.test(scene)
+const studentScene = ['consult', 'records', 'me', 'student'].includes(scene)
 
 async function node(name: string) {
   const prior = await resumeStore({ name })
@@ -34,11 +40,24 @@ async function node(name: string) {
   return { identity, store: await openStore(identity, { name }) }
 }
 
-// 模型替身：按提示词区分“拆四诊”和“起草病历”，按原话返回合成内容。
+// 模型替身：面诊口述拆分四诊；其余（学生整理/老师起草）给一份合成功夫。
 const stubLlm: LlmClient = {
   complete: async messages => {
     const system = String(messages[0]?.content ?? '')
+    const user = String(messages[1]?.content ?? '')
     if (system.includes('面诊口述拆分四诊')) return JSON.stringify({ look: ['舌淡红，苔薄白'], listenSmell: [], ask: ['入睡难'], pulse: ['脉细弱'] })
+    // 学生整理：把学生原话填进字段（模型只能摘学生说过的词）。
+    if (user.includes('"missingFocus"')) {
+      try {
+        const payload = JSON.parse(user) as { texts?: string[]; focusAnswers?: Record<string, string> }
+        const chief = payload.texts?.[0] ?? ''
+        const answers = Object.values(payload.focusAnswers ?? {}).filter(text => text.trim() !== '')
+        const fields: Record<string, string[]> = {}
+        if (chief !== '') fields.chiefComplaint = [chief]
+        if (answers.length > 0) fields.presentIllness = answers
+        return JSON.stringify({ fields, questions: [] })
+      } catch { /* 落到下面的草稿替身 */ }
+    }
     return JSON.stringify({
       fourExams: { ask: { value: '入睡难' } },
       judgment: { symptomSummary: { value: '睡眠困扰' }, pattern: { value: '心脾两虚' } },
@@ -53,17 +72,19 @@ const stubLlm: LlmClient = {
   stream: async () => { throw Error('合成模型不做流式') },
 }
 
-const teacher = await node('v216-teacher-' + scene)
-// 合成学生也要可恢复：页面被 Vite 重载时不能换一个新身份，否则学生会话里会多出一行不一样的坚持小结。
-const partner = await node('v216-student-' + scene)
+const teacher = await node('v217-teacher-' + scene)
+// 合成学生也要可恢复：页面被 Vite 重载时不能换一个新身份。
+const partner = await node('v217-partner-' + scene)
 const student = partner.identity
 await teacher.store.put('settings', 'role', { role: 'teacher' })
-// 建馆场景故意不预置学生；其他场景都需要一位合成学生。
-if (scene !== 'opening') await rememberTeacherStudent(teacher.store, student.publicKey)
-if (!(await teacher.store.get('settings', 'hall'))) {
-  await markHallOpened(teacher.store)
-  await publishStorefront({ store: teacher.store, identity: teacher.identity, storefront: { name: '合成养生馆', displayName: '合成阿慈', emblem: 'leaf', theme: 'warm', intro: '一起照顾日常作息。', welcome: '从每天照镜子开始。' } })
-}
+
+const now = new Date()
+const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-')
+const weekday = (now.getDay() + 6) % 7
+const weekStart = (() => { const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekday); return [monday.getFullYear(), String(monday.getMonth() + 1).padStart(2, '0'), String(monday.getDate()).padStart(2, '0')].join('-') })()
+const daysAgoDate = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 10, 0, 0)
+
+const STOREFRONT = { name: '合成养生馆', displayName: '合成阿慈', emblem: 'leaf' as const, theme: 'warm' as const, intro: '一起照顾日常作息，慢慢练成适合自己的习惯。', welcome: '从每天照镜子开始。' }
 
 const ledger = createLedgerSync({ identity: teacher.identity, store: teacher.store, onChange: () => window.dispatchEvent(new Event('aster:data-changed')), send: async () => crypto.randomUUID() })
 const stack = {
@@ -73,59 +94,116 @@ const stack = {
   flushIntakeOutbox: async () => 0,
   close: async () => {},
 } as unknown as Wiring
-const settingsNode = <details><summary>设置</summary><p>合成设置</p></details>
-const ledgerPanel = <LedgerSettings managed flat identity={teacher.identity} store={teacher.store} ledger={ledger} />
+const settingsNode = <details><summary>模型与偏好设置</summary><p>合成设置</p></details>
+const modelSettingsNode = <details><summary>我的大模型</summary><p>合成模型设置</p></details>
 const status = <><p role="status">中继：已连接</p></>
-const now = new Date()
-const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-')
-// 学生动态按“本周小结”过滤；用本周一，避免跨时区/跨零点时 weekStart 比今天晚。
-const weekday = (now.getDay() + 6) % 7
-const weekStart = (() => { const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekday); return [monday.getFullYear(), String(monday.getMonth() + 1).padStart(2, '0'), String(monday.getDate()).padStart(2, '0')].join('-') })()
 
-function remoteEncounter(): Encounter {
-  const encounter = startInPersonEncounter({ teacher: teacher.identity.publicKey, student: student.publicKey, id: 'a'.repeat(32), now: new Date('2026-10-22T02:00:00.000Z') })
+async function publishHall() {
+  if (!(await teacher.store.get('settings', 'hall'))) {
+    await markHallOpened(teacher.store)
+    await publishStorefront({ store: teacher.store, identity: teacher.identity, storefront: STOREFRONT })
+  }
+}
+
+function encounterFor(studentKey: string, patch: { alias: string; gender: 'male' | 'female'; age: number; city: string; at: Date; pattern: string; managedBy?: string }): Encounter {
+  const encounter = startInPersonEncounter({ teacher: teacher.identity.publicKey, student: studentKey, now: patch.at })
   encounter.kind = 'remote_async'
-  encounter.profile.alias = { value: '合成小王', source: 'student' }
-  encounter.profile.gender = { value: 'male', source: 'student' }
-  encounter.profile.age = { value: 34, source: 'student' }
+  encounter.profile.alias = { value: patch.alias, source: 'student' }
+  encounter.profile.gender = { value: patch.gender, source: 'student' }
+  encounter.profile.age = { value: patch.age, source: 'student' }
+  encounter.profile.city = { value: patch.city, source: 'student' }
+  if (patch.managedBy) encounter.profile.managedBy = { value: patch.managedBy, source: 'student' }
   encounter.intake.chiefComplaint = { value: '最近睡不好', source: 'student' }
-  encounter.intake.presentIllness = { value: '夜里容易醒，白天没精神。', source: 'student' }
+  encounter.judgment.pattern = { value: patch.pattern, source: 'teacher' }
+  encounter.judgment.mechanism = { value: '气血不足', source: 'teacher' }
+  encounter.plan.principle = { value: '益气补血', source: 'teacher' }
+  encounter.plan.prescription = { value: { items: [{ herb: '黄芪', dose: '10g' }, { herb: '当归', dose: '6g' }], method: '水煎', days: 7 }, source: 'teacher' }
+  encounter.plan.homework = [{ id: 'h'.repeat(32), title: '泡脚十五分钟', detail: '水温到微微出汗。', schedule: { kind: 'daily', time: '21:00' }, durationDays: 7, source: 'teacher' }]
+  encounter.plan.advice = { value: '早睡', source: 'teacher' }
   return encounter
 }
 
-async function seedRemote() {
-  await teacher.store.put('consult-package', 'a'.repeat(32), {
-    encounter: remoteEncounter(), history: [], attachments: [],
-    receivedAt: new Date('2026-10-22T02:05:00.000Z').toISOString(), sender: student.publicKey, droppedHistory: 0,
-  })
-  await teacher.store.put('student-adherence', student.publicKey, {
-    student: student.publicKey, weekStart, weeklyRate: 0.3, streak: 0, practiceDays: 2, scheduled: 7, done: 2,
-    receivedAt: new Date().toISOString(),
-  })
+interface RosterSeed { alias: string; gender: 'male' | 'female'; age: number; city: string; daysAgo: number; pattern: string; managedBy?: string; report: null | { practiceDays: number; weeklyRate: number | null; streak: number } }
+
+// 06 名单：5 位合成学生；小王有方案快照与 3 次签字病历，李阿姨由小林代管、没有小结。
+async function seedRoster(): Promise<string[]> {
+  const seeds: RosterSeed[] = [
+    { alias: '小王', gender: 'male', age: 34, city: '北京', daysAgo: 0, pattern: '心脾两虚', report: { practiceDays: 5, weeklyRate: 5 / 7, streak: 5 } },
+    { alias: '李阿姨', gender: 'female', age: 62, city: '北京', daysAgo: 2, pattern: '脾肾两虚', managedBy: '小林', report: null },
+    { alias: '小陈', gender: 'male', age: 28, city: '杭州', daysAgo: 4, pattern: '肝郁脾虚', report: { practiceDays: 0, weeklyRate: 0, streak: 0 } },
+    { alias: '小林', gender: 'female', age: 31, city: '上海', daysAgo: 6, pattern: '气血两虚', report: { practiceDays: 4, weeklyRate: 4 / 7, streak: 1 } },
+    { alias: '小周', gender: 'male', age: 41, city: '成都', daysAgo: 8, pattern: '脾胃虚弱', report: { practiceDays: 6, weeklyRate: 6 / 7, streak: 6 } },
+  ]
+  const keys: string[] = []
+  for (const [index, seed] of seeds.entries()) {
+    const person = await node('v217-roster-' + scene + '-' + index)
+    keys.push(person.identity.publicKey)
+    await rememberTeacherStudent(teacher.store, person.identity.publicKey)
+    if (seed.alias === '小王') {
+      for (const days of [30, 14, seed.daysAgo]) {
+        await saveTeacherRecord(teacher.store, signEncounter(encounterFor(person.identity.publicKey, { ...seed, at: daysAgoDate(days) }), teacher.identity.privateKey))
+      }
+    } else {
+      await saveTeacherRecord(teacher.store, signEncounter(encounterFor(person.identity.publicKey, { ...seed, at: daysAgoDate(seed.daysAgo) }), teacher.identity.privateKey))
+    }
+    if (seed.report) {
+      await teacher.store.put('student-adherence', person.identity.publicKey, {
+        student: person.identity.publicKey, weekStart, weeklyRate: seed.report.weeklyRate, streak: seed.report.streak,
+        practiceDays: seed.report.practiceDays, scheduled: 7, done: seed.report.practiceDays, receivedAt: daysAgoDate(1).toISOString(),
+      })
+    }
+    if (seed.alias === '小王') {
+      await teacher.store.put('care-plan-snapshot', person.identity.publicKey, {
+        constitution: '平和质', points: ['作息与日常练习', '洗漱后 · 按揉神门穴两分钟'], avoid: ['生冷'], updatedAt: daysAgoDate(14).toISOString(), version: 1,
+      })
+    }
+  }
+  await ledger.open(teacher.identity.publicKey, keys[0])
+  await ledger.record(teacher.identity.publicKey, keys[0], { type: 'topup', currency: 'CNY', amount: 12000, at: daysAgoDate(3).toISOString() })
+  await ledger.open(teacher.identity.publicKey, keys[1])
+  await ledger.record(teacher.identity.publicKey, keys[1], { type: 'topup', currency: 'CNY', amount: 100000, at: daysAgoDate(3).toISOString() })
+  return keys
 }
 
-async function seedStudent() {
-  await addTeacher(teacher.store, teacher.identity.publicKey)
-  // 学生这边也要有馆名/老师称呼，页首才和设计稿一样（同一份门面，换成本机收到的版本）。
-  const { makeStorefrontEvent, saveReceivedStorefront } = await import('../app/src/core/storefront')
-  const { saveActiveTeacher } = await import('../app/src/core/storefront/active')
-  await saveReceivedStorefront(teacher.store, makeStorefrontEvent(teacher.identity, { name: '合成养生馆', displayName: '合成阿慈', emblem: 'leaf', theme: 'warm', intro: '一起照顾日常作息。', welcome: '从每天照镜子开始。' }), teacher.identity.publicKey)
-  await saveActiveTeacher(teacher.store, teacher.identity.publicKey, [teacher.identity.publicKey])
-  const profile = await loadProfile(teacher.store)
-  await saveProfile(teacher.store, { ...profile, alias: { value: '合成小王', source: 'student' }, city: { value: '北京市', source: 'student' } })
-  await teacher.store.put('care-plans', teacher.identity.publicKey, {
+// 学生侧工作区（用学生自己的 store/identity，老师是另一位合成身份）：
+// 门面/称呼/作业/打卡/三日舌象；records 另存 2 份签字病历；me 另加家人与余额。
+async function studentWorkspace(kind: 'consult' | 'records' | 'me', sstore = teacher.store, sidentity = teacher.identity) {
+  await addTeacher(sstore, teacher.identity.publicKey)
+  await saveReceivedStorefront(sstore, makeStorefrontEvent(teacher.identity, STOREFRONT), teacher.identity.publicKey)
+  await saveActiveTeacher(sstore, teacher.identity.publicKey, [teacher.identity.publicKey])
+  const profile = await loadProfile(sstore)
+  await saveProfile(sstore, { ...profile, alias: { value: '合成小王', source: 'student' }, city: { value: '北京市', source: 'student' } })
+  await sstore.put('care-plans', teacher.identity.publicKey, {
     constitution: '平和质', points: ['霜降养脾胃。早饭吃温热的，别空腹喝冷饮。'], avoid: ['生冷'], updatedAt: new Date().toISOString(), version: 1,
   })
-  const first = { id: 'c'.repeat(32), title: '泡脚十五分钟', detail: '水温到微微出汗。', schedule: { kind: 'daily' as const, time: '21:00' }, durationDays: 7, source: 'teacher' as const }
-  const second = { id: 'd'.repeat(32), title: '按揉神门穴', detail: '每次两分钟。', schedule: { kind: 'habit' as const, anchor: '躺下后' }, durationDays: 7, source: 'teacher' as const }
-  await teacher.store.put('homework', first.id, { homework: first, startsOn: today })
-  await teacher.store.put('homework', second.id, { homework: second, startsOn: today })
-  await teacher.store.put('checkins', crypto.randomUUID(), { homeworkId: second.id, at: new Date().toISOString() })
-  const features = { color: 'pink', coatingColor: 'white', coatingThickness: 'thin', shape: 'standard', teeth: [], cracks: [], confidence: 0.8 }
+  const homework = { id: 'h'.repeat(32), title: '泡脚十五分钟', detail: '水温到微微出汗。', schedule: { kind: 'daily' as const, time: '21:00' }, durationDays: 60, source: 'teacher' as const }
+  await sstore.put('homework', homework.id, { homework, startsOn: [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate() - 40).padStart(2, '0')].join('-') })
+  for (const days of [35, 33, 32, 28, 27, 21, 20, 19, 14, 13, 12, 7, 6, 5, 4, 2]) {
+    await sstore.put('checkins', crypto.randomUUID(), { homeworkId: homework.id, at: new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 9, 0, 0).toISOString() })
+  }
   const { tongueSvg } = await import('../domain/tcm/tongue')
-  const crop = await tongueCrop()
-  const record: TongueAbstract = { kind: 'tongue', features, svg: tongueSvg(features), shichen: '辰', jieqi: '霜降', city: '北京', crop: { id: 'e'.repeat(32), type: 'photo', sha256: 'f'.repeat(64), bytes: crop.length } }
-  await saveTongue(teacher.store, record, new Date(Date.now() - 86400000), crop)
+  const colours = [
+    { color: 'pink', coatingColor: 'white', coatingThickness: 'thin', shape: 'standard', teeth: [], cracks: [], confidence: 0.8 },
+    { color: 'pale', coatingColor: 'white', coatingThickness: 'thick', shape: 'wide', teeth: [], cracks: [], confidence: 0.7 },
+    { color: 'pink', coatingColor: 'yellow', coatingThickness: 'thin', shape: 'standard', teeth: [], cracks: [], confidence: 0.7 },
+  ] as const
+  for (const [index, features] of colours.entries()) {
+    const crop = await tongueCrop()
+    const record: TongueAbstract = { kind: 'tongue', features: features as never, svg: tongueSvg(features), shichen: '辰', jieqi: '霜降', city: '北京', crop: { id: String(index + 1).repeat(32), type: 'photo', sha256: 'f'.repeat(64), bytes: crop.length } }
+    await saveTongue(sstore, record, daysAgoDate(index * 2), crop)
+  }
+  if (kind === 'records') {
+    for (const [index, pattern] of ['心脾两虚', '气血两虚'].entries()) {
+      const encounter = encounterFor(sidentity.publicKey, { alias: '合成小王', gender: 'male', age: 34, city: '北京', at: daysAgoDate(20 - index * 10), pattern })
+      const signed = signEncounter(encounter, teacher.identity.privateKey)
+      await sstore.put('student-records', signed.id, { id: signed.id, teacher: teacher.identity.publicKey, createdAt: encounter.createdAt, eventJson: JSON.stringify(signed), version: encounter.version })
+    }
+  }
+  if (kind === 'me') {
+    await addFamilyMember(sstore, sidentity, { alias: '李阿姨', relation: 'mother', gender: 'female', birthDate: '1960-01-01', city: '北京市' })
+    await ledger.open(teacher.identity.publicKey, sidentity.publicKey)
+    await ledger.record(teacher.identity.publicKey, sidentity.publicKey, { type: 'topup', currency: 'CNY', amount: 12000, at: daysAgoDate(2).toISOString() })
+  }
 }
 
 async function tongueCrop(): Promise<Uint8Array> {
@@ -148,37 +226,103 @@ function longEncounter(): Encounter {
   return encounter
 }
 
-function OpeningScene() {
+// V2-16 旧场景：老师“今天”/面诊需要一条等签字的远程问诊 + 学生周小结。
+function remoteEncounter(): Encounter {
+  const encounter = startInPersonEncounter({ teacher: teacher.identity.publicKey, student: student.publicKey, id: 'a'.repeat(32), now: new Date('2026-10-22T02:00:00.000Z') })
+  encounter.kind = 'remote_async'
+  encounter.profile.alias = { value: '合成小王', source: 'student' }
+  encounter.profile.gender = { value: 'male', source: 'student' }
+  encounter.profile.age = { value: 34, source: 'student' }
+  encounter.intake.chiefComplaint = { value: '最近睡不好', source: 'student' }
+  encounter.intake.presentIllness = { value: '夜里容易醒，白天没精神。', source: 'student' }
+  return encounter
+}
+
+async function seedRemote() {
+  await rememberTeacherStudent(teacher.store, student.publicKey)
+  await teacher.store.put('consult-package', 'a'.repeat(32), {
+    encounter: remoteEncounter(), history: [], attachments: [],
+    receivedAt: new Date('2026-10-22T02:05:00.000Z').toISOString(), sender: student.publicKey, droppedHistory: 0,
+  })
+  await teacher.store.put('student-adherence', student.publicKey, {
+    student: student.publicKey, weekStart, weeklyRate: 0.3, streak: 0, practiceDays: 2, scheduled: 7, done: 2,
+    receivedAt: new Date().toISOString(),
+  })
+}
+
+// V2-16 学生首页：两条作业、一条习惯已打卡、昨天一张舌象。
+async function seedStudentHome() {
+  await addTeacher(teacher.store, teacher.identity.publicKey)
+  await saveReceivedStorefront(teacher.store, makeStorefrontEvent(teacher.identity, STOREFRONT), teacher.identity.publicKey)
+  await saveActiveTeacher(teacher.store, teacher.identity.publicKey, [teacher.identity.publicKey])
+  const profile = await loadProfile(teacher.store)
+  await saveProfile(teacher.store, { ...profile, alias: { value: '合成小王', source: 'student' }, city: { value: '北京市', source: 'student' } })
+  await teacher.store.put('care-plans', teacher.identity.publicKey, {
+    constitution: '平和质', points: ['霜降养脾胃。早饭吃温热的，别空腹喝冷饮。'], avoid: ['生冷'], updatedAt: new Date().toISOString(), version: 1,
+  })
+  const first = { id: 'c'.repeat(32), title: '泡脚十五分钟', detail: '水温到微微出汗。', schedule: { kind: 'daily' as const, time: '21:00' }, durationDays: 7, source: 'teacher' as const }
+  const second = { id: 'd'.repeat(32), title: '按揉神门穴', detail: '每次两分钟。', schedule: { kind: 'habit' as const, anchor: '躺下后' }, durationDays: 7, source: 'teacher' as const }
+  await teacher.store.put('homework', first.id, { homework: first, startsOn: today })
+  await teacher.store.put('homework', second.id, { homework: second, startsOn: today })
+  await teacher.store.put('checkins', crypto.randomUUID(), { homeworkId: second.id, at: new Date().toISOString() })
+  const features = { color: 'pink', coatingColor: 'white', coatingThickness: 'thin', shape: 'standard', teeth: [], cracks: [], confidence: 0.8 }
+  const { tongueSvg } = await import('../domain/tcm/tongue')
+  const crop = await tongueCrop()
+  const record: TongueAbstract = { kind: 'tongue', features: features as never, svg: tongueSvg(features), shichen: '辰', jieqi: '霜降', city: '北京', crop: { id: 'e'.repeat(32), type: 'photo', sha256: 'f'.repeat(64), bytes: crop.length } }
+  await saveTongue(teacher.store, record, new Date(Date.now() - 86400000), crop)
+}
+
+const modelPreset = { provider: 'other', baseUrl: 'https://model.synthetic.invalid/v1', model: 'synthetic', apiKey: 'SYNTHETIC', testedAt: new Date().toISOString() }
+
+function OpeningScene({ preset }: { preset: typeof modelPreset | null }) {
   const [done, setDone] = useState(false)
   if (done) return <main id="phone-done"><h1>已进入老师首页</h1></main>
-  return <OpeningGuide identity={teacher.identity} store={teacher.store} gateway={gateway} modelGateway={null} modelConfig={{ provider: 'other', baseUrl: 'https://model.synthetic.invalid/v1', model: 'synthetic', apiKey: 'SYNTHETIC', testedAt: new Date().toISOString() }} onModelSaved={() => {}} onDone={() => setDone(true)} />
+  return <OpeningGuide identity={teacher.identity} store={teacher.store} gateway={gateway} modelGateway={null} modelConfig={preset} onModelSaved={() => {}} onDone={() => setDone(true)} />
 }
 
 async function main() {
-  if (scene === 'opening') {
+  let roster: string[] = []
+  if (!openScene && scene !== 'welcome' && scene !== 'opening') await publishHall()
+
+  if (scene === 'open2') await saveGuide(teacher.store, { step: 2, firstInvite: null })
+  if (scene === 'open3') await saveGuide(teacher.store, { step: 3, firstInvite: null })
+  if (scene === 'open4') await saveGuide(teacher.store, { step: 4, firstInvite: null })
+  if (scene === 'open5') {
     await markHallOpened(teacher.store)
     await saveGuide(teacher.store, { step: 5, firstInvite: { link: 'https://phone.synthetic.invalid/#invite=synthetic', createdAt: Date.now(), expiresAt: Date.now() + 3600_000 } })
   }
-  if (scene === 'today' || scene === 'manage' || scene === 'visit') await seedRemote()
-  if (scene === 'student') await seedStudent()
+  if (scene === 'open2' || scene === 'open3' || scene === 'open4' || scene === 'open5') {
+    await saveStorefrontDraft(teacher.store, { ...STOREFRONT, name: scene === 'open2' ? '' : STOREFRONT.name, intro: scene === 'open2' ? '' : STOREFRONT.intro })
+  }
+  if (scene === 'students' || scene === 'hall') roster = await seedRoster()
+  const ownStudentScene = studentScene && scene !== 'student'
+  if (ownStudentScene) await studentWorkspace(scene === 'records' ? 'records' : scene === 'me' ? 'me' : 'consult', partner.store, partner.identity)
+  if (scene === 'student') await seedStudentHome()
+  if (scene === 'today' || scene === 'visit') await seedRemote()
 
   const cropped = await tongueCrop()
   const tongueFeatures = { color: 'pink', coatingColor: 'white', coatingThickness: 'thin', shape: 'standard', teeth: [], cracks: [], confidence: 0.8 }
   const { tongueSvg } = await import('../domain/tcm/tongue')
-  const tongue: TongueAbstract = { kind: 'tongue', features: tongueFeatures, svg: tongueSvg(tongueFeatures), shichen: '辰', jieqi: '霜降', city: '北京' }
+  const tongue: TongueAbstract = { kind: 'tongue', features: tongueFeatures as never, svg: tongueSvg(tongueFeatures), shichen: '辰', jieqi: '霜降', city: '北京' }
   const long = longEncounter()
+  const pagesStore = ownStudentScene ? partner.store : teacher.store
+  const pagesIdentity = ownStudentScene ? partner.identity : teacher.identity
+  const family = scene === 'me' ? await loadFamilyMembers(pagesStore).catch(() => []) : []
+  const familyOptions = family.map(member => ({ account: member.account, alias: member.alias }))
 
   function Scene() {
-    if (scene === 'opening') return <OpeningScene />
+    if (openScene) return <OpeningScene preset={scene === 'open1' ? null : modelPreset} />
+    if (scene === 'opening') return <OpeningScene preset={null} />
     if (scene === 'dashboard') return <CommunityDashboard relays={[]} />
-    if (scene === 'student') return <StudentShell store={teacher.store} identity={teacher.identity} llm={stubLlm} stack={null} stackStatus="ready" memberStore={teacher.store} memberIdentity={teacher.identity} />
+    if (scene === 'welcome') return <StorefrontWelcome storefront={STOREFRONT} teacher={teacher.identity.publicKey} onStart={() => {}} />
     if (scene === 'long') return <SignReview encounter={long} alias="合成小王" previousPrescription={null} onSign={() => {}} onBack={() => {}} />
     if (scene === 'tongue') return <div className="nl-shell"><main className="nl-page"><TonguePair record={tongue} crop={cropped} editable title="舌象 1 · 辰时 · 霜降 · 北京" /></main></div>
-    return <TeacherShell identity={teacher.identity} store={teacher.store} stack={stack} llm={stubLlm} gateway={gateway} status={status} ledgerPanel={ledgerPanel} settings={settingsNode} />
+    if (studentScene) return <StudentShell store={pagesStore} identity={pagesIdentity} llm={stubLlm} stack={stack} stackStatus="ready" modelSettings={modelSettingsNode} memberStore={pagesStore} memberIdentity={pagesIdentity} family={familyOptions} active={0} onSwitch={() => {}} sendEnvelope={async () => {}} />
+    return <TeacherShell identity={teacher.identity} store={teacher.store} stack={stack} llm={stubLlm} gateway={gateway} status={status} settings={settingsNode} />
   }
 
   createRoot(document.getElementById('root')!).render(<Scene />)
-  Object.assign(window, { __phone: { student: student.publicKey, teacher: teacher.identity.publicKey } })
+  Object.assign(window, { __phone: { student: student.publicKey, teacher: teacher.identity.publicKey, roster } })
 }
 
 await main()

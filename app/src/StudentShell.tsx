@@ -5,24 +5,20 @@ import type { LlmClient } from './core/llm'
 import type { Wiring } from './core/wiring'
 import { ConsultPage } from './ConsultPage'
 import { StudentRecordsPage } from './StudentRecordsPage'
+import { StudentRecordsHome } from './StudentRecordsHome'
 import { StudentToday } from './StudentToday'
-import { SelfCheck } from './SelfCheck'
-import { LedgerSettings } from './LedgerSettings'
-import { PushSettings } from './PushSettings'
-import { TeacherListSettings } from './TeacherListSettings'
-import { TimeSettings } from './TimeSettings'
-import { FamilySettings } from './FamilySettings'
+import { StudentMe } from './StudentMe'
 import type { FamilyMember } from './core/family'
 import { listCheckins, type Assignment } from './core/homework'
 import { adherenceReport } from './core/adherence'
 import { adherenceEnvelope, loadTeachers } from './core/inbox'
 import { effectiveDay, checkinDay } from './core/homework/schedule'
 import { useTeacherVenue } from './useTeacherVenue'
-import { venueHeading } from './core/storefront/active'
 import { themeOf } from './core/storefront'
 import { observationId, recordObservation } from './core/kangbi'
 import './student.css'
 import './newui.css'
+import './newui2.css'
 
 const HomeworkPage = lazy(() => import('./HomeworkPage').then(module => ({ default: module.HomeworkPage })))
 
@@ -45,10 +41,9 @@ export interface StudentShellProps {
 }
 
 type Tab = 'today' | 'records' | 'me'
-type Sub = 'consult' | 'homework' | null
+type Sub = 'consult' | 'homework' | 'records' | null
 
-// V2-16 新外壳：学生端底部三个标签“今天 / 记录 / 我”。
-// 今天按设计稿重画；记录先把老病历页原样挪进来；我 = 老“其他”（家人、钱账、设置）+ 自评与本人感受。
+// V2-16 新外壳：学生端底部三个标签“今天 / 记录 / 我”；V2-17 把记录、问诊、我也按设计稿重画。
 export function StudentShell({ store, identity, llm, stack, stackStatus, modelNotice, modelSettings, family = [], active = 0, onSwitch, memberStore: scopedStore, memberIdentity: scopedIdentity, sendConsult, sendEnvelope, onFamilyChanged }: StudentShellProps) {
   const [tab, setTab] = useState<Tab>('today')
   const [sub, setSub] = useState<Sub>(null)
@@ -81,19 +76,18 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   }
   useEffect(() => { if (stackStatus === 'ready') reportAdherence() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pagesStore, stackStatus, active, venue.active])
 
-  if (sub === 'consult') {
-    return <div className="nl-shell" style={{ '--nl-bg': theme.background, '--nl-accent': theme.primary } as CSSProperties}>
-      <header className="nl-flow-head">
-        <button type="button" className="nl-back" aria-label="返回" onClick={() => setSub(null)}>‹</button>
-        <div><h1>问诊</h1><small>说给老师听的不舒服</small></div>
-      </header>
-      <ConsultPage key={active} store={pagesStore} modelStore={store} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} teacher={venue.active} teacherName={venue.call} />
-    </div>
+  if (sub === 'records') {
+    return <StudentRecordsPage identity={pagesIdentity} store={pagesStore} onBack={() => setSub(null)} />
   }
   if (sub === 'homework') {
     return <Suspense fallback={<div className="nl-shell"><p className="nl-page nl-quiet">正在打开今日作业…</p></div>}>
       <HomeworkPage store={pagesStore} onBack={() => setSub(null)} onCheckedIn={reportAdherence} />
     </Suspense>
+  }
+  if (sub === 'consult') {
+    return <div className="nl-shell" style={{ '--nl-bg': theme.background, '--nl-accent': theme.primary } as CSSProperties}>
+      <ConsultPage key={active} store={pagesStore} modelStore={store} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} teacher={venue.active} teacherName={venue.call} onBack={() => setSub(null)} />
+    </div>
   }
 
   const style = { '--nl-bg': theme.background, '--nl-accent': theme.primary, '--nl-accent-deep': theme.primary } as CSSProperties
@@ -104,20 +98,10 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
       teacher={venue.active} teacherCall={venue.call} teacherName={venue.name}
       member={activeMember} family={family} active={active} onSwitch={onSwitch}
       onConsult={() => setSub('consult')} onHomework={() => setSub('homework')} onCheckedIn={reportAdherence} />}
-    {tab === 'records' && <StudentRecordsPage identity={pagesIdentity} store={pagesStore} embedded onBack={() => setTab('today')} />}
-    {tab === 'me' && <main className="nl-page">
-      <h1>我</h1>
-      {venueHeading(venue) && <p className="nl-meta">{venueHeading(venue)}</p>}
-      <SelfCheck store={pagesStore} identity={pagesIdentity} teacher={venue.active} />
-      <FamilySettings store={store} identity={identity} send={sendEnvelope} onChanged={onFamilyChanged} />
-      <details className="nl-section"><summary>设置</summary>
-        {modelSettings}
-        <LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} members={family} teacher={venue.active} teacherName={venue.call} />
-        <TimeSettings store={store} />
-        <TeacherListSettings store={store} active={venue.active} onSwitch={teacher => void venue.switchTo(teacher)} />
-        <PushSettings identity={identity} />
-      </details>
-    </main>}
+    {tab === 'records' && <StudentRecordsHome store={pagesStore} identity={pagesIdentity} onOpenAllRecords={() => setSub('records')} />}
+    {tab === 'me' && <StudentMe store={store} identity={identity} family={family} active={active} onSwitch={onSwitch}
+      venue={venue} ledger={stack?.ledger ?? null} stackStatus={stackStatus} modelSettings={modelSettings}
+      sendEnvelope={sendEnvelope} onFamilyChanged={onFamilyChanged} />}
     <p role="status" className="nl-status" style={{ padding: '0 20px' }}>中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : stackStatus === 'rejected' ? '连接未成功，请联系老师' : '尚未连接'}</p>
     <nav className="nl-tabbar" aria-label="学生底部标签">
       <button type="button" aria-current={tab === 'today' ? 'page' : undefined} onClick={() => setTab('today')}><TodayIcon />今天</button>

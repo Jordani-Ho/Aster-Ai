@@ -10,13 +10,15 @@ V2-10：签字页多了一行“和上次比”四选一（不选也能签）；
 
 V2-11：`node e2e/selftest.walkthrough.mjs` 是《内测怎么开始》的干净环境走查脚本（不跑在 CI）：`BASE_URL=https://<临时隧道域名> DEPLOY_TOKEN=<data/teacher-setup-code.txt> node e2e/selftest.walkthrough.mjs`，用两个 375px 浏览器上下文分别当老师和学生，按八件事走一遍并截图到 `docs/screenshots/selftest-*.png`。模型请求用本地固定替身（没有真实模型密钥），其余（网关登记、邀请、中继、签名、门面、换机、家人）都走真实部署。
 
-V2-15：`node e2e/opening.browser.mjs` 独立启动 Vite + Chromium，不需中继/Rust；用真实 `OpeningGuide` / `TeacherManagement` 组件与 fake 模型/网关路由走五步建馆、第 3 步重载续走、1 小时邀请、过期重生成、第一位学生加入后进首页、管理页分块顺序与默认折叠。`opening.spec.ts` 再经真实中继/网关验证同一流程、学生用另一设备打开邀请、过期链接提示与老部署直接进首页；`fixtures.ts` 已改为老师先走建馆引导再生成第一位学生邀请。CI 运行两者，只用合成数据。
+V2-15：`node e2e/opening.browser.mjs` 独立启动 Vite + Chromium，不需中继/Rust；用真实 `OpeningGuide` / `TeacherManagement` 组件与 fake 模型/网关路由走五步建馆、第 3 步重载续走、1 小时邀请、过期重生成、第一位学生加入后进首页、开馆后「我的馆」馆卡片/邀请/门面/钱账总览/设置入口。`opening.spec.ts` 再经真实中继/网关验证同一流程、学生用另一设备打开邀请、过期链接提示与老部署直接进首页；`fixtures.ts` 已改为老师先走建馆引导再生成第一位学生邀请。CI 运行两者，只用合成数据。
 
 V2-13：`node e2e/phone.browser.mjs` 用真实老师端组件在 375px×812 下逐页验收今天/远程/面诊/管理/邀请/门面/钱账/换机/长病历折叠/舌象切换/建馆“先进去看看”，断言页面不横向滚动、可见按钮 ≥44px、二维码可保存/分享，并写 `docs/screenshots/phone-teacher-*.png`（非 CI）。`phone.spec.ts` 再经真实中继验证“收到问诊→打开→签字发出”全程不横向滚动、邀请链接在另一浏览器上下文打开老师门面、启动注册 service worker 与 manifest 图标。CI 运行两者。
 
 V2-14：统计字段/隐私扫描、开关与一天一次、仪表盘白名单/30 天分组在 `app/src/core/dashboard/*.test.ts`（合成身份与 fake-indexeddb，不连中继）；`phone.browser.mjs` 增加“管理 → 向社区分享运行统计”的实际字段预览、关掉后不发，以及 `/#dashboard` 只读页无按钮/表单/链接、无钥匙不显示数据；`phone.spec.ts` 在真实应用里再断言一次只读页无操作控件。CI 运行这些用例，不配置仪表盘公钥时各馆完全不发。
 
-V2-16：新界面第一批。`phone.browser.mjs` 换成新外壳场景：老师「今天」（学生到了？/ 等您签字 / 学生动态）→ 点一条远程问诊进「核对」页（草稿虚线黄框、还有 N 处草稿时“签字发出”灰着）→ 逐块「就这样」→「签字发出」；「今天 → 开始面诊」选学生 → 说一段 → 望闻问切四格自动填并标来源 →「说完了，看草稿」→ 逐块确认 → 签字；学生「今天」四块一屏可见、打卡圆圈点一下变对勾；「我的馆」沿用 V2-15 分块；长病历分段折叠；舌象 / 建馆 / 只读仪表盘回归。非 CI 写 `docs/screenshots/{phone-teacher-today,phone-teacher-visit,phone-teacher-review,phone-student-today,phone-teacher-manage}.png`（375px）。`phone.spec.ts` 经真实中继再走一遍“等您签字 → 核对 → 签字”和“面诊 → 四格 → 核对 → 签字”，并断言 375px 不横向滚动、按钮 ≥44px。新增单元测试：`app/src/review-model.test.ts`（分块/逐块确认/改方差异）、`app/src/four-exams.test.ts`（口述拆四诊，只接受原话片段）。
+V2-16：新界面第一批。`phone.browser.mjs` 换成新外壳场景：老师「今天」（学生到了？/ 等您签字 / 学生动态）→ 点一条远程问诊进「核对」页（草稿虚线黄框、还有 N 处草稿时“签字发出”灰着）→ 逐块「就这样」→「签字发出」；「今天 → 开始面诊」选学生 → 说一段 → 望闻问切四格自动填并标来源 →「说完了，看草稿」→ 逐块确认 → 签字；学生「今天」四块一屏可见、打卡圆圈点一下变对勾；长病历分段折叠；舌象 / 建馆 / 只读仪表盘回归。非 CI 写 `docs/screenshots/{phone-teacher-today,phone-teacher-visit,phone-teacher-review,phone-student-today}.png`（375px）。`phone.spec.ts` 经真实中继再走一遍“等您签字 → 核对 → 签字”和“面诊 → 四格 → 核对 → 签字”，并断言 375px 不横向滚动、按钮 ≥44px。新增单元测试：`app/src/review-model.test.ts`（分块/逐块确认/改方差异）、`app/src/four-exams.test.ts`（口述拆四诊，只接受原话片段）。
+
+V2-17：新界面第二批，一页对一张设计稿。`phone.browser.mjs` 场景扩到建馆五步（05a–05e 逐页截图，并把模型→登记→起馆名→开馆→1 小时邀请整条走通）、老师「学生」名单（06，搜索/全部/最近来过/坚持标签）→「一位学生」（07，当前方案/坚持情况/历次病历/钱账）→「＋ 开始面诊」直接进面诊页、老师「我的馆」（08，馆卡片/邀请主按钮/门面/钱账总览/设置）、学生进馆首屏（09）、问诊三步 10a→10b→10c（说一说→再问一句→看一眼卡片再发出）、急症 10d（只提醒不拦截、仍能发出）、记录（11）、我（12），并保留 V2-16 今天/面诊/核对/学生首页回归。非 CI 写 15 张 375px 截图 `docs/screenshots/phone-teacher-opening-{model,register,name,open,invite}.png`、`phone-teacher-{students,student,hall}.png`、`phone-student-{welcome,consult-speak,consult-followup,consult-card,consult-emergency,records,me}.png`。新增单元测试 `app/src/teacher-students.test.ts`（名单排序/搜索/最近来过/本周三档）与 `app/src/records-trend.test.ts`（近四周趋势）。`teacher.spec.ts`/`money.spec.ts`/`flow.spec.ts`/`onboarding.spec.ts` 同步到新导航（我的馆里的设置与门面行、我→余额卡、问诊三步按钮）。CI 运行全部浏览器脚本与 Playwright。
 
 这里只运行合成身份和资料。M1-15a 合并后接入完整九步问诊与四条硬性验收，使用真实编译中继、真实网关和 Chromium；模型与推送为本地替身，不需要 API Key。
 
@@ -45,7 +47,7 @@ Windows 使用已有 **Ubuntu/WSL** 编译并运行中继，Node/Chromium 使用
 
 1. 完整九步：文本、合成 JPEG、三轮追问、发送、老师模型起草/修改/采用/签字/扣费、学生病历/作业/打卡、随后复诊附上次病历。初始充值10仅为 fixture 通过原有账本接口准备，扣费3由真实签字界面触发，没有支付替身界面或改规则。
 2. 硬性断言：老师端解密扫描全部 IndexedDB 业务记录，原话和处理后照片字节/base64不存在，重连重放后仍不存在；双方实际显示余额7与相同对账码；另一路先送篡改病历再送有效病历，学生只显示有效者。
-3. 独立急症用例中断采集，不出现发送按钮，老师端无问诊包。
+3. 独立急症用例：只在卡片顶部提示「请尽快去医院」，发送按钮仍可用并发出带 `redFlag` 的问诊包，页面上不出现电话号码；自伤用例只显示心理援助热线。
 
 老师设置本机下载CSV，验收数值、短id、无原文/身份以及导出无HTTP请求；仅非CI运行写入忽略目录 `.cache/e2e/pilot-synthetic-local.csv`，供人工检查。指标公式/重试边界见 `app/src/core/pilot/README.md`。CI不保存CSV，也不上传浏览器报告、截图或trace；本机报告在 `playwright-report/`，失败附件在 `test-results/`，均不入库。CI缓存路径只包含编译/下载工具。
 

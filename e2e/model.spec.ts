@@ -32,12 +32,12 @@ test('M1-21 account failure shows house notice; switch off gives fixed intake qu
  await page.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{for(const r of await s.store.list('mirror'))await s.store.delete('mirror',r.key)}finally{s.store.close();s.identity.privateKey.fill(0)}});await page.reload()
  await expect(page.getByText('今天用的是备用模型，请检查您的模型账户',{exact:true})).toBeVisible()
  expect((await request.post(runtime.controlURL+'/reset',{headers:{authorization:'Bearer '+runtime.resetToken},data:{relayOnly:true,fallbackEnabled:false}})).status()).toBe(200)
- await page.getByRole('button',{name:/不舒服？告诉/}).click();await page.getByLabel('按键盘上的🎤说话就行').fill('SYNTHETIC_NETWORK_FALLBACK');await page.getByRole('button',{name:'发送',exact:true}).click();await expect(page.getByText('模型暂不可用，已改用固定问句。',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'跳过',exact:true})).toBeVisible()
+ await page.getByRole('button',{name:/不舒服？告诉/}).click();await page.getByLabel('按键盘上的🎤说话就行').fill('SYNTHETIC_NETWORK_FALLBACK');await page.getByRole('button',{name:'说好了，继续',exact:true}).click();await expect(page.getByText('模型暂不可用，已改用固定问句。',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'跳过，直接整理',exact:true})).toBeVisible()
 })
 
 test('M1-21 settings changes require retest and failed change preserves encrypted working account',async({people})=>{
  const page=people.student.page
- await page.getByRole('button',{name:'我',exact:true}).click();await page.locator('summary').filter({hasText:/^设置$/}).click();await page.getByText('我的大模型',{exact:true}).first().click()
+ await page.getByRole('navigation',{name:'学生底部标签'}).getByRole('button',{name:'我',exact:true}).click();await page.locator('.me-setting-row').click();await page.getByText('我的大模型',{exact:true}).first().click()
  const region=page.getByRole('region',{name:'模型接入',exact:true})
  expect(await region.getByLabel('接入凭证',{exact:true}).inputValue()).toBe('')
  await region.getByLabel('接入凭证',{exact:true}).fill('SYNTHETIC_NEW_TOKEN')

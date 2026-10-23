@@ -42,8 +42,7 @@ test('M1-20 four pages: urgent first, three taps to sign, revision stays draft, 
  await picture(teacher,'today')
  await teacher.getByRole('button',{name:'我的馆',exact:true}).click()
  await picture(teacher,'manage')
- await teacher.locator('details.manage-block').filter({hasText:/^钱账/}).locator('summary').click()
- await expect(teacher.getByText('学生连上社区后就会出现在这里；第一次记账时自动建账。',{exact:true})).toBeVisible()
+ await expect(teacher.getByRole('region',{name:'钱账总览'})).toContainText('还没记过账')
  // 面诊：选学生 → 说一段 → 四格 → 看草稿（这次先不签，留作草稿）
  await teacher.getByRole('button',{name:'今天',exact:true}).click()
  await teacher.getByRole('button',{name:/开始面诊/}).click()
@@ -97,7 +96,7 @@ test('M1-20 in person uses conversational intake, same drafting/revision/signatu
  expect(result.drafts).toHaveLength(1);expect(JSON.stringify(result.drafts)).toContain('SYNTHETIC_FACE_RAW');expect(result.indices).toHaveLength(1);expect(result.photos).toHaveLength(0)
  const student=people.student.page
  await expect.poll(()=>student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return (await s.store.list('student-records')).length}finally{s.store.close();s.identity.privateKey.fill(0)}})).toBeGreaterThan(0)
- await student.getByRole('button',{name:'记录',exact:true}).click()
+ await student.getByRole('navigation',{name:'学生底部标签'}).getByRole('button',{name:'记录',exact:true}).click()
  await expect(student.getByRole('heading',{name:'我的病历',exact:true})).toBeVisible()
  await expect(student.getByAltText('病历照片 1',{exact:true})).toHaveCount(0)
 })
@@ -137,10 +136,11 @@ test('M1-20 signed care plan reaches student mirror next day with fixed browser 
  await student.reload()
  await openAdvice(student)
  await expect(student.getByRole('region',{name:'每日建议'})).toContainText('SYNTHETIC_PLAN_POINT')
- // 老师自己的方案：同一套签字路径，只是收件人是自己；放在“我的馆 → 我的镜子”。
+ // 老师自己的方案：同一套签字路径，只是收件人是自己；放在“我的馆 → 设置 → 我的镜子”。
  await backToToday(teacher)
  await teacher.getByRole('button',{name:'我的馆',exact:true}).click()
- await teacher.locator('details.manage-block').filter({hasText:/^我的镜子/}).locator('summary').click()
+ await teacher.locator('.hall-row').filter({hasText:'设置'}).click()
+ await teacher.getByRole('button',{name:/我的镜子/}).click()
  await teacher.getByText('给自己定制调养方案',{exact:true}).click()
  await teacher.getByRole('textbox',{name:'调养要点',exact:true}).fill('SYNTHETIC_PLAN_POINT')
  await teacher.getByRole('button',{name:'整理方案',exact:true}).click()
@@ -148,6 +148,7 @@ test('M1-20 signed care plan reaches student mirror next day with fixed browser 
  await expect(teacher.getByText('给自己的方案已确认，明天的建议会参考它。',{exact:true})).toBeVisible()
  await teacher.clock.setSystemTime(nextDay);await teacher.reload()
  await teacher.getByRole('button',{name:'我的馆',exact:true}).click()
- await teacher.locator('details.manage-block').filter({hasText:/^我的镜子/}).locator('summary').click()
+ await teacher.locator('.hall-row').filter({hasText:'设置'}).click()
+ await teacher.getByRole('button',{name:/我的镜子/}).click()
  await expect(teacher.getByRole('region',{name:'每日建议'})).toContainText('SYNTHETIC_PLAN_POINT')
 })

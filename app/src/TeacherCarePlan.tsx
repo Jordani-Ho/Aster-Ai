@@ -44,8 +44,11 @@ export function TeacherCarePlan({ identity, store, student, llm, send }: {
       <button disabled={busy} onClick={async () => {
         setBusy(true); setNotice('')
         try {
-          if (pending) await retryCarePlan({ identity, store, pendingKey: pending, send })
-          else await issueCarePlan({ identity, store, student, draft, send })
+          const issued = pending
+            ? await retryCarePlan({ identity, store, pendingKey: pending, send })
+            : await issueCarePlan({ identity, store, student, draft, send })
+          // V2-17：老师端留一份刚签发的方案，供“一位学生”页显示当前方案（只存本机，不进协议）。
+          try { await store.put('care-plan-snapshot', student, issued as unknown as import('./core/store').StoreValue) } catch { /* 快照失败不影响方案已签发 */ }
           // V2-05：保留期限随调养方案一起发给这位学生（学生端据此滚动删除自己的记录）。
           if (send && student !== identity.publicKey) {
             try { await sendRetentionSetting(send, identity.publicKey, await loadRetentionDays(store), [student]) } catch { /* 方案已发出，设置晚点再随下一次方案补发。 */ }

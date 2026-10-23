@@ -1,4 +1,5 @@
 import { test, expect, runtime, mockModel } from './fixtures'
+import { actors } from './actors.mjs'
 import type { Page } from '@playwright/test'
 
 // V2-16：老师手机端新界面。真实中继/网关，模型为本地替身，全部合成数据。
@@ -67,10 +68,29 @@ test('V2-16 面诊手机端：选学生 → 说一段 → 四格自动填并标�
   await assertPhoneLayout(teacher)
 })
 
-test('V2-16 老师在手机上生成邀请二维码，链接可直接分享/打开，PWA 主屏幕素材可用', async ({ people, browser }) => {
+test('V2-17 老师从“学生”进一位学生，点“开始面诊”直接进面诊页', async ({ people }) => {
+  const teacher = people.teacher.page
+  await teacher.evaluate(async student => {
+    const p = '/src/core/store/index.ts', q = '/src/core/records/teacher.ts'
+    const session = await (await import(p)).resumeStore()
+    try { await (await import(q)).rememberTeacherStudent(session.store, student) }
+    finally { session.store.close(); session.identity.privateKey.fill(0) }
+  }, actors.student.pubkey)
+  await teacher.getByRole('navigation', { name: '老师底部标签' }).getByRole('button', { name: '学生', exact: true }).click()
+  await expect(teacher.getByRole('heading', { name: '学生', exact: true })).toBeVisible()
+  await teacher.locator('.ts-row').first().click()
+  await expect(teacher.getByRole('button', { name: '＋ 开始面诊', exact: true })).toBeVisible()
+  await assertPhoneLayout(teacher)
+  await teacher.getByRole('button', { name: '＋ 开始面诊', exact: true }).click()
+  await expect(teacher.getByLabel('您说，智能体记', { exact: true })).toBeVisible()
+  await assertPhoneLayout(teacher)
+})
+
+test('V2-17 老师手机上生成邀请二维码，链接可直接分享/打开，PWA 主屏幕素材可用', async ({ people, browser }) => {
   const teacher = people.teacher.page
   await teacher.getByRole('button', { name: '我的馆', exact: true }).click()
-  await teacher.locator('details.manage-block').filter({ hasText: /^邀请学生/ }).locator('summary').click()
+  await teacher.getByRole('button', { name: '＋ 邀请学生', exact: true }).click()
+  await expect(teacher.getByRole('heading', { name: '邀请学生', exact: true })).toBeVisible()
   await teacher.getByRole('button', { name: '生成邀请', exact: true }).click()
   await expect(teacher.getByAltText('学生扫码即可加入')).toBeVisible()
   const link = await teacher.getByLabel('邀请链接', { exact: true }).inputValue()

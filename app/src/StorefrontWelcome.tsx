@@ -1,8 +1,10 @@
 import { inviteTitle, themeOf, type Storefront, type StorefrontEmblem } from './core/storefront'
 import './storefront.css'
+import './newui.css'
+import './newui2.css'
 
-// V2-09 邀请首屏：标志、馆名、“某某老师邀请你”、短介绍、一个“开始使用”。
-// 按卡去掉了“不替代医院诊疗”之类的免责句：现实合规由真人把握，不写进代码。
+// V2-09 邀请首屏（V2-17 按 09 稿重画）：标志、馆名、“某某老师邀请你”、短介绍、一个“开始使用”。
+// 按卡去掉免责句：现实合规由真人把握，不写进代码。compact 用于建馆第 3 步的小预览。
 export function VenueEmblem({ emblem }: { emblem: StorefrontEmblem }) {
   if (emblem === '') return null
   return <svg className="venue-emblem" viewBox="0 0 32 32" aria-hidden="true">
@@ -23,20 +25,37 @@ export interface StorefrontWelcomeProps {
   error?: string
   /** 老师端预览：按钮不可点，不触发加入。 */
   preview?: boolean
+  /** 建馆第 3 步的小预览卡片。 */
+  compact?: boolean
 }
 
-export function StorefrontWelcome({ storefront, teacher, onStart, busy = false, error = '', preview = false }: StorefrontWelcomeProps) {
+export function StorefrontWelcome({ storefront, teacher, onStart, busy = false, error = '', preview = false, compact = false }: StorefrontWelcomeProps) {
   const style = themeOf(storefront)
-  return <main className="storefront-welcome" style={{ background: style.background, color: '#26221c' }}>
-    <div className="storefront-card" style={{ ['--venue-primary' as string]: style.primary }}>
-      <p className="storefront-emblem-row"><VenueEmblem emblem={storefront?.emblem ?? ''} /></p>
-      {storefront?.name ? <h1 className="storefront-name">{storefront.name}</h1> : <h1 className="storefront-name storefront-name-plain">知衡</h1>}
+  if (compact) {
+    return <section className="storefront-welcome sf-welcome sf-compact" aria-label="学生看到的样子" style={{ background: style.background }}>
+      <div className="sf-compact-card" style={{ ['--venue-primary' as string]: style.primary }}>
+        <span className="sf-emblem sf-emblem-small"><VenueEmblem emblem={storefront?.emblem ?? ''} /></span>
+        <div>
+          <h1 className="storefront-name">{storefront?.name || '知衡'}</h1>
+          <p className="storefront-invite">{inviteTitle(storefront, teacher)}</p>
+          {storefront?.intro && <p className="storefront-intro">{storefront.intro}</p>}
+        </div>
+      </div>
+    </section>
+  }
+  return <main className="storefront-welcome sf-welcome" style={{ background: style.background, color: '#26221c' }}>
+    <div className="sf-body" style={{ ['--venue-primary' as string]: style.primary }}>
+      <span className="sf-emblem"><VenueEmblem emblem={storefront?.emblem ?? ''} /></span>
       <p className="storefront-invite">{inviteTitle(storefront, teacher)}</p>
+      <h1 className="storefront-name">{storefront?.name || '知衡'}</h1>
       {storefront?.intro && <p className="storefront-intro">{storefront.intro}</p>}
-      {storefront?.welcome && <p className="storefront-hello">{storefront.welcome}</p>}
-      <button className="storefront-start" disabled={preview || busy} onClick={onStart}>{busy ? '正在接入…' : '开始使用'}</button>
-      <p className="storefront-hint">接下来接入你自己的模型，由你的智能体陪你记录。</p>
-      {error && <p role="alert" className="storefront-error">{error}</p>}
+      <span className="sf-divider" aria-hidden="true" />
+      <p className="sf-lines">每天照照镜子，看看自己的变化。<br />有不舒服的地方，整理好发给老师。</p>
     </div>
+    <footer className="sf-foot">
+      <button className="storefront-start" disabled={preview || busy} onClick={onStart}>{busy ? '正在接入…' : '开始使用'}</button>
+      <p className="storefront-hint">接下来，接入你自己的模型。</p>
+      {error && <p role="alert" className="storefront-error">{error}</p>}
+    </footer>
   </main>
 }
