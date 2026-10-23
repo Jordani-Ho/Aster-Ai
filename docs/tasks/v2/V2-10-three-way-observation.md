@@ -2,7 +2,7 @@
 
 - 状态：已派（DeepSeek，接在 V2-09 之后）
 - 依赖：V2-04（`kangbi-observations`）、V2-05
-- 依据：`docs/proposals/kangbi-calibration.md` §2；决策 2026-10-18“内测只观察、影子试算后由发起人拍板”
+- 依据：（原 Codex 康币定值方案已删，康币定义改见 `docs/proposals/康币定义.md`）；决策 2026-10-18“内测只观察、影子试算后由发起人拍板”
 
 ## 目的
 
