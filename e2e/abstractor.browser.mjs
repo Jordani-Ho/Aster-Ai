@@ -20,8 +20,8 @@ try {
  const mirrorSvg=page.locator('.nl-mirror-frame svg')
  await upload()
  {
-  await page.waitForTimeout(4000)
-  if (await mirrorSvg.count() !== 1) console.log('DEBUG-UPLOAD', JSON.stringify({ alert: await page.getByRole('alert').allInnerTexts(), body: (await page.locator('body').innerText()).slice(0, 1200) }))
+  await page.waitForTimeout(12000)
+  if (await mirrorSvg.count() !== 1) console.log('DEBUG-UPLOAD', JSON.stringify({ alert: await page.getByRole('alert').allInnerTexts(), files: await page.locator('input[type=file]').count(), errors, body: (await page.locator('body').innerText()).slice(0, 1200) }))
  }
  await expect(mirrorSvg).toHaveCount(1)
  await page.reload();await expect(mirrorSvg).toHaveCount(1)
