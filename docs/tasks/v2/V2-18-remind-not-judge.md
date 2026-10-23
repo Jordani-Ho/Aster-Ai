@@ -10,7 +10,8 @@
 2. **问诊流程**：`core/intake/session.ts` 不再调用 `check`、不再有 `emergency` 状态；问诊包和病历里不再写 `redFlag` 字段。老版本发来的包带着这个字段时，照常收，忽略它。
 3. **老师端**：收件箱不按急症排先后（`core/inbox/priority.ts` 里相关的去掉；没有别的用途就整个删），面诊页（`VisitPage`、`core/record/in-person.ts`）不再显示或记录急症标记。
 4. **常驻提醒**：做成一个组件 `CareReminder`，内容只有一句：“急症请立即去医院或拨打当地急救电话，别等老师回复。”任何地方都不出现心理援助热线。学生问诊三步的顶端都显示，不能关，不拦截发送。V2-17 里已经先放了，这张卡把它抽成组件，文案只在一个地方。
-5. **文档**：`core/README.md`、`core/intake/README.md`、`core/record/README.md`、`domain/tcm/README.md` 里有关急症红线的说法一并改掉。
+5. **顺手**：删掉 `TeacherStudentsPage` 坚持情况卡片里那句“只显示学生上报的周汇总，不逐日推断。”（V2-17 审核时提过、漏改）；`core/redflags/` 删掉时其 README 一起删。
+6. **文档**：`core/README.md`、`core/intake/README.md`、`core/record/README.md`、`domain/tcm/README.md` 里有关急症红线的说法一并改掉。
 
 ## 验收用例
 
