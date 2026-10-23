@@ -131,6 +131,8 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   await expect(teacher.getByRole('dialog',{name:'像不像我评分'})).toBeVisible()
   await teacher.getByRole('button',{name:'5分',exact:true}).click()
   await expect(teacher.getByRole('dialog',{name:'像不像我评分'})).toHaveCount(0)
+  const backHome=student.getByRole('button',{name:'回到今天',exact:true})
+  if(await backHome.count())await backHome.click()
   await studentRecords(student, true)
   await expect(student.getByText('证候：SYNTHETIC_PATTERN',{exact:true})).toBeVisible()
   await expect(student.getByText('SYNTHETIC_HOMEWORK',{exact:true})).toBeVisible()
