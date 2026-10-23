@@ -2,8 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
 import type { StoredConsult, StudentAdherence } from './core/inbox'
-import { listConsults, listStudentAdherence } from './core/inbox'
-import { prioritizeConsults, urgentConsult } from './core/inbox/priority'
+import { listConsults, listStudentAdherence, sortConsultsBySubmittedAt } from './core/inbox'
 import { localDay } from './core/homework/schedule'
 import { formatHeavenTime, heavenNow, type HeavenTime } from './core/heaven'
 import { listTeacherRecords } from './core/records/teacher'
@@ -47,7 +46,9 @@ export function TeacherToday({ identity, store, status, onStartVisit, onOpenRemo
     const refresh = () => {
       void Promise.all([listConsults(store), listStudentAdherence(store), listTeacherRecords(store)]).then(([rows, reports, records]) => {
         if (!active) return
-        setConsults(prioritizeConsults(rows)); setAdherence(reports)
+        // V2-18：收件箱只按学生提交问诊的时间排序，不按任何急症/心理判断排先后。
+        setConsults(sortConsultsBySubmittedAt(rows))
+        setAdherence(reports)
         // “等您签字”只列还没签过的问诊；签过的留在本机等保留期限处理。
         setSignedIds(new Set(records.map(record => record.encounterId)))
         setError('')
@@ -104,7 +105,7 @@ export function TeacherToday({ identity, store, status, onStartVisit, onOpenRemo
               <strong>{aliasOf(consult)}</strong>
               <span>{consult.encounter.intake.chiefComplaint.value ?? '问诊留言'} · 草稿已备好</span>
             </span>
-            {urgentConsult(consult) ? <span className="nl-pill">急症</span> : <span className="nl-pill muted">{dayLabel(consult.receivedAt)}</span>}
+            <span className="nl-pill muted">{dayLabel(consult.receivedAt)}</span>
           </button>
         </li>)}
       </ul>

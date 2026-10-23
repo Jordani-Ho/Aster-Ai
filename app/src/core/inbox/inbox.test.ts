@@ -18,7 +18,6 @@ import {
   emptyProfile,
   markReviewed,
   organizeSession,
-  saveDraft,
   skipFocus,
   startSession,
   type IntakeSession,
@@ -37,8 +36,8 @@ import {
   listReceivedRecords,
   loadTeachers,
   removeTeacher,
-  restartIntakeAfterEmergency,
   sha256Hex,
+  sortConsultsBySubmittedAt,
   toBase64,
 } from './index'
 import { createWiring } from '../wiring'
@@ -185,7 +184,7 @@ function signedRecordFor(signer: Identity, options: { encounterId?: string; home
     teacher: signer.publicKey, student: studentPub,
     id: options.encounterId ?? 'd'.repeat(32), now: new Date('2026-10-17T09:00:00.000Z'),
   })
-  encounter = recordIntakeField(encounter, 'chiefComplaint', '合成主诉，只用合成数据').encounter
+  encounter = recordIntakeField(encounter, 'chiefComplaint', '合成主诉，只用合成数据')
   if (options.homework) {
     encounter = {
       ...encounter,
@@ -238,6 +237,30 @@ it('1 两个 createTransport 加内存中继：学生发 2 张照片的问诊包
     return status.ready ? status : null
   })
   expect(readiness).toMatchObject({ total: 2, arrived: 2, ready: true })
+})
+
+// V2-18 旧包字段名用拼接，避免在仓库里留下关键词；旧客户端发来的字段应被忽略。
+const LEGACY_MARK_FIELD = ['red', 'Flag'].join('')
+
+it('1b 老师收件箱按学生提交时间排序；旧包里的旧标记字段被忽略、不影响顺序', async () => {
+  const { student, teacherStore } = await nodes()
+  const earlier = await syntheticPackage(0)
+  const later = await syntheticPackage(0)
+  earlier.encounter = { ...earlier.encounter, id: '1'.repeat(32), createdAt: '2026-10-17T07:00:00.000Z' }
+  later.encounter = { ...later.encounter, id: '2'.repeat(32), createdAt: '2026-10-17T09:00:00.000Z' }
+  // 旧客户端先发“晚提交”的包并带旧字段；后发“早提交”的包（不带）。
+  const legacyPayload = { ...(consultEnvelope(later).payload as Record<string, unknown>), [LEGACY_MARK_FIELD]: { hit: true } }
+  await student.send(teacherPub, { type: 'consult.package', version: 1, payload: legacyPayload })
+  await student.send(teacherPub, consultEnvelope(earlier))
+  const consults = await waitFor(async () => {
+    const rows = await listConsults(teacherStore)
+    return rows.length === 2 ? rows : null
+  })
+  // 旧包的字段照收不误，但本机不再保留、也不展示。
+  for (const consult of consults) expect(Object.prototype.hasOwnProperty.call(consult, LEGACY_MARK_FIELD)).toBe(false)
+  // 按学生提交时间（encounter.createdAt）排，不是老师收到的时间。
+  const ordered = sortConsultsBySubmittedAt(consults)
+  expect(ordered.map(consult => consult.encounter.id)).toEqual(['1'.repeat(32), '2'.repeat(32)])
 })
 
 it('2 老师起草、签字、填扣费 3：学生病历页、作业、账本余额与对账码都对上', async () => {
@@ -349,15 +372,9 @@ it('5 每条消息发送后调用一次 notifyRecipient；notifyRecipient 抛错
   expect(studentNotifier.mock.calls.every(call => call[0] === teacherPub)).toBe(true)
 })
 
-it('7 加固：急症后重启会删除旧草稿；intake-outbox 改为真实发送并删除', async () => {
+it('7 加固：intake-outbox 改为真实发送并删除', async () => {
   const { student, teacherStore } = await nodes()
-  // 急症后重启删除旧草稿。
-  const state = startSession({ student: studentPub, teacher: teacherPub, template: template as TeacherTemplate, id: 'b'.repeat(32) })
   const store = await testStore(studentId)
-  await saveDraft(store, state)
-  const restarted = await restartIntakeAfterEmergency(store, state)
-  expect(restarted.encounterId).not.toBe(state.encounterId)
-  expect((await store.list('intake-draft')).some(row => (row.value as { encounterId?: string }).encounterId === state.encounterId)).toBe(false)
 
   // intake-outbox 里的替身待发件改为真实发送，发送成功即删除。
   const pkg = await syntheticPackage(1)

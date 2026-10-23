@@ -8,7 +8,7 @@ import type { AttachmentRef, ConsultPackage, Encounter, Homework } from '../reco
 import { CARE_PLAN_TYPE, parseSignedCarePlanEvent, storeCarePlan, verifySignedCarePlan } from '../careplan'
 import { verifyFamilyProof } from '../family/proof'
 import type { AdherenceReport } from '../adherence'
-import { INTAKE_COLLECTIONS, deleteDraft, restartAfterEmergency, type IntakeSession, type StoredPackage } from '../intake/session'
+import { INTAKE_COLLECTIONS, type StoredPackage } from '../intake/session'
 import { localDay } from '../homework/schedule'
 import { isHeavenStamp } from '../heaven/stamp'
 import type { HeavenStamp } from '../heaven/stamp'
@@ -62,8 +62,6 @@ export interface ConsultEnvelopePayload {
   encounter: Encounter
   history: string[]
   attachments: AttachmentRef[]
-  /** 急症/自伤标记（M1-19）：只给老师端看，不进 Encounter schema。 */
-  redFlag?: { hit: boolean; crisis: boolean }
   /** 最近 14 天状态与压力走势（M1-19）：只给老师端看，不进 Encounter schema。 */
   trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] }
   /** M1-22 传输元数据：家人代管问诊时是代管人（根身份）公钥。 */
@@ -90,8 +88,6 @@ export interface StoredConsult {
   receivedAt: string
   sender: string
   droppedHistory: number
-  /** 急症/自伤标记（M1-19）：老师问诊箱据此醒目标出，只做展示不进入病历。 */
-  redFlag?: { hit: boolean; crisis: boolean } | null
   /** 最近 14 天状态与压力走势（M1-19）：老师草稿卡片上显示一条小走势。 */
   trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] } | null
   /** M1-22：家人代管问诊时为代管人公钥；一本账与回信都按它处理。 */
@@ -293,7 +289,6 @@ export function consultEnvelope(pkg: ConsultPackage): Envelope {
       encounter: structuredClone(pkg.encounter),
       history: [...pkg.history],
       attachments: pkg.attachments.map(item => ({ ...item.ref })),
-      ...(pkg.redFlag ? { redFlag: pkg.redFlag } : {}),
       ...(pkg.trend ? { trend: pkg.trend } : {}),
       ...(pkg.manager ? { manager: pkg.manager } : {}),
       ...(pkg.managerProof ? { managerProof: structuredClone(pkg.managerProof) } : {}),
@@ -412,6 +407,16 @@ export async function listConsults(store: LocalStore): Promise<StoredConsult[]> 
   return consults.sort((left, right) => Date.parse(right.receivedAt) - Date.parse(left.receivedAt))
 }
 
+// V2-18：老师收件箱只按学生提交问诊的时间排，不按急症或任何关键词置顶；同一时间按病历 id 稳定排序。
+export function sortConsultsBySubmittedAt(consults: readonly StoredConsult[]): StoredConsult[] {
+  const submittedAt = (consult: StoredConsult): number => {
+    const value = Date.parse(consult.encounter.createdAt)
+    return Number.isFinite(value) ? value : 0
+  }
+  return [...consults].sort((left, right) =>
+    submittedAt(left) - submittedAt(right) || left.encounter.id.localeCompare(right.encounter.id))
+}
+
 export async function consultReadiness(store: LocalStore, encounterId: string): Promise<ConsultReadiness> {
   const consult = await store.get(INBOX_COLLECTIONS.consult, encounterId) as unknown as StoredConsult | undefined
   if (!consult) return { consult: null, total: 0, arrived: 0, missing: [], ready: false }
@@ -496,11 +501,7 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
   if (!Array.isArray(value.attachments) || value.attachments.length > MAX_ATTACHMENTS || !value.attachments.every(isRef)) return
   const history = Array.isArray(value.history) ? value.history : []
   const checked = validHistory({ ...value, history }, identity)
-  const redFlagRaw = value.redFlag as unknown
-  const redFlag = typeof redFlagRaw === 'object' && redFlagRaw !== null && !Array.isArray(redFlagRaw)
-    && typeof (redFlagRaw as { hit?: unknown }).hit === 'boolean' && typeof (redFlagRaw as { crisis?: unknown }).crisis === 'boolean'
-    ? { hit: (redFlagRaw as { hit: boolean }).hit, crisis: (redFlagRaw as { crisis: boolean }).crisis }
-    : null
+  // V2-18：旧版本问诊包可能还带着旧标记字段；照常收下，忽略它，不写入本机也不展示。
   const trendRaw = value.trend as unknown
   const trend = typeof trendRaw === 'object' && trendRaw !== null && !Array.isArray(trendRaw)
     && Array.isArray((trendRaw as { days?: unknown }).days) && Array.isArray((trendRaw as { scores?: unknown }).scores) && Array.isArray((trendRaw as { stress?: unknown }).stress)
@@ -524,7 +525,6 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
     receivedAt: new Date().toISOString(),
     sender: message.sender,
     droppedHistory: checked.dropped,
-    redFlag,
     ...(trend ? { trend } : {}),
     ...(heaven ? { heaven: { ...heaven } } : {}),
     ...(manager ? { manager } : {}),
@@ -1000,12 +1000,6 @@ export async function completeConsultSigning(options: ConsultSigningOptions): Pr
   if (options.draft) await updateFingerprint(options.store, options.final.teacher, options.draft, final)
   const chargeError = await recordCharge(options.ledger, options.final.teacher, bookStudent, signed.id, options.charge, options.chargeBook?.forMember, options.currency)
   return { signed, chargeError }
-}
-
-// 急症中断后，学生点“我已知晓并重新开始”时先删掉旧草稿（含急症原文），再开新的一次采集。
-export async function restartIntakeAfterEmergency(store: LocalStore, state: IntakeSession, now?: Date): Promise<IntakeSession> {
-  await deleteDraft(store, state.encounterId)
-  return restartAfterEmergency(state, now)
 }
 
 // M1-05 接通后，intake-outbox 里的替身待发件改为真实发送；发送成功后才从待发集合删除。

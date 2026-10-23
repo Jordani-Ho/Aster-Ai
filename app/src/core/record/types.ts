@@ -86,8 +86,6 @@ export interface ConsultPackage {
   attachments: { ref: AttachmentRef; data: Uint8Array }[]
   /** V2-06：发送那一刻学生那边的天地人（时辰、节气、城市）；签字病历原样沿用，不重新取。 */
   heaven?: HeavenStamp
-  /** 急症/自伤标记（M1-19）：只随传输信封给老师端看，不进 Encounter schema。 */
-  redFlag?: { hit: boolean; crisis: boolean }
   /** 最近 14 天状态与压力走势（M1-19）：只随传输信封给老师端看，不进 Encounter schema。 */
   trend?: { days: string[]; checkins: number[]; scores: (number | null)[]; stress: (number | null)[] }
   /** M1-22 传输元数据：家人代管问诊时填代管人（根身份）公钥；本人问诊省略。不进病历 schema。 */

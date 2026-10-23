@@ -206,7 +206,6 @@ function StudentDetail({ identity, store, llm, send, ledger, row, records, onBac
                 {Array.from({ length: 7 }, (_, index) => <span key={index} className={index < report.practiceDays ? 'ts-week-dot done' : 'ts-week-dot'} aria-hidden="true">{index < report.practiceDays ? '✓' : ''}</span>)}
               </div>
               <p>本周完成 {report.practiceDays} 天{report.streak > 0 ? ` · 已连续 ${report.streak} 天` : ''}</p>
-              <p className="nl-quiet">只显示学生上报的周汇总，不逐日推断。</p>
             </>
             : <p className="nl-quiet">学生发来坚持率小结后，这里会显示本周完成情况。</p>}
         </div>

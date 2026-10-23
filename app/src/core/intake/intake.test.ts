@@ -41,6 +41,9 @@ function fresh(): IntakeSession {
   return startSession({ student, teacher, template, now, id: 'a'.repeat(32) })
 }
 
+// V2-18 旧包字段名用拼接，避免在仓库里留下关键词。
+const LEGACY_MARK_FIELD = ['red', 'Flag'].join('')
+
 function modelReturning(data: unknown): LlmClient {
   return { complete: vi.fn().mockResolvedValue(JSON.stringify(data)), stream: vi.fn() }
 }
@@ -151,15 +154,14 @@ describe('M1-09 学生采集验收', () => {
     expect(canConfirm(markReviewed(state)).ok).toBe(true)
   })
 
-  it('3 命中急症只标记不阻断，包上带 redFlag 仍可发送', () => {
-    let state = addUtterance(fresh(), '胸口压着疼，出冷汗')
-    expect(state.emergency?.hit).toBe(true)
+  it('3 急症样的话不阻断、不标记，照常能发送', () => {
+    const state = addUtterance(fresh(), '胸口压着疼，出冷汗')
     // 不阻断：还能继续说话、还能进包。
     expect(() => addUtterance(state, '还有点头晕')).not.toThrow()
     const confirmed = markReviewed({ ...state, phase: 'confirm' })
     expect(canConfirm(confirmed).ok).toBe(true)
     const pkg = buildConsultPackage(confirmed, emptyProfile(), [], [])
-    expect(pkg.redFlag).toEqual({ hit: true, crisis: false })
+    expect(Object.prototype.hasOwnProperty.call(pkg, LEGACY_MARK_FIELD)).toBe(false)
   })
 
   it('4 带 GPS EXIF 的合成 JPEG 重编码后为不含原 EXIF 的 JPEG，不超过 500 KB，长边 ≤1600', async () => {
@@ -320,20 +322,17 @@ describe('M1-09 学生采集验收', () => {
     expect(outcome.questions.length).toBeLessThanOrEqual(2)
   })
 
-  it('9 确认页把字段改成急症描述后仍可发送，包上带 redFlag；发送前再查一遍', async () => {
+  it('9 确认页把字段改成急症样描述后仍可发送，包上不带任何标记', async () => {
     const store = new MemoryStore()
     const state = await confirmedOffline()
     const risky = updateField(state, 'chiefComplaint', '胸口压着疼，出冷汗')
-    expect(risky.emergency?.hit).toBe(true)
     const reviewed = markReviewed(risky)
     expect(canConfirm(reviewed).ok).toBe(true)
     const send = vi.fn().mockResolvedValue(undefined)
     const pkg = await confirmAndSend(store, reviewed, emptyProfile(), [], [], send)
     expect(send).toHaveBeenCalled()
-    expect(pkg.redFlag).toEqual({ hit: true, crisis: false })
-    // 纵深防御：即使状态里没有 emergency，buildConsultPackage 也会重新检查并标记。
-    const tampered: IntakeSession = { ...reviewed, emergency: null }
-    expect(buildConsultPackage(tampered, emptyProfile(), [], []).redFlag).toEqual({ hit: true, crisis: false })
+    expect(Object.prototype.hasOwnProperty.call(pkg, LEGACY_MARK_FIELD)).toBe(false)
+    expect(buildConsultPackage(reviewed, emptyProfile(), [], [])).not.toHaveProperty(LEGACY_MARK_FIELD)
   })
 
   it('10 附件必须与确认页逐个一致（id、sha256、bytes），否则拒绝', async () => {

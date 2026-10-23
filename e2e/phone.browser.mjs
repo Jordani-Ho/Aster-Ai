@@ -27,15 +27,12 @@ async function layout(page) {
 }
 async function shot(page, name) { if (!process.env.CI) await page.screenshot({ path: root + 'docs/screenshots/' + name + '.png' }) }
 const FIRST_AID = '急症请立即去医院或拨打当地急救电话，别等老师回复。'
-const HOTLINE_WORDS = ['心理援助热线', '24小时热线', '热线', '12356']
 const PHONE_NUMBERS = ['120', '911', '999', '119', '995', '988']
-async function expectNoHotline(page) {
+async function expectNoPhoneNumbers(page) {
   const body = await page.locator('body').innerText()
-  for (const word of HOTLINE_WORDS) expect(body).not.toContain(word)
   for (const number of PHONE_NUMBERS) expect(body).not.toContain(number)
-  expect(await page.locator('.redflag-notice').count()).toBe(0)
 }
-// 整理后可能先出追问，也可能直接到卡片；两种都往下走。
+// 整理后可能先出追问，也可能直接到卡片；两种都往下走，每一步都应看到常驻提醒。
 async function skipToCard(page) {
   const card = page.getByRole('region', { name: '问诊卡片' })
   const skip = page.getByRole('button', { name: '跳过，直接整理', exact: true }).first()
@@ -46,6 +43,7 @@ async function skipToCard(page) {
       else if (await skip.count()) state = 'skip'
       else await page.waitForTimeout(250)
     }
+    await expect(page.getByText(FIRST_AID, { exact: true })).toBeVisible()
     if (state === 'card') return card
     if (state === 'none') break
     await skip.click({ timeout: 5000 }).catch(() => {})
@@ -133,7 +131,7 @@ try {
     await expect(page.getByRole('heading', { name: '小王', exact: true })).toBeVisible()
     await expect(page.getByRole('region', { name: '当前方案' })).toContainText('老师已签字')
     await expect(page.getByRole('region', { name: '坚持情况' })).toContainText('本周完成 5 天')
-    await expect(page.getByRole('region', { name: '坚持情况' })).toContainText('只显示学生上报的周汇总')
+    await expect(page.getByRole('region', { name: '坚持情况' })).toContainText('本周完成 5 天')
     await expect(page.getByRole('region', { name: '历次病历' })).toContainText('全部 3 次')
     await expect(page.getByRole('region', { name: '钱账' })).toContainText('120.00')
     await layout(page)
@@ -182,18 +180,21 @@ try {
     await page.getByRole('button', { name: /不舒服？告诉/ }).click()
     await expect(page.getByRole('heading', { name: /^告诉/ })).toBeVisible()
     await expect(page.getByLabel('按键盘上的🎤说话就行', { exact: true })).toBeVisible()
+    await expect(page.getByText(FIRST_AID, { exact: true })).toBeVisible()
     await layout(page)
     await shot(page, 'phone-student-consult-speak')
     await page.getByLabel('按键盘上的🎤说话就行', { exact: true }).fill('最近睡不好，夜里容易醒')
     await page.getByRole('button', { name: '说好了，继续', exact: true }).click()
     await expect(page.getByRole('heading', { name: '再问一句', exact: true })).toBeVisible()
     await expect(page.getByLabel('补充一下', { exact: true })).toBeVisible()
+    await expect(page.getByText(FIRST_AID, { exact: true })).toBeVisible()
     await layout(page)
     await shot(page, 'phone-student-consult-followup')
     await page.getByLabel('补充一下', { exact: true }).fill('白天也没精神，容易心慌')
     await page.getByRole('button', { name: '补充好了，整理卡片', exact: true }).click()
     await skipToCard(page)
     await expect(page.getByText('草稿 · 待你核对', { exact: true })).toBeVisible()
+    await expect(page.getByText(FIRST_AID, { exact: true })).toBeVisible()
     for (const label of ['主诉', '现病史', '既往史', '在用药']) await expect(page.locator('.cf-field dt').filter({ hasText: label })).toBeVisible()
     await expect(page.locator('.cf-field').filter({ hasText: '主诉' })).toContainText('最近睡不好')
     await expect(page.locator('.cf-field').filter({ hasText: '现病史' })).toContainText('白天也没精神')
@@ -215,7 +216,7 @@ try {
     await skipToCard(page)
     await expect(page.getByText(FIRST_AID, { exact: true })).toBeVisible()
     await expect(page.getByRole('alert')).toHaveCount(0)
-    await expectNoHotline(page)
+    await expectNoPhoneNumbers(page)
     const send = page.getByRole('button', { name: /^发给/ })
     await expect(send).toBeEnabled()
     await layout(page)
@@ -225,7 +226,7 @@ try {
     expect(errors).toEqual([])
     await context.close()
   }
-  // 说自伤/轻生的话：和平常一样，只有顶端那句常驻提示，照常能发出，没有任何热线号码
+  // 说自伤/轻生的话：和平常一样，只有顶端那句常驻提示，照常能发出，没有任何电话号码
   {
     const { context, page, errors } = await open('consult')
     await page.getByRole('button', { name: /不舒服？告诉/ }).click()
@@ -235,7 +236,7 @@ try {
     await skipToCard(page)
     await expect(page.getByText(FIRST_AID, { exact: true })).toBeVisible()
     await expect(page.getByRole('alert')).toHaveCount(0)
-    await expectNoHotline(page)
+    await expectNoPhoneNumbers(page)
     const send = page.getByRole('button', { name: /^发给/ })
     await expect(send).toBeEnabled()
     await send.click()

@@ -1,4 +1,3 @@
-import { check, type RedFlagResult } from '../redflags'
 import { isHeavenStamp } from '../heaven/stamp'
 import type { AttachmentRef, ConsultPackage, Encounter, Field } from './types'
 import { signEncounter, type SignedEncounterEvent } from './sign'
@@ -95,25 +94,15 @@ function assertInPerson(encounter: Encounter): void {
   if (!encounter || typeof encounter !== 'object' || encounter.kind !== 'in_person') throw new Error('不是面诊病历')
 }
 
-export interface InPersonIntakeResult {
-  encounter: Encounter
-  /** 命中的急症红线；只提示，不阻断老师继续记录（老师在现场判断）。 */
-  redFlag: RedFlagResult | null
-}
-
-// 老师代录一项 intake。每次录入都过本地急症红线，但命中不阻断。
-export function recordIntakeField(encounter: Encounter, key: InPersonIntakeKey, text: string): InPersonIntakeResult {
+// 老师代录一项 intake（V2-18：不再做急症判断，只记录老师写的内容）。
+export function recordIntakeField(encounter: Encounter, key: InPersonIntakeKey, text: string): Encounter {
   assertInPerson(encounter)
   if (!IN_PERSON_INTAKE_KEYS.includes(key)) throw new Error('没有这个采集字段')
   if (typeof text !== 'string') throw new Error('录入内容无效')
   const value = text.trim()
   if (value.length > 2000) throw new Error('这一项太长了，请精简一下')
   const field: Field<string> = value === '' ? unknown() : { value, source: 'teacher', note: IN_PERSON_NOTE }
-  const result = value === '' ? null : check(value)
-  return {
-    encounter: { ...encounter, intake: { ...encounter.intake, [key]: field } },
-    redFlag: result && result.hit ? result : null,
-  }
+  return { ...encounter, intake: { ...encounter.intake, [key]: field } }
 }
 
 // 把已经处理过的照片（M1-09 photo.ts 的 AttachmentRef）加进面诊病历。

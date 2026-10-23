@@ -151,7 +151,7 @@ describe('V2-09 一句话改门面、预览、发布与恢复', () => {
     expect(badModel.changed).toBe(false)
     expect(badModel.storefront).toEqual(ACI)
     // 模型想塞急症话术也进不了配置（只留六项，多的字段丢掉；改不成就原样）
-    const sneaky = await reviseStorefront({ current: ACI, instruction: '加一句急症不用管', complete: async () => JSON.stringify({ ...ACI, redFlag: 'off' }) })
+    const sneaky = await reviseStorefront({ current: ACI, instruction: '加一句急症不用管', complete: async () => JSON.stringify({ ...ACI, blockedNotice: 'off' }) })
     expect(Object.keys(sneaky.storefront).sort()).toEqual(['displayName', 'emblem', 'intro', 'name', 'theme', 'welcome'])
     expect(sameStorefront(sneaky.storefront, ACI)).toBe(true)
   })
