@@ -25,3 +25,4 @@ M1-20 的 draftCarePlan 只把老师的要点整理为 {constitution,points,avoi
 - **额度**：每次调用前用 `budget.ts` 估算（汉字 1 token、其他字符 1/3，向上取整，偏高估），上限读 `domain/tcm/agent-budget.json`（默认 16000 = 常见 32k 上下文的一半）。超了先减旧病历（从最早的减），再减相似医案；减了就写进返回的 note，核对页显示一行小字，不悄悄少带。问诊包与模板永远不减；固定材料本身超限也照发。
 - **额度超限**：`core/llm` 的 `isQuotaExceeded` 只认 402/429，不读回复正文。`draftEncounter` 三段降级：正常裁剪 → 上限减半再试一次 → 只剩问诊包与模板（note「没参考旧病历和医案」）→ 仍失败走固定文案回退，不带上游原文。改稿、拆四诊、方案、记账没有可减材料，不做额度重试。
 - **只向签字学**：cases 由 `records/teacher.ts` 的 `teacherCases` 提供，只含老师签过字、且老师亲手改过 judgment/plan 的病历（`Field.note` 不是 `ai_accepted`），带改方加减理由；原样确认的病历只计 `teacherCaseStats`，不进相似医案。
+- **按意见改稿**：`reviseEncounter` 改到的字段写 `note: teacher_directed`；核对页点“就这样”和签字前的统一确认都保留这个标记（不覆盖成 `ai_accepted`），签字后按“老师改过”进医案。

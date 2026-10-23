@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -8,9 +8,11 @@ import { openStore, type LocalStore } from '../store'
 import type { Envelope, Message } from '../transport'
 import { addTeacher, completeConsultSigning, createInbox, listReceivedRecords, type StoredConsult } from '../inbox'
 import { startInPersonEncounter, recordIntakeField, signAndHandoverInPerson } from '../record/in-person'
-import { signEncounter } from '../record/sign'
+import { acceptDraftForSigning, signEncounter } from '../record/sign'
 import type { Encounter } from '../record/types'
 import { searchCases } from '../drafting/cases'
+import { reviseEncounter } from '../drafting/revise'
+import { confirmBlock } from '../../review-model'
 import { storeCarePlan } from '../careplan'
 import { recordSelfRating, last14DayTrend, listSelfRatings } from '../mirror/trend'
 import { checkIn } from '../homework'
@@ -209,6 +211,46 @@ describe('V2-05 验收 0：老师端完整医案 teacher-records', () => {
     const tampered = { ...signedEdited, content: signedEdited.content.replace('睡不着', '被改过的内容') }
     expect(await saveTeacherRecord(store, tampered)).toBeNull()
     expect(await teacherCases(store)).toHaveLength(1)
+  })
+
+  it('V2-19 按意见改稿后点“就这样”签字：病历进医案并带改方理由，认可数不增加', async () => {
+    const teacher = createIdentity()
+    const student = createIdentity()
+    const store = await newStore(teacher, 'teacher')
+    // 老师看到的是一张 AI 草稿：摘要、证候、方子都是 ai_draft。
+    const base = remoteEncounter(teacher.publicKey, student.publicKey, { id: '7'.repeat(32) })
+    base.judgment = {
+      ...base.judgment,
+      symptomSummary: { value: '合成摘要', source: 'ai_draft' },
+      pattern: { value: '合成证候', source: 'ai_draft' },
+    }
+    base.plan = {
+      ...base.plan,
+      prescription: { value: { items: [{ herb: '合成药甲', dose: '3g' }, { herb: '合成药乙', dose: '2g' }] }, source: 'ai_draft' },
+    }
+    // 老师一句话让智能体改方。
+    const llm = {
+      complete: vi.fn().mockResolvedValue(JSON.stringify({ plan: { prescription: { value: {
+        items: [{ herb: '合成药乙', dose: '2g' }], changeReason: '合成理由：去掉药甲',
+      } } } })),
+      stream: vi.fn(),
+    }
+    const revised = await reviseEncounter(base, '去掉合成药甲', llm)
+    expect(revised.plan.prescription).toMatchObject({ source: 'ai_draft', note: 'teacher_directed' })
+    // 老师在核对页对判断、方子都点“就这样”，然后签字。
+    const final = acceptDraftForSigning(confirmBlock(confirmBlock(revised, 'judgment'), 'prescription'))
+    expect(final.judgment.symptomSummary).toMatchObject({ source: 'teacher', note: 'ai_accepted' })
+    expect(final.plan.prescription).toMatchObject({ source: 'teacher', note: 'teacher_directed' })
+    expect(await saveTeacherRecord(store, signEncounter(final, teacher.privateKey))).not.toBeNull()
+
+    const cases = await teacherCases(store)
+    expect(cases).toHaveLength(1)
+    expect(cases[0]).toMatchObject({
+      changeReason: '合成理由：去掉药甲',
+      prescription: { items: [{ herb: '合成药乙', dose: '2g' }] },
+    })
+    // 按意见改稿算“老师改过”，不增加“原样确认”的认可数。
+    expect(await teacherCaseStats(store)).toEqual({ referable: 1, accepted: 0 })
   })
 
   it('老师端只认自己签的完整病历；学生、面诊索引按公钥去重', async () => {

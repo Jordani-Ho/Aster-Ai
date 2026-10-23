@@ -1,9 +1,12 @@
 import prompt from '../../../../prompts/teacher/revise-draft.md?raw'
 import type { LlmClient } from '../llm'
 import type { Encounter, Field } from '../record/types'
+import { TEACHER_DIRECTED_NOTE } from '../record/notes'
 import { prescription, homework } from './index'
 const object = (v:unknown):v is Record<string,unknown> => !!v && typeof v==='object' && !Array.isArray(v)
 // 只允许改起草字段；省略保持原值，null 明确清空。身份、原话、附件和签字信息永不接受模型覆盖。
+// V2-19：改到的字段写 note: teacher_directed —— 这是老师按自己的意见让智能体改的，
+// 签字时保留这个标记，医案检索才算“老师改过”，不会被当成一字未改的认可。
 export async function reviseEncounter(input:Encounter, instruction:string, llm:LlmClient, options:{timeoutMs?:number}={}):Promise<Encounter> {
   let timer:ReturnType<typeof setTimeout>|undefined
   try {
@@ -26,12 +29,12 @@ export async function reviseEncounter(input:Encounter, instruction:string, llm:L
           if(!Array.isArray(item))throw Error()
           const parsed=homework(item)
           if(parsed.length!==item.length)throw Error()
-          result.plan.homework=parsed;changes++;continue
+          result.plan.homework=parsed.map(entry=>({...entry,note:TEACHER_DIRECTED_NOTE}));changes++;continue
         }
         if(!object(item)||!Object.hasOwn(item,'value'))throw Error()
         const value=item.value
         if(value!==null && (name==='plan'&&key==='prescription' ? !prescription(value) : typeof value!=='string'||!value.trim()))throw Error()
-        ;(target as unknown as Record<string,Field<unknown>>)[key]={value:structuredClone(value),source:'ai_draft'}
+        ;(target as unknown as Record<string,Field<unknown>>)[key]={value:structuredClone(value),source:'ai_draft',note:TEACHER_DIRECTED_NOTE}
         changes++
       }
     }

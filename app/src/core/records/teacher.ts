@@ -3,6 +3,7 @@ import type { StoreValue } from '../store'
 import type { DraftCase } from '../drafting/cases'
 import { nextVersion, SIGNED_ENCOUNTER_KIND, type SignedEncounterEvent } from '../record/sign'
 import type { Encounter, Field, Prescription } from '../record/types'
+import { AI_ACCEPTED_NOTE } from '../record/notes'
 import { listIdentityLinks } from '../identity/links'
 
 // V2-05 第 0 步：老师端签字发送成功后，把完整签名病历存进 teacher-records。
@@ -176,18 +177,17 @@ function latestVersions(records: readonly LoadedTeacherRecord[]): LoadedTeacherR
 }
 
 // 病历格式（docs/schemas/encounter.md 第 3 节第 1 条）：老师点“就这样”时来源写 teacher、
-// note 写 ai_accepted；老师亲手改过的字段来源 teacher、不写 ai_accepted。
-// 所以「原样确认」= note === 'ai_accepted'；其余 judgment/plan 字段算老师自己的话。
+// note 写 ai_accepted；老师亲手改过的字段来源 teacher、不写 note；老师让智能体按意见改过的字段
+// 写 teacher_directed（V2-19）。
+// 所以「原样确认」只认 note === 'ai_accepted'；其余 judgment/plan 字段（含 teacher_directed）算老师自己的话。
 // 范围与 modificationLog 一致：只看 judgment 与 plan，四诊常转述学生原话，不当老师的思路学。
-const ACCEPTED_NOTE = 'ai_accepted'
-
 function authoredText(field: Field<string> | undefined): string {
-  if (!field || field.source !== 'teacher' || field.note === ACCEPTED_NOTE) return ''
+  if (!field || field.source !== 'teacher' || field.note === AI_ACCEPTED_NOTE) return ''
   return typeof field.value === 'string' && field.value.trim() !== '' ? field.value : ''
 }
 
 function authoredPrescription(field: Field<Prescription> | undefined): Prescription | null {
-  if (!field || field.source !== 'teacher' || field.note === ACCEPTED_NOTE) return null
+  if (!field || field.source !== 'teacher' || field.note === AI_ACCEPTED_NOTE) return null
   return field.value ?? null
 }
 
