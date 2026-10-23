@@ -9,7 +9,6 @@ const browser=await chromium.launch({headless:true})
 try {
  const page=await browser.newPage({viewport:{width:375,height:812}})
  const errors=[];page.on('pageerror',e=>errors.push(e.message))
- let navigations=0;page.on('framenavigated',frame=>{if(frame===page.mainFrame())navigations++})
  const png=await readFile(new URL('../app/src/core/abstractor/fixtures/tongue.png',import.meta.url)), image=png.toString('base64')
  const features={color:'pale',coatingColor:'white',coatingThickness:'thin',shape:'wide',teeth:[],cracks:[],confidence:0.7,box:{x:0.2,y:0.2,width:0.6,height:0.6},lightingNote:false}
  let failure=false,requests=0
@@ -21,12 +20,7 @@ try {
  const upload=async()=>{await page.locator('input[type=file]').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:png});await expect(page.locator('input[type=file]')).toHaveValue('')}
  await expect(page.locator('[data-page=student-today]')).toBeVisible()
  const mirrorSvg=page.locator('.nl-mirror-frame svg')
- await upload()
- {
-  await page.waitForTimeout(12000)
-  if (await mirrorSvg.count() !== 1) console.log('DEBUG-UPLOAD', JSON.stringify({ navigations, alert: await page.getByRole('alert').allInnerTexts(), files: await page.locator('input[type=file]').count(), errors, body: (await page.locator('body').innerText()).slice(0, 1200) }))
- }
- await expect(mirrorSvg).toHaveCount(1)
+ await upload();await expect(mirrorSvg).toHaveCount(1)
  await page.reload();await expect(mirrorSvg).toHaveCount(1)
  failure=true;await upload();await expect(page.getByRole('alert')).toContainText('重新拍');await expect(mirrorSvg).toHaveCount(1)
  failure=false;await page.getByText('切换家人',{exact:true}).click();await expect(mirrorSvg).toHaveCount(0)

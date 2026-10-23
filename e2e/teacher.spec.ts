@@ -28,7 +28,7 @@ async function backToToday(page:Page){
 // V2-16：学生首页的“每日建议”收在折叠里，先展开再断言。
 async function openAdvice(page:Page){
  const summary=page.getByText('今天的完整建议',{exact:true})
- if(await summary.count()===0)return
+ await summary.waitFor({state:'visible',timeout:20000})
  const details=summary.locator('..')
  if(await details.getAttribute('open')===null)await summary.click()
 }

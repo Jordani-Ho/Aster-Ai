@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useState } from 'react'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
@@ -27,6 +28,8 @@ export interface TeacherManagementProps {
 // V2-16 我的馆：V2-15 的管理页整体挪进来，按顺序分块、每块默认折叠。
 // 换手机块里带上“待认回”提示（以前在今天的顶部）；我的镜子/给自己定制调养方案收在最后。
 export function TeacherManagement({ identity, store, llm, gateway, send, ledger, ledgerPanel, settings }: TeacherManagementProps) {
+  // “我的镜子”展开时才挂载，避免一进我的馆就为老师自己的建议调一次模型。
+  const [mirrorOpen, setMirrorOpen] = useState(false)
   return <main className="nl-page nl-manage">
     <h1>我的馆</h1>
     <p className="nl-quiet">按功能分块，点标题展开。每个功能只出现一处。</p>
@@ -56,12 +59,15 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
       <summary>向社区分享运行统计</summary>
       <StatsSharing store={store} />
     </details>
-    <details className="manage-block" aria-label="我的镜子">
+    <details className="manage-block" aria-label="我的镜子" open={mirrorOpen}
+      onToggle={event => { const open = event.currentTarget.open; setMirrorOpen(open) }}>
       <summary>我的镜子</summary>
-      <DailyMirrorCard store={store} llm={llm} teacher={identity.publicKey} />
-      <details className="nl-section"><summary>给自己定制调养方案</summary>
-        <TeacherCarePlan identity={identity} store={store} student={identity.publicKey} llm={llm} />
-      </details>
+      {mirrorOpen && <>
+        <DailyMirrorCard store={store} llm={llm} teacher={identity.publicKey} />
+        <details className="nl-section"><summary>给自己定制调养方案</summary>
+          <TeacherCarePlan identity={identity} store={store} student={identity.publicKey} llm={llm} />
+        </details>
+      </>}
     </details>
     {settings}
   </main>
