@@ -51,3 +51,15 @@
 4d. 合成三个月里六次记录：“一位学生”页每条指标有走势；被标过三次“失衡”的节点显示 3 次。
 5. 识别模型文件从本部署地址加载，不请求国外域名（e2e 断言网络请求）。
 6. iPhone 15 Pro 与华为两种宽度截图；只用合成图；CI 三项全过。
+
+## 完成记录（2026-10-24）
+
+- PR：https://github.com/Jordani-Ho/Aster-Ai/pull/68（分支 `task/V2-30-posture-tool`，未合并）。
+- 采集/导入：老师端“一位学生”页新增“体态”入口（`TeacherStudentsPage`），面诊页（`VisitPage`）也能打开；手机/电脑拍照或 ≤15 秒视频在浏览器内用 MediaPipe Pose 识别，照片走 V2-20 `processPhoto`，识别完照片/视频当场清零；FreeMoCap 支持长表 CSV（`freemocap_data_by_frame.csv` / `{recording}_by_frame.csv`）与 `mediapipe_body_3d_xyz.npy`，不引入 AGPL 代码；格式结论与陷阱写在 `app/src/core/posture/README.md`。统一输出 0–1 归一化关键点（3D 正视 X/Z、侧视 Y/Z 投影后归一化，原始 z 只保存不参与公式）。
+- 骨骼资产：`@mediapipe/tasks-vision@1.1.1`（Apache-2.0，版本写死）；`app/public/posture/pose_landmarker_lite.task`（5.78 MB）与 `LICENSE-Apache-2.0.txt` 入库；wasm 由 `vite.config.ts` 的 `posture-assets` 插件从 node_modules 复制到 `public/posture/wasm`（不重复入库）；e2e 断言运行时只请求本站。
+- 指标：`domain/tcm/posture.ts` 公式引擎（`heightDiff/distance/angle/symmetry/midlineOffset` + 已知关键点，写错给具体原因）；默认四条在 `domain/tcm/posture-metrics.json`；老师模板 `TemplateSettings → 体态指标`（`settings/posture-metrics`），可改/删/加；低置信度点标“看不清”、用到它的指标“这次算不出”。
+- 病历：`Encounter.postures?: PostureRecord[]`（B 类，已同步 `docs/schemas/encounter.md`）；只随面诊签字保存，`signEncounter` 拒绝非面诊/格式不对/不属于该学生的记录；`SignReview` 显示骨架+指标+前后对比，学生端「记录」只读展示。
+- 多段/标注/趋势/作业：每段动作+阶段+学生感觉；前后两段并排与指标变化；点关节标失衡+原因、画两肩连线/脊柱中线；拖动点写 `overrides` 并标“老师改过”、指标按改后坐标重算；趋势按指标画走势并统计失衡次数；动作一键加进当前面诊 `plan.homework`。
+- 测试：app 65 文件 / 510 测试（posture 新增 13 项）；新增 `e2e/posture.browser.mjs`（采集/导入、照片不入库、加指标自动算、两次对比、前后两段、拖点标注并随签字保存、六个月趋势与失衡次数、真实模型资产本地加载 smoke、两机型截图）并加入 CI；phone / opening / v228 / v229 / storefront / abstractor 回归 PASS；本机真实中继 e2e 28/28。
+- 截图：`docs/screenshots/posture-iphone15pro-393.png`、`posture-huawei-412.png`、`posture-huawei-448.png`（合成图）。
+- 风险：真机识别质量需人工确认（CI 用检测器桩做业务验收，真实模型只做本地资源 smoke）；FreeMoCap 宽表 CSV / parquet 未支持；2.0 alpha 尺度可能偏差 10%。
