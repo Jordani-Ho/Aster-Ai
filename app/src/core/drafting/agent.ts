@@ -19,8 +19,12 @@ export async function draftWithAgent(store: LocalStore, pkg: ConsultPackage, mat
     tokens: (data: { pkg: ConsultPackage; materials: DraftMaterials }) => requestTokens(fitDraftMaterials(draftMaterialInput(data.pkg, data.materials, level)).messages),
     run: async (data): Promise<Generated> => {
       let failed = false
-      const result = await draftEncounter(data.pkg, data.materials, llm, { ...options, onError: text => { failed = true; options.onError?.(text) } })
-      if (failed) throw new AgentError('model_unavailable')
+      let failureKind: 'model_account' | 'model_unavailable' = 'model_unavailable'
+      const result = await draftEncounter(data.pkg, data.materials, llm, { ...options,
+        onError: text => { failed = true; options.onError?.(text) },
+        onFailure: kind => { failureKind = kind; options.onFailure?.(kind) },
+      })
+      if (failed) throw new AgentError(failureKind)
       // 老师已录入的 intake/profile 是只读引用；只有下面这些模型新增字段经过输出守线。
       const { fourExams, judgment, plan } = result.encounter
       return { fourExams, judgment, plan, note: result.note }

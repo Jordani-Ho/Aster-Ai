@@ -64,3 +64,15 @@ it('含健康内容的任务结果随已有保留期清理，不把任务草稿�
     } finally { store.close() }
   }
 })
+
+it('真实起草失败保留账户类别，不保存上游文字或把失败草稿缓存成成功', async () => {
+  const owner = createIdentity(), store = await openStore(owner, { factory: new IDBFactory() })
+  try {
+    const pkg = inPersonConsultPackage(startInPersonEncounter({ teacher: owner.publicKey, student: 'a'.repeat(64) }))
+    const client = { complete: vi.fn(async () => { throw Object.assign(Error('PRIVATE_UPSTREAM_TEXT'), { status: 401 }) }), stream: vi.fn() }
+    await expect(draftWithAgent(store, pkg, { template }, client)).rejects.toThrow('账户')
+    expect((await store.list('agent-failures'))[0].value).toMatchObject({ kind: 'model_account' })
+    expect(JSON.stringify(await store.list('agent-failures'))).not.toContain('PRIVATE')
+    expect(await store.list('agent-runs')).toEqual([])
+  } finally { store.close() }
+})

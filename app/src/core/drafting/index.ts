@@ -14,6 +14,8 @@ export interface DraftOptions {
   timeoutMs?: number
   /** 界面应显示此安全错误；未提供时错误也会保留在 symptomSummary.note。 */
   onError?: (message: string) => void
+  /** 仅给执行器安全类别，不传原始异常或模型回复。 */
+  onFailure?: (kind: 'model_account' | 'model_unavailable') => void
 }
 
 /** V2-19：一次起草要带的材料。旧病历与医案可减，模板与问诊包不可减。 */
@@ -161,11 +163,13 @@ export async function draftEncounter(pkg: ConsultPackage, materials: DraftMateri
       draft.plan.homework = homework(plan.homework)
     }
     return { encounter: draft, note }
-  } catch {
+  } catch (error) {
     const message = '起草失败：模型不可用、超时或回复格式错误；已保留学生资料，请重试或由老师填写。'
     const fallback = studentDraft(pkg.encounter)
     fallback.judgment.symptomSummary.note = message
     try { options.onError?.(message) } catch { /* 提示界面失败也不能阻断回退。 */ }
+    const status = error && typeof error === 'object' ? (error as { status?: unknown }).status : null
+    try { options.onFailure?.(status === 401 || status === 403 || isQuotaExceeded(error) ? 'model_account' : 'model_unavailable') } catch { /* 类别观察不阻断回退。 */ }
     return { encounter: fallback, note: [] }
   }
 }
