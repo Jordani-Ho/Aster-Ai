@@ -12,7 +12,7 @@ import { recordSignedObservation, type ObservationNote } from './core/kangbi'
 import { calculateMetric, saveMetric, rateMetric } from './core/pilot'
 import { teacherCases, teacherRecordsOf, type LoadedTeacherRecord } from './core/records/teacher'
 import { loadTeacherTemplate } from './core/drafting/template'
-import { draftEncounter } from './core/drafting'
+import { draftWithAgent } from './core/drafting/agent'
 import { priorMaterials } from './core/drafting/materials'
 import { reviseEncounter } from './core/drafting/revise'
 import { TonguePair } from './TonguePair'
@@ -92,7 +92,7 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
           setStatus('正在整理草稿，老师看过整张卡片后签字发出。')
           let draftError = ''
           // V2-19：只带这位学生、这件事的材料；旧病历可减，模板与问诊包不可减。
-          const result = await draftEncounter(pkg, {
+          const result = await draftWithAgent(store, pkg, {
             template: await loadTeacherTemplate(store),
             prior: priorMaterials(rows),
             cases: await teacherCases(store, { forStudent: consult.encounter.student }),

@@ -196,7 +196,9 @@ export async function runRetention(store: LocalStore, role: RetentionRole, optio
   const days = options.days ?? (role === 'teacher' ? await loadRetentionDays(store) : effectiveRetentionDays(await listTeacherRetentions(store)))
   if (!validRetentionDays(days)) return EMPTY_RESULT(RETENTION_DEFAULT_DAYS)
   const cutoff = now.getTime() - days * DAY
-  return { days, deleted: role === 'teacher' ? await cleanTeacher(store, cutoff) : await cleanStudent(store, cutoff) }
+  const deleted = role === 'teacher' ? await cleanTeacher(store, cutoff) : await cleanStudent(store, cutoff)
+  deleted['agent-runs'] = await dropRows(store, 'agent-runs', (_key, value) => !olderThan((value as { at?: unknown })?.at, cutoff))
+  return { days, deleted }
 }
 
 /** 打开应用时每天只跑一次；返回是否真的跑了。 */
