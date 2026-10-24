@@ -14,18 +14,20 @@ export function createRunner(options: {
   side(options.side)
   if (!Number.isSafeInteger(options.maxTokens) || options.maxTokens <= 0) throw new AgentError('input')
   const { store } = options
-  const execute = <M, O>(task: AgentTask<M, O>, request: RunRequest, confirm: boolean): Promise<RunResult<O>> => {
+  const execute = <M, O>(task: AgentTask<M, O>, request: RunRequest, confirm: boolean, draftKey?: string): Promise<RunResult<O>> => {
     const action = async (): Promise<RunResult<O>> => {
       let phase: 'input' | 'storage' | 'delivery' | 'model_unavailable' = 'input'
       try {
         defineTask(task)
         const at = request.now ?? new Date()
         if (task.side !== options.side || typeof request.targetId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(request.targetId) || !(at instanceof Date) || !Number.isFinite(+at)) throw new AgentError('input')
-        const localDay = day(at), key = await agentKey([task.side, task.id, request.targetId, localDay])
+        if (draftKey !== undefined && (!confirm || !/^[a-f0-9]{64}$/.test(draftKey))) throw new AgentError('input')
+        const localDay = day(at), key = draftKey ?? await agentKey([task.side, task.id, request.targetId, localDay])
         phase = 'storage'
         let row = await store.get('agent-runs', key) as SavedRun<O> | undefined
         if (row) {
-          if (row.taskId !== task.id || row.targetId !== request.targetId || row.side !== task.side || row.confirm !== task.confirm || row.localDay !== localDay || !['draft', 'delivered'].includes(row.status)) throw new AgentError('input')
+          if (row.taskId !== task.id || row.targetId !== request.targetId || row.side !== task.side || row.confirm !== task.confirm || (!draftKey && row.localDay !== localDay) || !['draft', 'delivered'].includes(row.status)) throw new AgentError('input')
+          if (draftKey && (typeof row.localDay !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(row.localDay) || await agentKey([row.side, row.taskId, row.targetId, row.localDay]) !== key)) throw new AgentError('input')
           assertAgentOutput(row.output)
         } else {
           if (confirm) throw new AgentError('input')
@@ -74,6 +76,6 @@ export function createRunner(options: {
   return {
     run: <M, O>(task: AgentTask<M, O>, request: RunRequest) => execute(task, request, false),
     /** 仅供真人点击入口调用；不在 run() 中替 human 任务调用。 */
-    confirm: <M, O>(task: AgentTask<M, O>, request: RunRequest) => execute(task, request, true),
+    confirm: <M, O>(task: AgentTask<M, O>, request: RunRequest, draftKey?: string) => execute(task, request, true, draftKey),
   }
 }

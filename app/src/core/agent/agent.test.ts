@@ -47,6 +47,19 @@ describe('V2-21 任务与输入边界', () => {
       expect(JSON.stringify(rows)).not.toContain('PRIVATE'); expect(JSON.stringify(rows)).not.toContain(student)
     } finally { store.close() }
   })
+  it('跨日仍可按草稿键确认旧草稿，不重生成；不能用别人的对象或坏键确认', async () => {
+    const store = await session()
+    try {
+      const task = job(), runner = createRunner({ store, side: 'teacher', maxTokens: 100 })
+      const draft = await runner.run(task, { targetId: student, now })
+      const tomorrow = new Date(2026, 9, 25, 9)
+      await expect(runner.confirm(task, { targetId: teacher, now: tomorrow }, draft.key)).rejects.toThrow()
+      await expect(runner.confirm(task, { targetId: student, now: tomorrow }, 'bad')).rejects.toThrow()
+      const final = await runner.confirm(task, { targetId: student, now: tomorrow }, draft.key)
+      expect(final.output).toEqual(draft.output); expect(final.status).toBe('delivered')
+      expect(task.gather).toHaveBeenCalledOnce(); expect(task.run).toHaveBeenCalledOnce(); expect(task.deliver).toHaveBeenCalledOnce()
+    } finally { store.close() }
+  })
   it('预算过量在 run 之前拒绝；无模型的规则任务正常运行', async () => {
     const store = await session()
     try {
