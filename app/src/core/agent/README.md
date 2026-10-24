@@ -2,7 +2,7 @@
 
 核心只管角色、任务、串行执行与守线，不导入领域内容、提示词、模型或签字工具。现有记忆仍由 records、drafting/materials、mirror 等模块按需提供，不新造一份对话历史。所有任务都是随应用发布的可信代码，不是可执行的模型输出或第三方插件沙箱。
 
-- `role.ts`：`loadAgentRole(store, publicKey, side?)` 从 settings 读取角色。老师模板未配置为 null（领域适配器仍用既有默认模板），邀约默认为 review；学生当前老师取 active-teacher 或老师名单第一位，作息缺失为 null；missing 列出未配置项。invitation-mode 与 agent-routine 是后续基础工作卡的设置口，V2-21 不保存它们或阻断现有开馆。模板与作息此处仅验证 JSON 对象外壳，领域细项由 V2-22/V2-23 校验。
+- `role.ts`：`loadAgentRole(store, publicKey, side?)` 从 settings 读取角色。老师模板未配置为 null（领域适配器仍用既有默认模板），邀约默认为 review；学生当前老师取 active-teacher 或老师名单第一位，作息缺失为 null；missing 列出未配置项。V2-22 起老师模板读取 teacher-templates 的生效部分、邀约方式读取 hall-groundwork；旧 teacher-template / invitation-mode 仅作只读兼容。agent-routine 留待 V2-23。模板与作息此处仅验证 JSON 对象外壳，领域细项由 V2-22/V2-23 校验。
 - `tasks.ts`：用 `defineTask` 登记 id、side、trigger、gather、run、confirm、deliver；校验角色、触发类型/钟点/消息类型、确认方式、回调。触发描述是入口元数据，不是后台定时器。time.hour 为本地钟点，时辰由天时工具在触发入口换算。
 - `runner.ts`：一次一件事，每次重新 gather；材料必须为有限 JSON，估算不超过调用方提供的额度。默认按 V2-19 的字符估算；领域适配器可按实际拼好的请求计算 tokens，领域上限仍由 domain/tcm/agent-budget.json 提供。能用规则的任务不必提供模型。
 - `guard.ts`：产出和发送载荷递归拒绝 source:teacher；不得伪造老师字段。发送必须命中当前本机 teacher-students 或 settings/teachers，且同任务同收件人的发送尝试至少间隔一个时辰（两小时，跨日不重置）。template 任务对外发送还须 allowTemplate 明确允许；缺省拒绝。向外传递用 deliver 的 context.send，不把原始 send 暴露给任务。

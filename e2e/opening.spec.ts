@@ -52,6 +52,9 @@ test('V2-15 全新部署：只看到引导，五步走完后第一位学生用 1
     await expect(page.getByText('合成阿慈老师邀请你', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: '就用这个名字', exact: true }).click()
     await expect(page.getByText('✓ 模型已接好', { exact: true })).toBeVisible()
+    for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) {
+      await page.getByRole('button', { name: '就这样，保存' + label, exact: true }).click()
+    }
     await page.getByRole('button', { name: '开馆', exact: true }).click()
     await expect(page.getByRole('heading', { name: '请第一位学生进来', exact: true })).toBeVisible()
 

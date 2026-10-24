@@ -162,6 +162,13 @@ export async function draftEncounter(pkg: ConsultPackage, materials: DraftMateri
       draft.plan.advice = field(plan.advice, text)
       draft.plan.homework = homework(plan.homework)
     }
+    // 模板里留待老师的段落不能仅靠提示词：模型即使填了，也不接纳。
+    const teacherSections = materials.template.workflow?.record?.sections?.filter((section: { writable_by?: string }) => section.writable_by === 'teacher') ?? []
+    for (const section of teacherSections) {
+      if (section.key === 'four_exams') draft.fourExams = structuredClone(pkg.encounter.fourExams)
+      if (section.key === 'judgment') draft.judgment = structuredClone(pkg.encounter.judgment)
+      if (section.key === 'plan') draft.plan = structuredClone(pkg.encounter.plan)
+    }
     return { encounter: draft, note }
   } catch (error) {
     const message = '起草失败：模型不可用、超时或回复格式错误；已保留学生资料，请重试或由老师填写。'

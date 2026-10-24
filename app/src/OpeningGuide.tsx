@@ -21,6 +21,8 @@ import {
 import { StorefrontWelcome, VenueEmblem } from './StorefrontWelcome'
 import './newui.css'
 import './newui2.css'
+import { HallGroundwork } from './HallGroundwork'
+import { groundworkStatus } from './core/hall/groundwork'
 
 // V2-17 建馆五步（05a–05e）：逻辑沿用 V2-15（断点续走、第一位学生 1 小时邀请、“先进去看看”），
 // 只换界面：模型 → 登记 → 起馆名 → 开馆 → 邀请第一位学生。
@@ -57,6 +59,7 @@ function clockLabel(at: number): string {
 
 export function OpeningGuide({ identity, store, gateway, modelGateway, modelConfig, onModelSaved, onDone }: OpeningGuideProps) {
   const [loaded, setLoaded] = useState(false)
+  const [groundReady, setGroundReady] = useState(false)
   const [step, setStep] = useState<GuideStep>(1)
   // V2-31：扫码链接 #setup=<口令> 在第 2 步自动填好；读到时立刻从地址栏清掉。
   const [token, setToken] = useState(() => takeSetupToken())
@@ -209,6 +212,7 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
     if (!clean || clean.name === '' || clean.displayName === '') { setError('门面还没填完整，请返回上一步。'); return }
     setBusy(true); setError('')
     try {
+      if ((await groundworkStatus(store)).missing.length) throw Error('基础工作还没齐')
       await publishStorefront({ store, identity, storefront: clean })
       await saveStorefrontDraft(store, clean)
       await markHallOpened(store)
@@ -321,7 +325,7 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
     return <main className="op-page">
       {header}{progress}
       {errorLine}
-      <section className="op-open" aria-label="开馆">
+      <section className="op-open op-ground-open" aria-label="开馆">
         <span className="op-open-emblem"><VenueEmblem emblem={draft.emblem} /></span>
         <p className="nl-quiet">您的馆准备好了</p>
         <h1 className="op-title op-open-name">{draft.name || '还没有馆名'}</h1>
@@ -334,9 +338,10 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
             <li>✓ 门面已备好</li>
           </ul>
         </div>
-        <p className="nl-quiet op-open-note">开馆后，就能邀请第一位学生。<br />名字和门面以后还可以改。</p>
+        <p className="nl-quiet op-open-note">先定好基础工作，就能邀请第一位学生。名字和门面以后还可以改。</p>
       </section>
-      <footer className="op-foot"><button type="button" className="nl-primary" disabled={busy} onClick={() => void openHall()}>开馆</button></footer>
+      <HallGroundwork store={store} onReady={setGroundReady} />
+      <footer className={`op-foot${groundReady ? '' : ' ground-footer'}`}><button type="button" className={groundReady ? 'nl-primary' : 'ground-open'} disabled={busy || !groundReady} onClick={() => void openHall()}>开馆</button></footer>
     </main>
   }
 

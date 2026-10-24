@@ -46,7 +46,32 @@ try {
   await expect(page.getByText('✓ 模型已接好', { exact: true })).toBeVisible()
   await expect(page.getByText('✓ 老师已登记', { exact: true })).toBeVisible()
   await expect(page.getByText('✓ 门面已备好', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '开馆', exact: true }).click()
+  if (!process.env.CI) {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.getByRole('heading', { name: '开馆基础工作', exact: true }).scrollIntoViewIfNeeded()
+    await page.screenshot({ path: root + 'docs/screenshots/v222-hall-groundwork-390.png' })
+    await page.setViewportSize({ width: 375, height: 812 })
+  }
+  await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeDisabled()
+  await page.getByRole('button', { name: '就这样，保存模板', exact: true }).click()
+  await expect(page.getByRole('button', { name: '就这样，保存排班', exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('button', { name: '就这样，保存排班', exact: true })).toBeVisible()
+  await page.getByLabel('每时段最多接待几位', { exact: true }).fill('0')
+  await page.getByRole('button', { name: '就这样，保存排班', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('1–20')
+  await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeDisabled()
+  await page.getByLabel('每时段最多接待几位', { exact: true }).fill('3')
+  await page.evaluate(() => window.__opening.failNextSave())
+  await page.getByRole('button', { name: '就这样，保存排班', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('没保存成功')
+  await expect(page.getByRole('alert')).toContainText('SYNTHETIC_DISK_FULL')
+  await page.reload()
+  await expect(page.getByRole('button', { name: '就这样，保存排班', exact: true })).toBeVisible()
+  for (const label of ['排班', '邀约方式', '药材库', '保留期限', '模型']) {
+      await page.getByRole('button', { name: '就这样，保存' + label, exact: true }).click()
+    }
+    await page.getByRole('button', { name: '开馆', exact: true }).click()
 
   // 05e：1 小时邀请、二维码、重新生成。
   await expect(page.getByRole('heading', { name: '请第一位学生进来', exact: true })).toBeVisible()

@@ -19,7 +19,7 @@ export async function draftWithAgent(store: LocalStore, pkg: ConsultPackage, mat
   if (!pkg?.encounter || !/^[a-f0-9]{32}$/.test(pkg.encounter.id) || !publicKey(pkg.encounter.student) || !publicKey(pkg.encounter.teacher)) throw new AgentError('input')
   const level = options.level ?? 'record'
   if (!['record', 'pattern', 'prescription'].includes(level) || (options.timeoutMs !== undefined && (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0))) throw new AgentError('input')
-  type Generated = Pick<Encounter, 'fourExams' | 'judgment' | 'plan'> & { note: string[] }
+  type Generated = Partial<Pick<Encounter, 'fourExams' | 'judgment' | 'plan'>> & { note: string[] }
   const task = defineTask({
     id: 'drafting', side: 'teacher', trigger: { kind: 'manual' }, confirm: 'human',
     gather: async () => ({ pkg, materials }),
@@ -38,7 +38,8 @@ export async function draftWithAgent(store: LocalStore, pkg: ConsultPackage, mat
       if (failed) throw new AgentError(failureKind)
       // 老师已录入的 intake/profile 是只读引用；只有下面这些模型新增字段经过输出守线。
       const { fourExams, judgment, plan } = result.encounter
-      return { fourExams, judgment, plan, note: result.note }
+      const reserved = new Set(data.materials.template.workflow?.record?.sections?.filter((section: { writable_by?: string }) => section.writable_by === 'teacher').map((section: { key: string }) => section.key) ?? [])
+      return { ...(!reserved.has('four_exams') ? { fourExams } : {}), ...(!reserved.has('judgment') ? { judgment } : {}), ...(!reserved.has('plan') ? { plan } : {}), note: result.note }
     },
     deliver: async () => {}, // 草稿交给既有核对页；签字发出完全不走执行器。
   })

@@ -16,8 +16,12 @@ export async function loadAgentRole(store: AgentStore, owner: string, agentSide?
   side(chosen)
   const missing = !agentSide && saved === undefined ? ['role'] : []
   if (chosen === 'teacher') {
-    const template = await store.get('settings', 'teacher-template')
-    const invitation = await store.get('settings', 'invitation-mode')
+    const versions = await store.get('settings', 'teacher-templates')
+    const groundwork = await store.get('settings', 'hall-groundwork')
+    if (versions !== undefined && (!object(versions) || !Array.isArray(versions.rows))) throw new AgentError('input')
+    const active = object(versions) && Array.isArray(versions.rows) ? versions.rows.filter(row => object(row) && row.status === 'active') : []
+    const template = active.length ? Object.fromEntries(active.map(row => [row.type, row.schema])) : await store.get('settings', 'teacher-template')
+    const invitation = groundwork === undefined ? await store.get('settings', 'invitation-mode') : object(groundwork) && object(groundwork.invitation) ? groundwork.invitation.mode : null
     if ((template !== undefined && !object(template)) || (invitation !== undefined && invitation !== 'auto' && invitation !== 'review')) throw new AgentError('input')
     if (template !== undefined) assertJson(template)
     if (template === undefined) missing.push('teacher-template')

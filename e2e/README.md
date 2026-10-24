@@ -77,3 +77,5 @@ M1-21：teacher/student 前置都经真实接入表单测试并保存合成账�
 ## V2-21 智能体骨架探针
 
 `node e2e/agent.browser.mjs` 使用真实 Chromium、IndexedDB 与同源两个标签页，验证 Web Locks 下同一任务同一对象同一天只 gather/run 一次，human 草稿不自动发，真人确认后只 deliver 一次。数据为合成数据，传递为本机替身，不访问真实模型或真实师生；现有真实中继问诊验收继续覆盖 UI 接入。
+
+V2-22：opening.browser.mjs 的真实开馆流程增加六项默认确认、缺项禁开馆、确认后刷新续做、非法容量拒绝与注入一次 put 故障后的“没保存成功”及原因。opening.spec.ts 的真实中继新馆流程和 phone.browser.mjs 两种手机宽度均走相同六项确认；不跳过既有邀请、身份或模型测试步骤。测试账户、网关、模型均为合成替身。
