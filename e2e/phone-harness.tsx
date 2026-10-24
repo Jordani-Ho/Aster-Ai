@@ -6,6 +6,7 @@ import { SignReview } from '../app/src/SignReview'
 import { TonguePair } from '../app/src/TonguePair'
 import { OpeningGuide } from '../app/src/OpeningGuide'
 import { CommunityDashboard } from '../app/src/CommunityDashboard'
+import { VersionLine } from '../app/src/VersionLine'
 import { StorefrontWelcome } from '../app/src/StorefrontWelcome'
 import { createIdentity } from '../app/src/core/identity'
 import { openStore, resumeStore } from '../app/src/core/store'
@@ -41,8 +42,11 @@ async function node(name: string) {
 }
 
 // 模型替身：面诊口述拆分四诊；其余（学生整理/老师起草）给一份合成功夫。
+// V2-29：追问由用例控制（每个整理调用按顺序取一条追问列表，默认不追问）；modelCalls 统计模型调用次数。
+const intakeControl: { modelCalls: number; replies: { focus: string; text: string }[][] } = { modelCalls: 0, replies: [] }
 const stubLlm: LlmClient = {
   complete: async messages => {
+    intakeControl.modelCalls += 1
     const system = String(messages[0]?.content ?? '')
     const user = String(messages[1]?.content ?? '')
     if (system.includes('面诊口述拆分四诊')) return JSON.stringify({ look: ['舌淡红，苔薄白'], listenSmell: [], ask: ['入睡难'], pulse: ['脉细弱'] })
@@ -55,7 +59,7 @@ const stubLlm: LlmClient = {
         const fields: Record<string, string[]> = {}
         if (chief !== '') fields.chiefComplaint = [chief]
         if (answers.length > 0) fields.presentIllness = answers
-        return JSON.stringify({ fields, questions: [] })
+        return JSON.stringify({ fields, questions: intakeControl.replies.length > 0 ? intakeControl.replies.shift() : [] })
       } catch { /* 落到下面的草稿替身 */ }
     }
     return JSON.stringify({
@@ -333,6 +337,8 @@ async function main() {
     if (openScene) return <OpeningScene preset={scene === 'open1' ? null : modelPreset} />
     if (scene === 'opening') return <OpeningScene preset={null} />
     if (scene === 'dashboard') return <CommunityDashboard relays={[]} />
+    // V2-29：只渲染版本行，用来验证“宿主机 APP_VERSION → Vite define → 页面”这条链路。
+    if (scene === 'version') return <div className="nl-shell"><VersionLine /></div>
     if (scene === 'welcome') return <StorefrontWelcome storefront={STOREFRONT} teacher={teacher.identity.publicKey} onStart={() => {}} />
     if (scene === 'long') return <SignReview encounter={long} alias="合成小王" previousPrescription={null} onSign={() => {}} onBack={() => {}} />
     if (scene === 'tongue') return <div className="nl-shell"><main className="nl-page"><TonguePair record={tongue} crop={cropped} editable title="舌象 1 · 辰时 · 霜降 · 北京" /></main></div>
@@ -341,7 +347,7 @@ async function main() {
   }
 
   createRoot(document.getElementById('root')!).render(<Scene />)
-  Object.assign(window, { __phone: { student: student.publicKey, teacher: teacher.identity.publicKey, roster } })
+  Object.assign(window, { __phone: { student: student.publicKey, teacher: teacher.identity.publicKey, roster, intake: intakeControl } })
 }
 
 await main()

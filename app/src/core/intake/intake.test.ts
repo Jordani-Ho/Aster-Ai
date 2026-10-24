@@ -14,6 +14,7 @@ import {
   INTAKE_COLLECTIONS,
   addPhoto,
   addUtterance,
+  answerFocus,
   buildConsultPackage,
   canConfirm,
   confirmAndSend,
@@ -24,6 +25,7 @@ import {
   organizeSession,
   saveDraft,
   skipFocus,
+  skipRemainingFocuses,
   startSession,
   updateField,
   type HistoryCandidate,
@@ -355,5 +357,42 @@ describe('M1-09 学生采集验收', () => {
       expect(() => buildConsultPackage(withPhoto, emptyProfile(), [], attachments)).toThrow('附件')
     }
     expect(() => buildConsultPackage(withPhoto, emptyProfile(), [], [])).toThrow('附件')
+  })
+})
+
+// V2-29：点“跳过，直接整理”= 一次跳完所有剩余追问，直接进确认页；不调模型、不编造。
+describe('V2-29 跳过直接整理', () => {
+  const threeQuestions = [
+    { focus: '二问汗', text: '夜里出汗吗？' },
+    { focus: '三问头身', text: '头、身上有没有不舒服？' },
+    { focus: '四问便', text: '大便怎么样？' },
+  ]
+
+  function withQuestions(): IntakeSession {
+    return { ...addUtterance(fresh(), '最近睡不好'), questions: threeQuestions, phase: 'collecting' }
+  }
+
+  it('还剩 3 问时一次跳完：进确认页、questions 清空、没问到的项记为 skipped、字段仍是 unknown', () => {
+    const state = withQuestions()
+    const next = skipRemainingFocuses(state)
+    expect(next.phase).toBe('confirm')
+    expect(next.questions).toEqual([])
+    expect(next.answers['二问汗']?.status).toBe('skipped')
+    expect(next.answers['三问头身']?.status).toBe('skipped')
+    expect(next.answers['四问便']?.status).toBe('skipped')
+    for (const focus of next.focusOrder) expect(next.answers[focus]?.status).toBe('skipped')
+    for (const key of ['chiefComplaint', 'presentIllness', 'history', 'medsAllergies'] as const) expect(next.fields[key].value).toBeNull()
+    expect(canConfirm(next).ok).toBe(false)
+    expect(canConfirm(markReviewed(next)).ok).toBe(true)
+  })
+
+  it('已经回答过的项保持不变；跳完不改原话、不产生新字段', () => {
+    const answered = answerFocus(withQuestions(), '二问汗', '夜里容易出汗')
+    const next = skipRemainingFocuses(answered)
+    expect(next.answers['二问汗']).toEqual({ status: 'answered', text: '夜里容易出汗' })
+    expect(next.answers['三问头身']?.status).toBe('skipped')
+    expect(next.texts).toEqual(answered.texts)
+    expect(next.fields).toEqual(answered.fields)
+    expect(next.phase).toBe('confirm')
   })
 })

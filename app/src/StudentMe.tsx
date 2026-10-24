@@ -12,6 +12,7 @@ import { LedgerSettings } from './LedgerSettings'
 import { TimeSettings } from './TimeSettings'
 import { PushSettings } from './PushSettings'
 import { SelfCheck } from './SelfCheck'
+import { VersionLine } from './VersionLine'
 import { themeOf } from './core/storefront'
 import type { TeacherVenue } from './core/storefront/active'
 import './newui.css'
@@ -72,6 +73,7 @@ export function StudentMe({ store, identity, family, onSwitch, venue, ledger, st
       <PushSettings identity={identity} />
     </details>
     <SelfCheck store={store} identity={identity} teacher={venue.active} />
+    <VersionLine />
   </SubPage>
 
   if (view === 'family') return <SubPage title="家人" onBack={close}>

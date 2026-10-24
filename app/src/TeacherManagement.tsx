@@ -14,6 +14,7 @@ import { StatsSharing } from './StatsSharing'
 import { LedgerSettings } from './LedgerSettings'
 import { DailyMirrorCard } from './DailyMirrorCard'
 import { TeacherCarePlan } from './TeacherCarePlan'
+import { VersionLine } from './VersionLine'
 import { VenueEmblem } from './StorefrontWelcome'
 import { loadOwnStorefront, verifyStorefrontEvent, themeOf, type Storefront } from './core/storefront'
 import './newui.css'
@@ -118,6 +119,7 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
     <details className="nl-section"><summary>模型与偏好设置</summary>
       {settings}
     </details>
+    <VersionLine />
   </SubPage>
 
   const theme = themeOf(own)

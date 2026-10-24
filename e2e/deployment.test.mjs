@@ -89,6 +89,42 @@ test('V2-28 更新脚本：成员名单与一次性口令不变、旧邀请仍�
 test('relay configure defaults closed and requires members unless explicitly opened',async()=>{
  const dir=await workspace();try{const script=path.join(dir,'relay/configure.mjs');let result=spawnSync(process.execPath,[script,'a'.repeat(64)],{encoding:'utf8',env:{...process.env,RELAY_COMMUNITY_OPEN:''}});assert.equal(result.status,0,result.stderr);assert.match(await readFile(path.join(dir,'relay/config.local.toml'),'utf8'),/community_open = false/);result=spawnSync(process.execPath,[script],{encoding:'utf8',env:{...process.env,RELAY_COMMUNITY_OPEN:''}});assert.notEqual(result.status,0)}finally{await rm(dir,{recursive:true,force:true})}
 })
+// V2-29：版本号必须由宿主机算好、经容器环境变量带进 web 启动构建（镜像里没有 .git），不能回退成 unknown。
+test('V2-29 版本号：宿主机短提交号写进 .env，再经 compose 传给 web 容器启动构建',async()=>{
+ const dir=await workspace(),home=path.join(dir,'deploy/home'),bin=await fakeBin(dir)
+ try{
+  const script=path.join(home,'setup.sh')
+  await writeFile(path.join(home,'.env'),ENV_TEXT)
+  // 1) 宿主机显式传入（CI 与本测试可控）：setup.sh 原样写回 .env
+  bash(script,{...envFor(bin),APP_VERSION:'deadbee',APP_BUILD_DATE:'01-02'})
+  let envText=await readFile(path.join(home,'.env'),'utf8')
+  assert.match(envText,/^APP_VERSION=deadbee$/m)
+  assert.match(envText,/^APP_BUILD_DATE=01-02$/m)
+  // 2) compose 把这两个变量交给 web 容器；entrypoint 在容器启动时 npm run build 读它们
+  const compose=await readFile(path.join(root,'deploy/home/compose.yaml'),'utf8')
+  assert.match(compose,/APP_VERSION: \$\{APP_VERSION/)
+  assert.match(compose,/APP_BUILD_DATE: \$\{APP_BUILD_DATE/)
+  const entry=await readFile(path.join(root,'deploy/home/web/entrypoint.sh'),'utf8')
+  assert.match(entry,/npm run build/)
+  const dockerfile=await readFile(path.join(root,'deploy/home/web/Dockerfile'),'utf8')
+  assert.match(dockerfile,/ARG APP_VERSION/)
+  assert.match(dockerfile,/ENV APP_VERSION=\$\{APP_VERSION\}/)
+  // 3) 不显式给值：setup.sh 在宿主机从 git 取短提交号；取不到（如 WSL 直接跑 Windows worktree）写 unknown
+  await writeFile(path.join(home,'.env'),ENV_TEXT)
+  bash(script,envFor(bin))
+  envText=await readFile(path.join(home,'.env'),'utf8')
+  let expected=null
+  if(process.platform==='win32'){
+    const wsl=spawnSync('wsl.exe',['-d','Ubuntu','--exec','git','-C',linux(home),'rev-parse','--short','HEAD'],{encoding:'utf8'})
+    expected=wsl.status===0?wsl.stdout.trim():null
+  }else{
+    const host=spawnSync('git',['rev-parse','--short','HEAD'],{cwd:root,encoding:'utf8'})
+    expected=host.status===0?host.stdout.trim():null
+  }
+  assert.equal(/^APP_VERSION=(.*)$/m.exec(envText)?.[1].trim(),expected??'unknown')
+  assert.match(envText,/^APP_BUILD_DATE=\d{2}-\d{2}$/m)
+ }finally{await rm(dir,{recursive:true,force:true})}
+})
 test('第二版部署目录与 README 里没有第一版已删功能的字样',async()=>{
  const banned=[[/备份槽/,'备份槽'],[/30078/,'30078'],[/身份槽/,'身份槽'],[/passkey/i,'passkey'],[/种子成员/,'种子成员'],[/MEMBER_PUBKEYS/,'MEMBER_PUBKEYS'],[/SELF_TEST_MEMBER/,'SELF_TEST_MEMBER'],[/VERIFY_MEMBER/,'VERIFY_MEMBER'],[/gateway-members\.json/,'gateway-members.json']]
  const files=[]

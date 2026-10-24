@@ -138,6 +138,17 @@ export function skipFocus(state: IntakeSession, focus: string): IntakeSession {
   }
 }
 
+// V2-29：“跳过，直接整理”= 一次结束追问，直接进确认页；所有还没答的项按“跳过”记。
+// 不调用模型、不编造内容：字段保持 unknown，确认页显示“未提供”。
+export function skipRemainingFocuses(state: IntakeSession): IntakeSession {
+  if (state.phase === 'sent') throw new Error('这次采集已经发送')
+  const answers = { ...state.answers }
+  for (const focus of state.focusOrder) {
+    if (!answers[focus]) answers[focus] = { status: 'skipped' as const }
+  }
+  return { ...state, answers, questions: [], phase: 'confirm', reviewed: false }
+}
+
 // 整理与追问：有模型时走模型，失败或断网时用固定问句；最多 3 轮，之后直接进确认页。
 export async function organizeSession(
   state: IntakeSession,

@@ -18,6 +18,10 @@ docker info >/dev/null 2>&1 || die "Docker 守护进程没有运行。执行：s
 command -v node >/dev/null 2>&1 || die "未找到 node。本脚本用 Node 22 生成配置（仓库开发也需要它）。"
 
 # ---- 2. 读取 .env ----
+# V2-29：版本号由宿主机算好（下面第 7c 节）。显式从环境传入的优先（也方便测试/CI），
+# 注意要在 source .env 之前记下来，避免上一次写进 .env 的旧值顶掉这次计算的。
+HOST_APP_VERSION="${APP_VERSION:-}"
+HOST_APP_BUILD_DATE="${APP_BUILD_DATE:-}"
 [ -f .env ] || die "缺少 .env。请先执行：cp .env.example .env。"
 chmod 600 .env 2>/dev/null || true
 set -a
@@ -127,6 +131,20 @@ if [ "$COMMUNITY_VALUE" = "1" ]; then
 else
   log "社区网关模型：未开启（学生在网页里接入自己的模型）"
 fi
+
+# ---- 7c. 版本号（V2-29）：宿主机算好短提交号与构建日期，写进 .env → compose 传给 web 容器；----
+# web 镜像里没有 .git（.dockerignore 排除），页面是容器启动时由 entrypoint 构建的，
+# 所以必须靠容器环境变量把版本号带进去，容器内 npm run build 才能读到 APP_VERSION。
+APP_VERSION_VALUE="$HOST_APP_VERSION"
+if [ -z "$APP_VERSION_VALUE" ]; then
+  APP_VERSION_VALUE="$(git rev-parse --short HEAD 2>/dev/null || true)"
+fi
+[ -n "$APP_VERSION_VALUE" ] || APP_VERSION_VALUE="unknown"
+APP_BUILD_DATE_VALUE="$HOST_APP_BUILD_DATE"
+[ -n "$APP_BUILD_DATE_VALUE" ] || APP_BUILD_DATE_VALUE="$(date +%m-%d)"
+ensure_env APP_VERSION "$APP_VERSION_VALUE"
+ensure_env APP_BUILD_DATE "$APP_BUILD_DATE_VALUE"
+log "版本号：$APP_VERSION_VALUE · $APP_BUILD_DATE_VALUE（web 容器启动构建时注入页面）"
 
 # ---- 8. 校验 compose 配置能展开 ----
 docker compose config >/dev/null || die "compose 配置校验失败：看上面的报错。"
