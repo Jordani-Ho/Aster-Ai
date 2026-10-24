@@ -8,7 +8,7 @@ import type { ConsultPackage, Encounter } from './core/record/types'
 import {
   addTongue, addUtterance, answerFocus, canConfirm, confirmAndSend, INTAKE_COLLECTIONS,
   defaultHistorySelection, loadDraft, loadHistory, loadProfile, markReviewed,
-  organizeSession, saveDraft, skipFocus, startSession, updateField,
+  organizeSession, saveDraft, skipRemainingFocuses, startSession, updateField,
   type IntakeKey, type IntakeSession,
 } from './core/intake'
 import { loadTeachers } from './core/inbox'
@@ -123,19 +123,28 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
 
-  // 10b：补充一句 / 跳过 → 整理
-  const organize = async (answer: boolean) => {
+  // 10b：补充这一问 → 继续整理（还有要问的继续问，没有就到卡片页）
+  const organize = async () => {
     if (busy || !session || session.questions.length === 0) return
-    if (answer && answerText.trim() === '') return
+    if (answerText.trim() === '') return
     setBusy(true); setError('')
     try {
       const focus = session.questions[0].focus
-      let next = answer ? answerFocus(session, focus, answerText.trim()) : skipFocus(session, focus)
-      if (answer) setAnswerText('')
+      let next = answerFocus(session, focus, answerText.trim())
+      setAnswerText('')
       next = await organizeSession(next, llm, memberOption)
       if (next.phase === 'confirm') next = markReviewed(next)
       apply(next)
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
+  }
+
+  // V2-29：跳过 = 结束追问、直接进“看一眼，再发出”；不调用模型，剩下没问的项按跳过记（字段保持 unknown）。
+  const skipToCard = () => {
+    if (busy || !session || session.questions.length === 0) return
+    setError('')
+    try {
+      apply(markReviewed(skipRemainingFocuses(session)))
+    } catch (cause) { setError(message(cause)) }
   }
 
   const sendPackage = async () => {
@@ -264,8 +273,8 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
     <footer className="cf-foot">
       {step === 'speak' && <button type="button" className="nl-primary" disabled={busy || draftText.trim() === ''} onClick={() => void speak()}>说好了，继续</button>}
       {step === 'followup' && <>
-        <button type="button" className="nl-primary" disabled={busy || answerText.trim() === ''} onClick={() => void organize(true)}>补充好了，整理卡片</button>
-        <button type="button" className="op-link-button" disabled={busy} onClick={() => void organize(false)}>跳过，直接整理</button>
+        <button type="button" className="nl-primary" disabled={busy || answerText.trim() === ''} onClick={() => void organize()}>补充好了，整理卡片</button>
+        <button type="button" className="op-link-button" disabled={busy} onClick={skipToCard}>跳过，直接整理</button>
       </>}
       {step === 'card' && <button type="button" className="nl-primary" disabled={busy} onClick={() => void sendPackage()}>发给{call}</button>}
     </footer>

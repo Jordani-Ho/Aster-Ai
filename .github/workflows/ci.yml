@@ -92,6 +92,8 @@ jobs:
         run: node e2e/opening.browser.mjs
       - name: V2-28 open-hall foolproof browser integration (open hall, community model, bottom bar)
         run: node e2e/v228.browser.mjs
+      - name: V2-29 skip-and-version browser integration (skip to card, build version on both settings pages)
+        run: node e2e/v229.browser.mjs
       - name: V2-13 teacher-phone browser integration
         run: node e2e/phone.browser.mjs
       - run: npm run test:e2e-env
