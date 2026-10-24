@@ -44,5 +44,6 @@
 | [V2-27](V2-27-student-nudge.md) | 学生智能体的督促 | Codex | V2-21、V2-25 |
 | [V2-28](V2-28-open-hall-foolproof.md) | 建馆傻瓜化与实测小问题 | DeepSeek | — |
 | [V2-29](V2-29-skip-and-version.md) | “跳过，直接整理”真的直接整理；界面显示版本号 | DeepSeek | — |
+| [V2-30](V2-30-posture-tool.md) | 体态工具：骨架识别与老师自己的指标 | DeepSeek | V2-22 |
 
 第二批（地基合并后再展开）：自我调整（表层配置化）、门面、物流（本地资源）、观察。
