@@ -15,7 +15,14 @@ export interface PhotoCodec {
   decode(bytes: Uint8Array, type: string): Promise<{ source: unknown; width: number; height: number }>
   draw(source: unknown, width: number, height: number): PhotoCanvas
 }
-export interface PhotoResult { ref: AttachmentRef; data: Uint8Array }
+export interface PhotoResult {
+  ref: AttachmentRef
+  data: Uint8Array
+  /** 解码出来的原图尺寸（V2-20：舌头短边门槛按它判断“离得够不够近”）。 */
+  source: { width: number; height: number }
+  /** 实际写进 JPEG 的尺寸（长边 ≤ MAX_LONG_SIDE）。 */
+  image: { width: number; height: number }
+}
 
 export function assertPhotoCount(count: number): void {
   if (!Number.isSafeInteger(count) || count < 0) throw new Error('照片数量无效')
@@ -164,5 +171,7 @@ export async function processPhoto(input: PhotoInput, options: { codec?: PhotoCo
   return {
     ref: { id: randomId(16), type: 'photo', sha256: await sha256Hex(data), bytes: data.length },
     data,
+    source: { width: decoded.width, height: decoded.height },
+    image: { width: size.width, height: size.height },
   }
 }

@@ -9,7 +9,8 @@ import template from '../../../../domain/tcm/templates/default.json'
 import { attachmentEnvelope, consultEnvelope, createInbox, addTeacher } from '../inbox'
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
 import { signEncounter, verifySignedEncounter } from '../record/sign'
-import type { TongueCropCodec } from '../intake/photo'
+import type { PhotoCodec, TongueCropCodec } from '../intake/photo'
+import { TONGUE_FAILURE_MESSAGES, TONGUE_TOO_FAR_MESSAGE } from '../tongue/failures'
 import { parseTongueAbstract } from '../../../../domain/tcm/tongue'
 
 // 全部合成：固定 PNG、假裁剪编解码、合成身份、fake-indexeddb，不连真实 relay。
@@ -22,6 +23,11 @@ const codec: TongueCropCodec = {
   async decode() { return { source: {}, width: 200, height: 200 } },
   crop() { return { toJpeg: async () => CROP } },
 }
+// V2-20：送模型前先经 processPhoto（长边 ≤1600、JPEG）；这里注入合成实现，解码报 480×480 让短边门槛通过。
+const photoCodec: PhotoCodec = {
+  async decode() { return { source: {}, width: 480, height: 480 } },
+  draw() { return { toJpeg: async () => new Uint8Array([0xff, 0xd8, 0xff, 0xd9]) } },
+}
 const model = (patch: Record<string, unknown> = {}) => ({ describe: async () => JSON.stringify({ ...features, box, lightingNote: false, ...patch }) })
 const identity = () => createIdentity()
 
@@ -33,7 +39,7 @@ it('镜子：只留裁剪图与候选特征，家人隔离；问诊包带裁剪�
     const scoped = store.scoped('family-1'), input = { bytes: new Uint8Array(png), type: 'image/png' }
     const original = input.bytes
     const at = new Date('2026-10-18T12:00:00Z')
-    const { record, crop } = await captureTongue(input, context, model(), { codec })
+    const { record, crop } = await captureTongue(input, context, model(), { codec, photoCodec })
     expect(original.every(x => x === 0)).toBe(true); expect(input.bytes).toBeNull()
     await saveTongue(scoped, record, at, crop)
     expect(await loadTongue(scoped, '2026-10-18')).toEqual(record)
@@ -73,15 +79,15 @@ it('模型或拍摄失败不落盘、不覆盖先前记录，输入仍清除', a
   const store = await openStore(identity(), { factory: new IDBFactory(), name: crypto.randomUUID() })
   try {
     const at = new Date('2026-10-18T12:00:00Z')
-    const { record, crop } = await captureTongue({ bytes: new Uint8Array(png), type: 'image/png' }, context, model(), { codec })
+    const { record, crop } = await captureTongue({ bytes: new Uint8Array(png), type: 'image/png' }, context, model(), { codec, photoCodec })
     await saveTongue(store, record, at, crop)
     const photo = { bytes: new Uint8Array(png), type: 'image/png' }, original = photo.bytes
-    await expect(captureTongue(photo, context, { describe: async () => { throw Error('failure') } }, { codec })).rejects.toThrow('重新拍')
+    await expect(captureTongue(photo, context, { describe: async () => { throw Error('failure') } }, { codec, photoCodec })).rejects.toThrow(TONGUE_FAILURE_MESSAGES.model_unavailable)
     expect(photo.bytes).toBeNull(); expect(original.every(x => x === 0)).toBe(true)
     expect(await loadTongue(store, '2026-10-18')).toEqual(record)
     // 框太小同样不生成记录、不覆盖旧图。
     const tiny = { bytes: new Uint8Array(png), type: 'image/png' }, tinyOriginal = tiny.bytes
-    await expect(captureTongue(tiny, context, model({ box: { x: 0.1, y: 0.1, width: 0.2, height: 0.2 } }), { codec })).rejects.toThrow('没拍清舌头')
+    await expect(captureTongue(tiny, context, model({ box: { x: 0.1, y: 0.1, width: 0.2, height: 0.2 } }), { codec, photoCodec })).rejects.toThrow(TONGUE_TOO_FAR_MESSAGE)
     expect(tiny.bytes).toBeNull(); expect(tinyOriginal.every(x => x === 0)).toBe(true)
     expect(await loadTongue(store, '2026-10-18')).toEqual(record)
   } finally { store.close() }

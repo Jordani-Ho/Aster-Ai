@@ -75,11 +75,13 @@ jobs:
       - run: npm ci
       - run: npm ci --prefix app
       - run: npm ci --prefix gateway
-      - name: Install matching Chromium and system libraries
-        run: npx playwright install --with-deps chromium
+      - name: Install matching Chromium, WebKit and system libraries
+        run: npx playwright install --with-deps chromium webkit
       - run: npm run typecheck:e2e
       - name: V2-03 abstractor browser integration
         run: node e2e/abstractor.browser.mjs
+      - name: V2-20 tongue fix browser integration (Chromium + WebKit)
+        run: node e2e/tongue.browser.mjs
       - name: V2-04 money browser integration
         run: node e2e/money.browser.mjs
       - name: V2-09 storefront browser integration

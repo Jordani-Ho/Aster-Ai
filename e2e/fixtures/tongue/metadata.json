@@ -1,0 +1,57 @@
+{
+  "tongue-normal.jpg": {
+    "width": 1200,
+    "height": 1600,
+    "bytes": 46708,
+    "box": {
+      "x": 0.3,
+      "y": 0.42,
+      "width": 0.4,
+      "height": 0.26
+    }
+  },
+  "tongue-long-6000.jpg": {
+    "width": 6000,
+    "height": 4500,
+    "bytes": 465894,
+    "box": {
+      "x": 0.3,
+      "y": 0.42,
+      "width": 0.4,
+      "height": 0.26
+    }
+  },
+  "tongue-1pct-short160.jpg": {
+    "width": 1600,
+    "height": 1600,
+    "bytes": 45643,
+    "box": {
+      "x": 0.45,
+      "y": 0.45,
+      "width": 0.1,
+      "height": 0.1
+    }
+  },
+  "tongue-1pct-short100.jpg": {
+    "width": 1600,
+    "height": 1600,
+    "bytes": 46247,
+    "box": {
+      "x": 0.45,
+      "y": 0.42,
+      "width": 0.0625,
+      "height": 0.16
+    }
+  },
+  "tongue-synthetic.heic": {
+    "width": 1200,
+    "height": 1600,
+    "bytes": 22488,
+    "box": {
+      "x": 0.3,
+      "y": 0.42,
+      "width": 0.4,
+      "height": 0.26
+    }
+  }
+}

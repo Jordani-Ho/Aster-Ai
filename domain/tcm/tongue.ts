@@ -37,9 +37,12 @@ export interface TongueAbstract {
 export interface TongueBox { x: number; y: number; width: number; height: number }
 export interface TongueReading { features: TongueFeatures; box: TongueBox; lightingNote: boolean }
 
-export const TONGUE_RETAKE = '没拍清舌头，请靠近一点重拍。'
-/** 框占画面不到 5% 视为没拍清：不生成记录，请靠近重拍。 */
-export const TONGUE_BOX_MIN_RATIO = 0.05
+/** V2-20：裁剪后舌头短边至少这么多像素才算看清；像素值在 tongue-features.json。 */
+export function tongueCropMinShortSide(): number {
+  const value = (table as { cropMinShortSide?: unknown }).cropMinShortSide
+  if (!Number.isSafeInteger(value) || (value as number) <= 0) throw Error('舌头裁剪短边阈值无效')
+  return value as number
+}
 
 export type FeatureKey = 'color' | 'coatingColor' | 'coatingThickness' | 'shape' | 'teeth' | 'cracks'
 export const FEATURE_KEYS: FeatureKey[] = ['color', 'coatingColor', 'coatingThickness', 'shape', 'teeth', 'cracks']
@@ -78,7 +81,8 @@ export function parseTongueFeatures(value: unknown): TongueFeatures {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('特征无效')
   const v = value as Record<string, unknown>
   const keys = ['color', 'coatingColor', 'coatingThickness', 'shape', 'teeth', 'cracks', 'confidence']
-  if (Object.keys(v).length !== keys.length || keys.some(key => !Object.hasOwn(v, key))) throw Error('特征字段无效')
+  // V2-20：模型偶尔会多给说明字段，忽略多余的；必需字段缺一个仍拒绝。
+  if (keys.some(key => !Object.hasOwn(v, key))) throw Error('特征字段无效')
   if (!member(v.color, table.color) || !member(v.coatingColor, table.coatingColor)
     || !member(v.coatingThickness, table.coatingThickness) || !member(v.shape, table.shape)
     || typeof v.confidence !== 'number' || !Number.isFinite(v.confidence)
@@ -94,30 +98,29 @@ export function parseTongueFeatures(value: unknown): TongueFeatures {
   } as TongueFeatures
 }
 
-// 裁剪框严格校验：相对坐标、在画面内、面积不少于 5%；不合格就按“没拍清舌头”提示重拍。
+// V2-20：裁剪框只校验“在画面内、是正数”。模型给 0–1 归一化或 0–1000 都接受：
+// 只要有一个数大于 1，就整套按 1000 换算；多余字段忽略。面积不再设门槛（改看裁剪后的短边像素）。
 export function parseTongueBox(value: unknown): TongueBox {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error(TONGUE_RETAKE)
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('舌头框无效')
   const box = value as Record<string, unknown>
-  const keys = ['x', 'y', 'width', 'height']
-  if (Object.keys(box).length !== keys.length) throw Error(TONGUE_RETAKE)
-  const numbers: number[] = []
-  for (const key of keys) {
+  const keys = ['x', 'y', 'width', 'height'] as const
+  const numbers = keys.map(key => {
     const item = box[key]
-    if (typeof item !== 'number' || !Number.isFinite(item)) throw Error(TONGUE_RETAKE)
-    numbers.push(item)
-  }
-  const [x, y, width, height] = numbers
-  if (x < 0 || y < 0 || width <= 0 || height <= 0) throw Error(TONGUE_RETAKE)
-  if (x + width > 1.001 || y + height > 1.001) throw Error(TONGUE_RETAKE)
-  if (width * height < TONGUE_BOX_MIN_RATIO) throw Error(TONGUE_RETAKE)
+    if (typeof item !== 'number' || !Number.isFinite(item)) throw Error('舌头框无效')
+    return item
+  })
+  let [x, y, width, height] = numbers
+  if (numbers.some(item => item > 1)) { x /= 1000; y /= 1000; width /= 1000; height /= 1000 }
+  if (x < 0 || y < 0 || width <= 0 || height <= 0) throw Error('舌头框无效')
+  if (x + width > 1.001 || y + height > 1.001) throw Error('舌头框无效')
   return { x, y, width, height }
 }
 
-// 模型回复：特征 + 舌头框 + 偏色标记。模型直接说找不到舌头时同样请靠近重拍。
+// 模型回复：特征 + 舌头框 + 偏色标记。模型直接说找不到舌头时由调用方提示靠近重拍。
 export function parseTongueReading(value: unknown): TongueReading {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error(TONGUE_RETAKE)
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('没拍到舌头')
   const v = value as Record<string, unknown>
-  if (v.error !== undefined || v.noTongue === true) throw Error(TONGUE_RETAKE)
+  if (v.error !== undefined || v.noTongue === true) throw Error('没拍到舌头')
   const { box, lightingNote, ...raw } = v
   const features = parseTongueFeatures(raw)
   return { features, box: parseTongueBox(box), lightingNote: lightingNote === true }

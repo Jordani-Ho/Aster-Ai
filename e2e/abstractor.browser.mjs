@@ -22,7 +22,7 @@ try {
  const mirrorSvg=page.locator('.nl-mirror-frame svg')
  await upload();await expect(mirrorSvg).toHaveCount(1)
  await page.reload();await expect(mirrorSvg).toHaveCount(1)
- failure=true;await upload();await expect(page.getByRole('alert')).toContainText('重新拍');await expect(mirrorSvg).toHaveCount(1)
+ failure=true;await upload();await expect(page.getByRole('alert')).toContainText('稍后再拍');await expect(mirrorSvg).toHaveCount(1)
  failure=false;await page.getByText('切换家人',{exact:true}).click();await expect(mirrorSvg).toHaveCount(0)
  await upload();await expect(mirrorSvg).toHaveCount(1)
  await page.getByText('切换页面',{exact:true}).click();await expect(page.getByRole('heading',{name:'看一眼，再发出'})).toBeVisible()
