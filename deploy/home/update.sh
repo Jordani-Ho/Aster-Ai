@@ -51,14 +51,17 @@ else
   log "临时隧道的 cloudflared 容器没有重建，网址保持不变。"
 fi
 
-# 4) 核对：名单人数不能变少、一次性口令种子不能变；不对就恢复并停下。
-node scripts/safeguard-data.mjs check "$before_members" "$before_seed" "$before_code" || die "更新后核对失败：看上面的提醒，名单/口令已尽量从备份恢复。"
-
-# 5) 验收探测（只读；不想跑就 NO_VERIFY=1）。
+# 4) 验收探测（只读；不想跑就 NO_VERIFY=1）。
+#    V2-31：verify.sh 会幂等把验收自测成员补进成员名单（名单被重置过也自愈）。
 if [ "${NO_VERIFY:-0}" != "1" ]; then
   log "跑一次验收探测 verify.sh…"
   ./verify.sh || printf '提醒：验收探测没有全过，看上面的 FAIL 行；环境已经更新完。\n' >&2
 fi
+
+# 5) 核对：名单人数不能变少、一次性口令种子不能变；不对就恢复并停下。
+#    顺序说明：名单恢复只在第 1 步 prepare 里做（setup 之前），这里只核对；
+#    所以 verify 刚补进去的自测成员只会让人数变多，不会被这里的恢复覆盖掉。
+node scripts/safeguard-data.mjs check "$before_members" "$before_seed" "$before_code" || die "更新后核对失败：看上面的提醒，名单/口令已尽量从备份恢复。"
 
 after_members="$(count_members)"
 log ""

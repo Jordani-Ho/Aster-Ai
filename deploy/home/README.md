@@ -108,6 +108,9 @@ cd deploy/home
 - **想强制重建镜像**（改了代码以后）：`docker compose --profile quick build --no-cache relay gateway web`，再跑 `./quick-start.sh`。
 - **登记口令在哪**：`deploy/home/data/setup/teacher-setup-code.txt`（扫码网页是同目录的 `teacher-setup.html`）；
   终端也会打印二维码。老师登记成功后这两份文件会被网关自动删掉（口令用过即作废），所以登记后再找就找不到是正常的。
+- **`verify.sh` 报“网关成员请求期望 202，实际 403”**：这是验收自测成员不在名单里（成员名单被重置过）。
+  现在 `verify.sh` 每次都幂等把 `data/self-member.json` 里的公钥补进 `data/gateway/members.json`（去重），
+  直接重跑 `./verify.sh` 即可；`data/self-member.json` 内容损坏时删掉它再跑会重新生成。
 - **名单/口令会不会被更新弄丢**：不会。`setup.sh` 与 `update.sh` 都会先备份 `data/gateway/members.json`、
   `data/gateway/seed.json`、`data/setup/teacher-setup-code.txt` 到 `data/backup/last/`；
   口令与种子只成对备份、成对恢复，只缺一个会重新生成一对（还没老师登记）或删掉作废口令（已登记）；

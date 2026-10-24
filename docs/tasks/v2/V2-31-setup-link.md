@@ -34,4 +34,5 @@
 - 口令一致性：`scripts/safeguard-data.mjs` 把 seed 与口令当一对：成对备份/恢复；只缺一个时未登记就重生成一对、已登记就保留种子删作废口令；哈希不一致报错退出并给出处理命令；`setup.sh`/`update.sh` 结束跑 verify，`verify.sh` 也检查。
 - 口令作废：网关在 `/invite/seed` 认领成功分支里删除 `data/setup` 的口令与 html（网关只多挂 `./data/setup:/app/setup`，无新接口）；setup/update 的 verify 兜底补删。`gateway-config.json` 新增 `setupDir: /app/setup`。
 - 路径：口令/扫码页移到 `deploy/home/data/setup/`；README、`docs/内测怎么开始.md`、`docs/合伙人/落地手册.html`、`verify.sh`、`update.sh` 同步。
-- 验证：app 64 文件 / 497 测试；gateway 29 测试；deployment 10 项（新增二维码与口令不外泄、成对规则、改坏退出 3 项）；新增 `e2e/v231.browser.mjs`（扫码链接自动填、地址栏清空、请求 URL 不含口令、手动粘贴老路）并加入 CI；opening/phone/v228/v229/storefront/abstractor 回归 PASS；真实中继 e2e 本机 28/28。真机扫码待内测确认（CI 无扫码解码能力）。
+- 验证：app 64 文件 / 497 测试；gateway 29 测试；deployment 12 项（新增二维码与口令不外泄、成对规则、改坏退出、自测成员幂等补回、update 顺序 5 项）；新增 `e2e/v231.browser.mjs`（扫码链接自动填、地址栏清空、请求 URL 不含口令、手动粘贴老路）并加入 CI；opening/phone/v228/v229/storefront/abstractor 回归 PASS；真实中继 e2e 本机 28/28。真机扫码待内测确认（CI 无扫码解码能力）。
+- 审核补充（gh #66 评论）：修了自测环境真实 bug——名单被重置成 0 人但 `data/self-member.json` 还在时，`verify.sh` 以前只在首次生成时写名单，导致“网关成员请求期望 202，实际 403”。现在 `ensure_self_member` 每次都幂等补公钥进 `data/gateway/members.json`（去重）；`update.sh` 顺序改为 prepare 恢复 → setup → verify 补成员并探测 → check 只核对，恢复不会覆盖 verify 补进去的成员；新增两条 deployment 断言覆盖这两种情况。

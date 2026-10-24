@@ -6,7 +6,7 @@ import {spawnSync} from 'node:child_process'
 import {createHash} from 'node:crypto'
 import {root} from './process.mjs'
 const linux=p=>p.replace(/^([A-Z]):/i,(_,letter)=>'/mnt/'+letter.toLowerCase()).replaceAll('\\','/')
-const FILES=['deploy/home/setup.sh','deploy/home/update.sh','deploy/home/scripts/generate-gateway.mjs','deploy/home/scripts/safeguard-data.mjs','deploy/home/scripts/setup-link.mjs','deploy/home/scripts/vendor/qrcode-generator-1.4.4.cjs','gateway/members.js','relay/configure.mjs','package.json']
+const FILES=['deploy/home/setup.sh','deploy/home/update.sh','deploy/home/verify.sh','deploy/home/scripts/generate-gateway.mjs','deploy/home/scripts/safeguard-data.mjs','deploy/home/scripts/setup-link.mjs','deploy/home/scripts/vendor/qrcode-generator-1.4.4.cjs','gateway/members.js','relay/configure.mjs','package.json']
 async function workspace(){await mkdir(path.join(root,'.cache/e2e'),{recursive:true});const dir=await mkdtemp(path.join(root,'.cache/e2e/setup-'));for(const file of FILES){await mkdir(path.dirname(path.join(dir,file)),{recursive:true});await copyFile(path.join(root,file),path.join(dir,file))}return dir}
 function bash(script,env){const result=process.platform==='win32'?spawnSync('wsl.exe',['-d','Ubuntu','--exec','env',...Object.entries(env).map(([k,v])=>k+'='+v),'bash',linux(script)],{encoding:'utf8'}):spawnSync('bash',[script],{encoding:'utf8',env:{...process.env,...env}});assert.equal(result.status,0,result.stderr);return result.stdout}
 // 期望失败时用这个：不 assert 退出码，返回 status/stdout/stderr 自己判断。
@@ -204,6 +204,46 @@ test('V2-31 口令与种子不一致：update.sh 报错退出并说明怎么处�
   assert.match(text,/update\.sh/)
   const calls=await readFile(log,'utf8')
   assert.ok(!/compose.*\b(up|build)\b/.test(calls),'不一致时不应该启动容器')
+ }finally{await rm(dir,{recursive:true,force:true})}
+})
+// V2-31 审核补充：名单被重置成 0 人但 self-member.json 还在时，verify 以前只在首次生成时写名单 → 403。
+// 现在每次都幂等补回自测成员公钥（去重），verify 仍能全部通过。
+test('V2-31 自测成员：self-member.json 已在、members.json 为空时 verify 幂等补回并全部通过',async()=>{
+ const dir=await workspace(),home=path.join(dir,'deploy/home'),bin=await fakeBin(dir)
+ try{
+  await writeFile(path.join(home,'.env'),ENV_TEXT)
+  const env=envFor(bin)
+  bash(path.join(home,'setup.sh'),env)
+  const secret='1'.repeat(64),pubkey='2'.repeat(64)
+  await writeFile(path.join(home,'data/self-member.json'),JSON.stringify({secret,pubkey}))
+  await writeFile(path.join(home,'data/gateway/members.json'),'[]')
+  const out=bash(path.join(home,'verify.sh'),env)
+  assert.match(out,/全部通过/)
+  assert.match(out,/已把验收自测成员补进网关成员名单/)
+  assert.deepEqual(JSON.parse(await readFile(path.join(home,'data/gateway/members.json'),'utf8')),[pubkey])
+  // 再跑一遍：幂等，不会重复添加、仍然通过。
+  const again=bash(path.join(home,'verify.sh'),env)
+  assert.match(again,/全部通过/)
+  assert.deepEqual(JSON.parse(await readFile(path.join(home,'data/gateway/members.json'),'utf8')),[pubkey])
+ }finally{await rm(dir,{recursive:true,force:true})}
+})
+// V2-31 审核补充：update.sh 的顺序（prepare 恢复 → setup → verify 补自测成员 → check 只核对）
+// 保证 verify 刚补进去的自测成员不会被后面的名单恢复覆盖。
+test('V2-31 update 顺序：verify 先补自测成员，check 不覆盖',async()=>{
+ const dir=await workspace(),home=path.join(dir,'deploy/home'),bin=await fakeBin(dir)
+ try{
+  await writeFile(path.join(home,'.env'),ENV_TEXT)
+  const env=envFor(bin),pubkey='3'.repeat(64)
+  bash(path.join(home,'setup.sh'),env)
+  await writeFile(path.join(home,'data/self-member.json'),JSON.stringify({secret:'4'.repeat(64),pubkey}))
+  await writeFile(path.join(home,'data/gateway/members.json'),'[]')
+  const out=bash(path.join(home,'update.sh'),env)
+  assert.match(out,/全部通过/)
+  assert.match(out,/成员名单：1 人（更新前 0 人）/)
+  assert.deepEqual(JSON.parse(await readFile(path.join(home,'data/gateway/members.json'),'utf8')),[pubkey])
+  const again=bash(path.join(home,'update.sh'),env)
+  assert.deepEqual(JSON.parse(await readFile(path.join(home,'data/gateway/members.json'),'utf8')),[pubkey])
+  assert.match(again,/成员名单：1 人（更新前 1 人）/)
  }finally{await rm(dir,{recursive:true,force:true})}
 })
 test('第二版部署目录与 README 里没有第一版已删功能的字样',async()=>{
