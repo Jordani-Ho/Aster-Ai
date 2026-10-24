@@ -18,6 +18,34 @@ const job = (overrides: Record<string, unknown> = {}) => defineTask({
 })
 
 describe('V2-21 任务与输入边界', () => {
+  it('可选 inputKey 按材料复用；跨日按原键确认不重新取材料', async () => {
+    const store = await session()
+    try {
+      let text = 'FIRST'
+      const task = job({ gather: vi.fn(async () => ({ text })), inputKey: (data: { text: string }) => data.text })
+      const runner = createRunner({ store, side: 'teacher', maxTokens: 100 }), request = { targetId: student, now }
+      const first = await runner.run(task, request)
+      expect(await runner.run(task, request)).toEqual(first)
+      expect(task.run).toHaveBeenCalledOnce()
+      text = 'SECOND'
+      const second = await runner.run(task, request)
+      expect(second.key).not.toBe(first.key); expect(second.output.text).toBe('SECOND')
+      expect(task.run).toHaveBeenCalledTimes(2)
+      const calls = vi.mocked(task.gather).mock.calls.length
+      const saved = await store.get('agent-runs', first.key) as Record<string, unknown>
+      for (const value of ['', 'x'.repeat(129), 42, 'wrong-key']) {
+        await store.put('agent-runs', first.key, { ...saved, inputKey: value } as never)
+        await expect(runner.confirm(task, { targetId: student, now }, first.key)).rejects.toThrow('输入')
+      }
+      await store.put('agent-runs', first.key, saved as never)
+      await runner.confirm(task, { targetId: student, now: new Date(2026, 9, 25) }, first.key)
+      expect(task.gather).toHaveBeenCalledTimes(calls)
+      expect(task.deliver).toHaveBeenCalledWith(first.output, expect.anything())
+      for (const value of ['', 'x'.repeat(129), null, 42, {}]) {
+        await expect(runner.run(job({ inputKey: () => value }), request)).rejects.toThrow('输入')
+      }
+    } finally { store.close() }
+  })
   it('串行执行；同一对象同一天三次只生成一次，新的执行器也返回已存结果', async () => {
     const store = await session()
     try {
@@ -75,7 +103,7 @@ describe('V2-21 任务与输入边界', () => {
     { id: '' }, { id: 'a'.repeat(65) }, { side: 'admin' }, { confirm: 'automatic' },
     { trigger: { kind: 'unknown' } }, { trigger: { kind: 'time', hour: 24 } },
     { trigger: { kind: 'time', hour: 1.5 } }, { trigger: { kind: 'message', type: '' } },
-    { gather: null }, { run: null }, { deliver: null }, { tokens: 1 },
+    { gather: null }, { run: null }, { deliver: null }, { tokens: 1 }, { inputKey: 1 },
   ])('拒绝错误的任务定义 %j', value => expect(() => job(value)).toThrow())
   it.each([0, -1, NaN, Infinity, 1.5])('拒绝错误的额度 %s', async maxTokens => {
     const store = await session()

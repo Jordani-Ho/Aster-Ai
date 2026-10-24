@@ -118,6 +118,12 @@ describe('V2-05 验收 0：老师端完整医案 teacher-records', () => {
     // 远程：签字发送成功后存完整签名病历。
     const encounter = remoteEncounter(teacher.publicKey, student.publicKey)
     const final = acceptAll(encounter)
+    await store.put('agent-runs', 'remote-draft', { side: 'teacher', taskId: 'drafting', targetId: encounter.id })
+    await store.put('agent-runs', 'unrelated', { side: 'teacher', taskId: 'drafting', targetId: 'e'.repeat(32) })
+    await expect(completeConsultSigning({ identity: teacher, store, consult: storedConsult(encounter), final,
+      send: async () => { throw Error('offline') }, ledger: { record: async () => {} },
+    })).rejects.toThrow('offline')
+    expect(await store.get('agent-runs', 'remote-draft')).toBeDefined()
     const charges: { recordHash?: string; confirmationId?: string; currency?: string }[] = []
     const result = await completeConsultSigning({
       identity: teacher, store, consult: storedConsult(encounter), final,
@@ -126,6 +132,8 @@ describe('V2-05 验收 0：老师端完整医案 teacher-records', () => {
       charge: 2, currency: 'CNY',
     })
     const rows = await listTeacherRecords(store)
+    expect(await store.get('agent-runs', 'remote-draft')).toBeUndefined()
+    expect(await store.get('agent-runs', 'unrelated')).toBeDefined()
     expect(rows).toHaveLength(1)
     expect(rows[0].eventId).toBe(result.signed.id)
     expect(rows[0].encounter).toEqual(final)

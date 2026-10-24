@@ -17,6 +17,8 @@ export interface AgentTask<M, O> {
   deliver(output: O, context: DeliveryContext): Promise<void>
   /** 领域适配器可按实际请求估算；未提供时估算全部 JSON 材料。 */
   tokens?(materials: M): number
+  /** 可选输入指纹；允许浏览器原生 SHA-256 的异步结果。 */
+  inputKey?(materials: M): string | Promise<string>
 }
 export class AgentError extends Error {
   constructor(public readonly kind: 'input' | 'budget' | 'guard' | 'model_account' | 'model_unavailable' | 'delivery' | 'storage', public readonly reason?: 'relationship' | 'cooldown' | 'template') {
@@ -37,7 +39,7 @@ export function defineTask<M, O>(task: AgentTask<M, O>): AgentTask<M, O> {
   if (!['open', 'manual', 'time', 'message'].includes(trigger.kind)) throw new AgentError('input')
   if (trigger.kind === 'time' && (!Number.isInteger(trigger.hour) || trigger.hour < 0 || trigger.hour > 23)) throw new AgentError('input')
   if (trigger.kind === 'message' && (typeof trigger.type !== 'string' || !/^[a-z][a-z0-9_.-]{0,63}$/.test(trigger.type))) throw new AgentError('input')
-  if (['gather', 'run', 'deliver'].some(key => typeof task[key as 'run'] !== 'function') || (task.tokens !== undefined && typeof task.tokens !== 'function')) throw new AgentError('input')
+  if (['gather', 'run', 'deliver'].some(key => typeof task[key as 'run'] !== 'function') || (task.tokens !== undefined && typeof task.tokens !== 'function') || (task.inputKey !== undefined && typeof task.inputKey !== 'function')) throw new AgentError('input')
   return Object.freeze({ ...task, trigger: Object.freeze({ ...trigger }) })
 }
 /** 与 V2-19 相同的保守字符估算；核心不依赖任何领域数值。 */

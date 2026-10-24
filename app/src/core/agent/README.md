@@ -9,7 +9,7 @@
 
 ## 草稿、确认和幂等
 
-`run(task, {targetId, now?})` 用当前设备本地日期构造 SHA-256 键：side + taskId + targetId + localDay。agent-runs 先保存 draft 与产出；human 只返回草稿给既有核对页，不调用 deliver。后续主动任务可由真人入口调用 confirm；再次触发或确认返回已有产出，不重新 gather/run。confirm 不能凭空生成草稿。template 的本机记录可以直接 deliver，对外消息另检查基础配置。
+`run(task, {targetId, now?})` 用当前设备本地日期构造 SHA-256 键：side + taskId + targetId + localDay；任务提供 inputKey(materials) 时再拼输入指纹（非空字符串，最长 128 字符，可异步返回）。agent-runs 先保存 draft 与产出；human 只返回草稿给既有核对页，不调用 deliver。后续主动任务可由真人入口调用 confirm；无 inputKey 的任务再次触发返回已有产出，不重新 gather/run；有 inputKey 的任务先 gather 一次有限 JSON 材料快照计算指纹，命中只复用产出，不再 run。按原草稿键确认不重新 gather，以保存的指纹核验原键。confirm 不能凭空生成草稿。template 的本机记录可以直接 deliver，对外消息另检查基础配置。
 
 同页共享串行队列；支持 Web Locks 时跨标签页也串行。没有 Web Locks 的环境只保证同一 JS 运行环境串行，跨标签页应只开一个应用实例。队列完成后不保留材料/结果引用，返回值为副本；持久化的草稿结果用于幂等，按原有保留期清理。写入没有成功时不能宣称已产出/已送达；失败重试允许重新计算未落盘的结果。
 
@@ -23,7 +23,7 @@ agent-failures 只留 `{at, kind}` 最近 100 条，没有对象身份、输入�
 
 ## 已接入的两件事
 
-- `drafting/agent.ts` → drafting 任务：对象是问诊卡 encounter.id，不能把“同一学生”当作一天只能问诊一次。远程核对和面诊起草都走这里；沿用 V2-19 的裁材料、额度重试与安全失败提示。只保存模型新增的四诊、判断、方案、材料提示；老师已经录入的 intake/profile 由调用方只读拼回，绝不让模型写 source:teacher。草稿进入原来的 SignReview，签字、钱账入账和退款仍完全在骨架外，不经 runner.confirm。
+- `drafting/agent.ts` → drafting 任务：对象是问诊卡 encounter.id，不能把“同一学生”当作一天只能问诊一次。远程核对和面诊起草都走这里；输入指纹取 intake、fourExams、profile 递归按对象键排序的 JSON SHA-256（数组顺序保留），输入变更后重新起草。签字发送成功并保存正式病历后，records/teacher 清除该 encounter 的全部起草任务副本；签字或发送失败保留。沿用 V2-19 的裁材料、额度重试与安全失败提示。只保存模型新增的四诊、判断、方案、材料提示；老师已经录入的 intake/profile 由调用方只读拼回，绝不让模型写 source:teacher。草稿进入原来的 SignReview，签字、钱账入账和退款仍完全在骨架外，不经 runner.confirm。
 - `mirror/getDailyMirror` → mirror 任务：对象 self，家人的 LocalStore 分片天然隔离。同日缓存和固定建议回退不变，只在本机落结果，不发送感受或模型上下文。dailyMirror 仍是无存储的生成工具；应用入口使用 getDailyMirror。页面缓存丢失时从已完成任务恢复，不重复生成；测试若要模拟重新生成，需同时清理该镜子任务记录。
 
 ## 打开时补做，后台不假装在线

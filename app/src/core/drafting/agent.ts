@@ -2,10 +2,17 @@ import type { LocalStore } from '../store'
 import type { LlmClient } from '../llm'
 import type { ConsultPackage, Encounter } from '../record/types'
 import { createRunner } from '../agent/runner'
-import { AgentError, defineTask, publicKey } from '../agent/tasks'
+import { AgentError, agentKey, defineTask, publicKey } from '../agent/tasks'
 import { budgetLimit, requestTokens } from './budget'
 import { fitDraftMaterials } from './materials'
 import { draftEncounter, draftMaterialInput, type DraftMaterials, type DraftOptions, type DraftResult } from './index'
+
+// 递归排序对象键；保留数组顺序和字段来源，避免仅 JSON 属性顺序变化就重新起草。
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical)
+  if (value !== null && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical((value as Record<string, unknown>)[key])]))
+  return value
+}
 
 /** 起草对象是一张问诊卡，而不是“学生今天只能问诊一次”。不同 encounter 各有独立草稿。 */
 export async function draftWithAgent(store: LocalStore, pkg: ConsultPackage, materials: DraftMaterials, llm: LlmClient, options: DraftOptions & { now?: Date } = {}): Promise<DraftResult> {
@@ -16,6 +23,10 @@ export async function draftWithAgent(store: LocalStore, pkg: ConsultPackage, mat
   const task = defineTask({
     id: 'drafting', side: 'teacher', trigger: { kind: 'manual' }, confirm: 'human',
     gather: async () => ({ pkg, materials }),
+    inputKey: async (data: { pkg: ConsultPackage; materials: DraftMaterials }) => {
+      const { intake, fourExams, profile } = data.pkg.encounter
+      return agentKey([JSON.stringify(canonical({ intake, fourExams, profile }))])
+    },
     tokens: (data: { pkg: ConsultPackage; materials: DraftMaterials }) => requestTokens(fitDraftMaterials(draftMaterialInput(data.pkg, data.materials, level)).messages),
     run: async (data): Promise<Generated> => {
       let failed = false

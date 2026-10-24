@@ -7,6 +7,56 @@ import { draftWithAgent } from '../drafting/agent'
 import { getDailyMirror } from '../mirror'
 import { runRetention } from '../records/retention'
 import template from '../../../../domain/tcm/templates/default.json'
+import { acceptDraftForSigning } from '../record/sign'
+import { signAndHandoverInPerson } from '../record/in-person'
+
+it('同一问诊卡输入不变复用，改一格四诊重新起草；签字成功才清理该卡全部起草副本', async () => {
+  const owner = createIdentity(), store = await openStore(owner, { factory: new IDBFactory() })
+  try {
+    const encounter = startInPersonEncounter({ teacher: owner.publicKey, student: 'a'.repeat(64) })
+    const client = { complete: vi.fn(async (messages: { content: string }[]) => JSON.stringify({ judgment: { symptomSummary: { value: JSON.parse(messages[1].content).encounter.fourExams.pulse.value ?? '合成小结' } } })), stream: vi.fn() }
+    const options = { now: new Date(2026, 9, 24, 9) }
+    const first = await draftWithAgent(store, inPersonConsultPackage(encounter), { template }, client, options)
+    expect(await draftWithAgent(store, inPersonConsultPackage(encounter), { template }, client, options)).toEqual(first)
+    expect(client.complete).toHaveBeenCalledOnce()
+    encounter.fourExams.pulse = { value: 'SYNTHETIC_PULSE_CHANGED', source: 'teacher' }
+    const second = await draftWithAgent(store, inPersonConsultPackage(encounter), { template }, client, options)
+    expect(client.complete).toHaveBeenCalledTimes(2)
+    expect(second.encounter.judgment.symptomSummary.value).toBe('SYNTHETIC_PULSE_CHANGED')
+    expect(JSON.stringify(client.complete.mock.calls[1])).toContain('SYNTHETIC_PULSE_CHANGED')
+    expect(await draftWithAgent(store, inPersonConsultPackage(encounter), { template }, client, options)).toEqual(second)
+    expect(client.complete).toHaveBeenCalledTimes(2)
+    expect(await store.list('agent-runs')).toHaveLength(2)
+    await store.put('agent-runs', 'other', { taskId: 'drafting', side: 'teacher', targetId: 'b'.repeat(32) })
+    await store.put('agent-runs', 'mirror', { taskId: 'mirror', side: 'student', targetId: encounter.id })
+    const signing = { encounter: acceptDraftForSigning(second.encounter), privateKey: owner.privateKey, store }
+    await expect(signAndHandoverInPerson({ ...signing, send: async () => { throw Error('offline') } })).rejects.toThrow('offline')
+    expect(await store.list('agent-runs')).toHaveLength(4)
+    await signAndHandoverInPerson({ ...signing, send: async () => {} })
+    expect((await store.list('agent-runs')).map(row => row.key).sort()).toEqual(['mirror', 'other'])
+  } finally { store.close() }
+})
+
+it('起草输入指纹规范化对象键顺序，并包含 intake、profile；坏输入不调用模型', async () => {
+  const owner = createIdentity(), store = await openStore(owner, { factory: new IDBFactory() })
+  try {
+    const encounter = startInPersonEncounter({ teacher: owner.publicKey, student: 'a'.repeat(64) })
+    const client = { complete: vi.fn(async () => '{}'), stream: vi.fn() }, options = { now: new Date(2026, 9, 24, 9) }
+    await draftWithAgent(store, inPersonConsultPackage(encounter), { template }, client, options)
+    encounter.profile = Object.fromEntries(Object.entries(encounter.profile).reverse()) as typeof encounter.profile
+    encounter.intake.chiefComplaint = { source: 'unknown', value: null }
+    await draftWithAgent(store, inPersonConsultPackage(encounter), { template }, client, options)
+    expect(client.complete).toHaveBeenCalledOnce()
+    encounter.intake.chiefComplaint.value = 'SYNTHETIC_NEW_INTAKE'
+    await draftWithAgent(store, inPersonConsultPackage(encounter), { template }, client, options)
+    encounter.profile.alias.value = 'SYNTHETIC_NEW_PROFILE'
+    await draftWithAgent(store, inPersonConsultPackage(encounter), { template }, client, options)
+    expect(client.complete).toHaveBeenCalledTimes(3)
+    encounter.fourExams.pulse.value = Infinity as never
+    await expect(draftWithAgent(store, inPersonConsultPackage(encounter), { template }, client, options)).rejects.toThrow('输入')
+    expect(client.complete).toHaveBeenCalledTimes(3)
+  } finally { store.close() }
+})
 
 it('实际起草适配器：同问诊卡并发只起草一次，材料不跨学生；只读老师录入不被当成新写字段', async () => {
   const owner = createIdentity(), store = await openStore(owner, { factory: new IDBFactory() })

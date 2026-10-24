@@ -3,7 +3,7 @@ import { assertAgentOutput, assertJson, sendAgentMessage } from './guard'
 
 export interface RunRequest { targetId: string; now?: Date }
 export interface RunResult<O> { key: string; status: 'draft' | 'delivered'; output: O }
-interface SavedRun<O> { taskId: string; targetId: string; side: AgentSide; confirm: 'human' | 'template'; localDay: string; at: string; status: 'draft' | 'delivered'; output: O }
+interface SavedRun<O> { taskId: string; targetId: string; side: AgentSide; confirm: 'human' | 'template'; localDay: string; inputKey?: string; at: string; status: 'draft' | 'delivered'; output: O }
 let queue: Promise<void> = Promise.resolve()
 function day(at: Date): string { return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}` }
 export function createRunner(options: {
@@ -22,24 +22,33 @@ export function createRunner(options: {
         const at = request.now ?? new Date()
         if (task.side !== options.side || typeof request.targetId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(request.targetId) || !(at instanceof Date) || !Number.isFinite(+at)) throw new AgentError('input')
         if (draftKey !== undefined && (!confirm || !/^[a-f0-9]{64}$/.test(draftKey))) throw new AgentError('input')
-        const localDay = day(at), key = draftKey ?? await agentKey([task.side, task.id, request.targetId, localDay])
+        let materials: M | undefined, inputKey: string | undefined
+        if (task.inputKey && !draftKey) {
+          materials = await task.gather()
+          assertJson(materials)
+          materials = structuredClone(materials)
+          inputKey = await task.inputKey(structuredClone(materials))
+          if (typeof inputKey !== 'string' || inputKey.length === 0 || inputKey.length > 128) throw new AgentError('input')
+        }
+        const localDay = day(at), key = draftKey ?? await agentKey([task.side, task.id, request.targetId, localDay, ...(inputKey === undefined ? [] : [inputKey])])
         phase = 'storage'
         let row = await store.get('agent-runs', key) as SavedRun<O> | undefined
         if (row) {
-          if (row.taskId !== task.id || row.targetId !== request.targetId || row.side !== task.side || row.confirm !== task.confirm || (!draftKey && row.localDay !== localDay) || !['draft', 'delivered'].includes(row.status)) throw new AgentError('input')
-          if (draftKey && (typeof row.localDay !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(row.localDay) || await agentKey([row.side, row.taskId, row.targetId, row.localDay]) !== key)) throw new AgentError('input')
+          if (row.taskId !== task.id || row.targetId !== request.targetId || row.side !== task.side || row.confirm !== task.confirm || (!draftKey && (row.localDay !== localDay || row.inputKey !== inputKey)) || !['draft', 'delivered'].includes(row.status)) throw new AgentError('input')
+          if (row.inputKey !== undefined && (typeof row.inputKey !== 'string' || row.inputKey.length === 0 || row.inputKey.length > 128)) throw new AgentError('input')
+          if (draftKey && (Boolean(task.inputKey) !== (row.inputKey !== undefined) || typeof row.localDay !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(row.localDay) || await agentKey([row.side, row.taskId, row.targetId, row.localDay, ...(row.inputKey === undefined ? [] : [row.inputKey])]) !== key)) throw new AgentError('input')
           assertAgentOutput(row.output)
         } else {
           if (confirm) throw new AgentError('input')
           phase = 'model_unavailable'
-          const materials = await task.gather()
+          materials ??= await task.gather()
           assertJson(materials)
           const tokens = task.tokens ? task.tokens(materials) : materialTokens(materials)
           if (!Number.isSafeInteger(tokens) || tokens < 0) throw new AgentError('input')
           if (tokens > options.maxTokens) throw new AgentError('budget')
           const output = await task.run(structuredClone(materials))
           assertAgentOutput(output)
-          row = { taskId: task.id, targetId: request.targetId, side: task.side, confirm: task.confirm, localDay, at: at.toISOString(), status: 'draft', output: structuredClone(output) }
+          row = { taskId: task.id, targetId: request.targetId, side: task.side, confirm: task.confirm, localDay, ...(inputKey === undefined ? {} : { inputKey }), at: at.toISOString(), status: 'draft', output: structuredClone(output) }
           phase = 'storage'
           await store.put('agent-runs', key, row)
         }

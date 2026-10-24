@@ -112,7 +112,7 @@ async function callModel(llm: LlmClient, messages: ChatMessage[], timeoutMs: num
 }
 
 export function draftMaterialInput(pkg: ConsultPackage, materials: DraftMaterials, level: DraftLevel): DraftMaterialInput {
-  return { prompt, encounter: { profile: pkg.encounter.profile, intake: pkg.encounter.intake }, template: materials.template, level,
+  return { prompt, encounter: { profile: pkg.encounter.profile, intake: pkg.encounter.intake, fourExams: pkg.encounter.fourExams }, template: materials.template, level,
     prior: [...(materials.prior ?? [])],
     cases: searchCases([pkg.encounter.intake.chiefComplaint.value, pkg.encounter.intake.presentIllness.value].filter(Boolean).join(' '), materials.cases ?? []),
   }
