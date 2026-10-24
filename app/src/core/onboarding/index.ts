@@ -16,6 +16,9 @@ export function validateInvite(input:Event,url:string,now=Math.floor(Date.now()/
 export function inviteLink(base:string,event:Event):string{const url=new URL(base);url.search='';url.hash='invite='+btoa(JSON.stringify(event)).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');return url.href}
 export function readInviteLink(link:string):Event|null{const hash=new URL(link).hash.slice(1);if(!hash.startsWith('invite='))return null;try{const encoded=hash.slice(7);if(encoded.length>12000)throw Error();return JSON.parse(atob(encoded.replaceAll('-','+').replaceAll('_','/')))}catch{throw Error(INVITE_ERROR)}}
 export function gatewayBase(modelUrl:string):string{return modelUrl.replace(/\/v1\/?$/,'').replace(/\/$/,'')}
+// V2-28：从终端/微信复制的一次性口令常带换行或空格（网关会把多出来的字符算进哈希，直接 403）。
+// 口令本体是 base64url，不含空白，所以粘贴时去掉所有空格、换行、制表符是安全的。
+export function normalizeSetupToken(value:string):string{return value.replace(/\s+/g,'')}
 export async function onboardingRequest(identity:Identity,url:string,payload:unknown):Promise<void>{const body=JSON.stringify(payload),authorization=await nip98Authorization(identity.privateKey,url,'POST',body);const res=await fetch(url,{method:'POST',headers:{'content-type':'application/json',authorization},body});if(!res.ok)throw Error(res.status===403?INVITE_ERROR:'暂时未能加入社区，请稍后重试。')}
 export async function acceptInvite(identity:Identity,store:LocalStore,event:Event,url:string){
  if(!validateInvite(event,url))throw Error(INVITE_ERROR)

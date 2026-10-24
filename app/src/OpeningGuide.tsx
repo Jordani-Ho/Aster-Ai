@@ -6,7 +6,7 @@ import {
   connectionError, normalizeModel, providers, savePersonalModel, testConnection,
   type ModelGateway, type PersonalModel,
 } from './core/llm/personal'
-import { onboardingRequest } from './core/onboarding'
+import { onboardingRequest, normalizeSetupToken } from './core/onboarding'
 import {
   DEFAULT_STOREFRONT, STOREFRONT_LIMITS, STOREFRONT_THEMES, THEMES,
   normalizeStorefront, publishStorefront, saveStorefrontDraft,
@@ -33,8 +33,10 @@ export interface OpeningGuideProps {
   onDone: () => void
 }
 
+// V2-28：给选择而不是让人查文档；选了自动填好接口地址与模型名（“其他”才需要自己填）。
 const GUIDE_PROVIDERS = [
   { id: 'deepseek', label: 'DeepSeek' },
+  { id: 'kimi', label: 'Kimi' },
   { id: 'qwen', label: '千问' },
   { id: 'other', label: '其他' },
 ] as const
@@ -175,9 +177,11 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
     const name = displayName.trim()
     if (name === '') { setError('先填一个学生认得的称呼。'); return }
     if (name.length > STOREFRONT_LIMITS.displayName) { setError(`称呼最多 ${STOREFRONT_LIMITS.displayName} 个字。`); return }
+    const code = normalizeSetupToken(token)
+    if (code === '') { setError('先粘贴登记口令。'); return }
     setBusy(true); setError('')
     try {
-      await onboardingRequest(identity, gateway + '/invite/seed', { token: token.trim() })
+      await onboardingRequest(identity, gateway + '/invite/seed', { token: code })
       setToken('')
       await saveStorefrontDraft(store, { ...draft, displayName: name } as Storefront)
       setDraft(current => ({ ...current, displayName: name }))
@@ -254,6 +258,7 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
             <label>接口地址<input disabled={busy} value={baseUrl} placeholder="https://…/v1" onChange={event => setBaseUrl(event.target.value)} /></label>
             <label>模型名称<input disabled={busy} value={model} placeholder="模型名称" onChange={event => setModel(event.target.value)} /></label>
           </>}
+          {provider !== 'other' && <p className="op-card-note">接口地址：{providerDefaults(provider).baseUrl}<br />模型名称：{providerDefaults(provider).model}（已自动填好）</p>}
           {selected?.docs && <p className="op-link-row"><a href={'/help/' + provider + '.html'} target="_blank" rel="noopener noreferrer">没有账户？查看接入方法 ›</a></p>}
         </div>
         <div className="op-hint"><span className="op-hint-icon" aria-hidden="true"><VenueEmblem emblem="leaf" /></span><span>接入后，会先试一句话，<br />看看能不能正常回答。</span></div>
@@ -272,8 +277,10 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
         <p className="op-desc">填一个学生认得的称呼。<br />登记好，就可以起馆名了。</p>
         <div className="op-card">
           <label>学生怎么称呼您<input value={displayName} maxLength={STOREFRONT_LIMITS.displayName} disabled={busy} placeholder="例如：阿慈老师" onChange={event => { setDisplayName(event.target.value); setError('') }} /></label>
-          <label>登记口令<input type="password" autoComplete="off" disabled={busy} value={token} placeholder="粘贴收到的登记口令" onChange={event => setToken(event.target.value)} /></label>
-          <p className="op-card-note">用收到的登记口令完成登记。</p>
+          <label>登记口令<input type="password" autoComplete="off" disabled={busy} value={token} placeholder="粘贴收到的登记口令（空格和换行会自动去掉）" onChange={event => { setToken(normalizeSetupToken(event.target.value)); setError('') }} /></label>
+          <p className="op-card-note">口令在部署这台电脑上：<code>deploy/home/data/teacher-setup-code.txt</code>，在 WSL 终端里 <code>cat</code> 一下就能看到。</p>
+          <p className="op-card-note">它是一次性引导凭据：证明你是这台服务器的主人，防止别人抢注老师；<strong>用过就作废</strong>。</p>
+          <p className="op-card-note">直接粘贴即可，前后空格和换行会自动去掉，不用自己编。</p>
         </div>
         <div className="op-note-card">
           <strong>只登记这一次</strong>
