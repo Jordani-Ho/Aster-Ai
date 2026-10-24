@@ -3,7 +3,7 @@ import { assertAgentOutput, assertJson, sendAgentMessage } from './guard'
 
 export interface RunRequest { targetId: string; now?: Date }
 export interface RunResult<O> { key: string; status: 'draft' | 'delivered'; output: O }
-interface SavedRun<O> { taskId: string; targetId: string; side: AgentSide; localDay: string; at: string; status: 'draft' | 'delivered'; output: O }
+interface SavedRun<O> { taskId: string; targetId: string; side: AgentSide; confirm: 'human' | 'template'; localDay: string; at: string; status: 'draft' | 'delivered'; output: O }
 let queue: Promise<void> = Promise.resolve()
 function day(at: Date): string { return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}` }
 export function createRunner(options: {
@@ -25,7 +25,7 @@ export function createRunner(options: {
         phase = 'storage'
         let row = await store.get('agent-runs', key) as SavedRun<O> | undefined
         if (row) {
-          if (row.taskId !== task.id || row.targetId !== request.targetId || row.side !== task.side || row.localDay !== localDay || !['draft', 'delivered'].includes(row.status)) throw new AgentError('input')
+          if (row.taskId !== task.id || row.targetId !== request.targetId || row.side !== task.side || row.confirm !== task.confirm || row.localDay !== localDay || !['draft', 'delivered'].includes(row.status)) throw new AgentError('input')
           assertAgentOutput(row.output)
         } else {
           if (confirm) throw new AgentError('input')
@@ -37,7 +37,7 @@ export function createRunner(options: {
           if (tokens > options.maxTokens) throw new AgentError('budget')
           const output = await task.run(structuredClone(materials))
           assertAgentOutput(output)
-          row = { taskId: task.id, targetId: request.targetId, side: task.side, localDay, at: at.toISOString(), status: 'draft', output: structuredClone(output) }
+          row = { taskId: task.id, targetId: request.targetId, side: task.side, confirm: task.confirm, localDay, at: at.toISOString(), status: 'draft', output: structuredClone(output) }
           phase = 'storage'
           await store.put('agent-runs', key, row)
         }

@@ -29,6 +29,8 @@ describe('V2-21 任务与输入边界', () => {
       results[0].output.text = 'mutated'
       expect((await runner.run(task, request)).output.text).toBe('SYNTHETIC')
       expect(task.deliver).not.toHaveBeenCalled()
+      // 不能把已有的真人草稿换一个同名自动任务，就绕过真人确认。
+      await expect(runner.run(job({ confirm: 'template' }), request)).rejects.toThrow()
       await runner.confirm(task, request); await runner.confirm(task, request)
       expect(task.deliver).toHaveBeenCalledOnce()
     } finally { store.close() }
