@@ -22,6 +22,7 @@ import {
   startSession,
   type IntakeSession,
 } from '../intake/session'
+import type { PhotoResult } from '../intake/photo'
 import { localDay } from '../homework/schedule'
 import {
   addTeacher,
@@ -135,12 +136,14 @@ async function nodes(options: { studentNotifier?: (pubkey: string) => Promise<vo
 
 // 合成照片：任意字节 + 真实 sha256，模拟 M1-09 处理后的结果。
 async function syntheticPhotos(count: number) {
-  const photos: { ref: { id: string; type: 'photo'; sha256: string; bytes: number }; data: Uint8Array }[] = []
+  const photos: PhotoResult[] = []
   for (let index = 0; index < count; index += 1) {
     const data = new Uint8Array([index + 1, 2, 3, index + 4, 5, 6])
     photos.push({
       ref: { id: (index + 1).toString(16).padStart(32, '0'), type: 'photo', sha256: await sha256Hex(data), bytes: data.length },
       data,
+      source: { width: 1200, height: 1600 },
+      image: { width: 1200, height: 1600 },
     })
   }
   return photos

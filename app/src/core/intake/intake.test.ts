@@ -192,6 +192,9 @@ describe('M1-09 学生采集验收', () => {
     const result = await processPhoto({ bytes: dirty, type: 'image/jpeg' }, { codec })
     expect(draws).toEqual([{ width: 1600, height: 1067 }])
     expect(qualities).toEqual([0.8, 0.6])
+    // V2-20：把原图尺寸和实际写出的尺寸都带出来（舌头短边门槛用前者判断“离得够不够近”）。
+    expect(result.source).toEqual({ width: 3000, height: 2000 })
+    expect(result.image).toEqual({ width: 1600, height: 1067 })
     expect(result.data.length).toBeLessThanOrEqual(MAX_BYTES)
     expect(result.ref.type).toBe('photo')
     expect(result.ref.bytes).toBe(result.data.length)
@@ -339,7 +342,7 @@ describe('M1-09 学生采集验收', () => {
     const state = await confirmedOffline()
     const data = new Uint8Array([1, 2, 3, 4])
     const ref = { id: 'att-1', type: 'photo' as const, sha256: 'a'.repeat(64), bytes: data.length }
-    const withPhoto = addPhoto(state, { ref, data })
+    const withPhoto = addPhoto(state, { ref, data, source: { width: 1200, height: 1600 }, image: { width: 1200, height: 1600 } })
     const pkg = buildConsultPackage(withPhoto, emptyProfile(), [], [{ ref, data }])
     expect(pkg.encounter.intake.attachments).toEqual([ref])
     const mismatched = [

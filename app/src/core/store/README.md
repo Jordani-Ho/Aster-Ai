@@ -59,6 +59,7 @@ V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`
 | `self-ratings` / `self-stress` | 每日状态/压力自评 `{date,score,shichen?,jieqi?,city?}` | 同日覆盖；后三项为 V2-02 天时 |
 | `tongue-records` | 每日抽象舌象 `{kind,features,svg,shichen,jieqi,city,lightingNote?,crop?}`（键 YYYY-MM-DD） | V2-08：特征可“不确定”，记录引用裁剪图；重拍覆盖当天记录 |
 | `tongue-crops` | 镜子的舌头裁剪图字节 `{id, at, data}`（键为裁剪图 id） | V2-08：只留最新一张；按保留期限删，原图从不入库 |
+| `tongue-failures` | 舌头拍摄失败类别 `{id, at, kind}`（kind = photo_format / no_tongue / model_unavailable / model_account / model_unsupported） | V2-20：只记类别，不存照片与模型原文；只留最近 100 条 |
 | `ledger-index` / `ledger-*` | 康币账本索引与每本师生账 `{ledger,notices,conflicts,receipts,pendingDisputes,outbox}` | 单一写入者记账链 |
 | `pilot-metrics` | 试点指标 `{idPrefix,durationMs,modificationRate,missingRate,resemblance,homeworkAdherence?}` | 只有数值，无身份/原文 |
 | `student-adherence` | 老师端学生本周坚持率小结（键为学生公钥） | 学生主动上报的数值，无原文 |

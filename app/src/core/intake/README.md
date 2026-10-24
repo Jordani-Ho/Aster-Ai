@@ -6,7 +6,7 @@ V2-03：问诊页不再使用 `processPhoto/addPhoto` 收集原图附件；共�
 
 ## 模块
 
-- `photo.ts`：手机拍照处理。长边缩到 ≤1600 像素、JPEG 质量 0.8 重新编码；每张 ≤500 KB（超限按 0.8 → 0.6 → 0.4 逐级降质量重编码），最多 4 张。生成 `AttachmentRef`（sha256、bytes）。只用浏览器自带能力（`createImageBitmap` + canvas），不新增依赖；测试注入 `PhotoCodec` 替身，不需要浏览器。V2 起不再逐段剥离 EXIF（canvas 重编码本身不保留原图元数据；继续逐段解析属多余层，已删）。
+- `photo.ts`：手机拍照处理。长边缩到 ≤1600 像素、JPEG 质量 0.8 重新编码；每张 ≤500 KB（超限按 0.8 → 0.6 → 0.4 逐级降质量重编码），最多 4 张。生成 `AttachmentRef`（sha256、bytes）。只用浏览器自带能力（`createImageBitmap` + canvas），不新增依赖；测试注入 `PhotoCodec` 替身，不需要浏览器。V2 起不再逐段剥离 EXIF（canvas 重编码本身不保留原图元数据；继续逐段解析属多余层，已删）。V2-20 起返回值另带 `source`（解码出的原图尺寸）与 `image`（实际写出的尺寸）；舌象路径用 `source` 判断离得够不够近。
 - `followup.ts`：追问与整理。模型（经 `core/llm` 的用户模型客户端）只做两件事：从学生**原话**里逐字摘取片段归入 `intake` 字段、指出还缺哪些 focus。所有片段必须能在学生原话里找到（逐字子串），否则丢弃——模型改写、编造或夹带“把来源写成 teacher”都不会生效。断网或模型失败时退回固定问句（`domain/tcm/templates/default-questions.json`），流程不中断。每轮最多问 2 项，最多 3 轮，之后直接进确认页。
 - `session.ts`：采集状态机。只记录学生原话、整理结果与追问；V2-18 起不判断急症或心理状况，也不产生任何标记。确认页展示整理结果（学生可改任何一项，来源仍是 `student`）；未在确认页看过（`markReviewed`）不能进问诊包。`confirmAndSend` 只由学生点“确认发送”触发，先调用注入的 `send(pkg)`，成功后保存本人副本并删除草稿。确认发送的代码路径不调用模型。
 - `profile` / 历史病历：`buildConsultPackage` 的 `profile` 从本机常驻档案（`profile` 集合）读；历史病历从 `student-records` 集合读，默认勾选同一位老师的近 3 次（`defaultHistorySelection`），学生取消后不进包。V2-06：确认发送时把 `heavenStampOf(await heavenNow(store))` 作为 `options.heaven` 传进来，写进问诊包与病历（家人问诊用家人分片的城市）；`heaven` 可选，缺了不影响发送。

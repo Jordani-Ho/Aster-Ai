@@ -29,7 +29,7 @@ Object.assign(window,{inspectAbstractor:async()=>{
   const tx=opened.transaction('records'), rows=await new Promise<unknown[]>((resolve,reject)=>{const r=tx.objectStore('records').getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})
   dumps.push(rows);opened.close()
  }
- return {dumps,sent,root:await store.list('tongue-records'),family:await scoped.list('tongue-records'),teacher:await target.list('consult-package'),familyDraft:await loadDraft(scoped)}
+ return {dumps,sent,root:await store.list('tongue-records'),tongueCrops:await store.list('tongue-crops'),tongueFailures:await store.list('tongue-failures'),family:await scoped.list('tongue-records'),teacher:await target.list('consult-package'),familyDraft:await loadDraft(scoped)}
 }})
 function Harness(){const [tab,setTab]=useState('today'),[family,setFamily]=useState(false);const current=family?scoped:store;return <><button onClick={()=>setTab(value=>value==='today'?'consult':'today')}>切换页面</button><button aria-pressed={family} onClick={()=>setFamily(value=>!value)}>切换家人</button>{tab==='today'?<StudentToday key={String(family)} store={current} modelStore={store} settingsStore={store} identity={identity} llm={null} teacher={teacher.publicKey} teacherCall="阿慈老师" teacherName="合成养生馆" onConsult={()=>setTab('consult')} onHomework={()=>{}} onCheckedIn={()=>{}} />:<ConsultPage key={String(family)} store={current} modelStore={store} identity={identity} llm={null} sendConsult={send}/>}</>}
 createRoot(document.getElementById('root')!).render(<Harness/> )

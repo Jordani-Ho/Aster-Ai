@@ -20,6 +20,8 @@ V2-16：新界面第一批。`phone.browser.mjs` 换成新外壳场景：老师�
 
 V2-17：新界面第二批，一页对一张设计稿。`phone.browser.mjs` 场景扩到建馆五步（05a–05e 逐页截图，并把模型→登记→起馆名→开馆→1 小时邀请整条走通）、老师「学生」名单（06，搜索/全部/最近来过/坚持标签）→「一位学生」（07，当前方案/坚持情况/历次病历/钱账）→「＋ 开始面诊」直接进面诊页、老师「我的馆」（08，馆卡片/邀请主按钮/门面/钱账总览/设置）、学生进馆首屏（09）、问诊三步 10a→10b→10c（说一说→再问一句→看一眼卡片再发出）、急症 10d（只提醒不拦截、仍能发出）、记录（11）、我（12），并保留 V2-16 今天/面诊/核对/学生首页回归。非 CI 写 15 张 375px 截图 `docs/screenshots/phone-teacher-opening-{model,register,name,open,invite}.png`、`phone-teacher-{students,student,hall}.png`、`phone-student-{welcome,consult-speak,consult-followup,consult-card,consult-emergency,records,me}.png`。新增单元测试 `app/src/teacher-students.test.ts`（名单排序/搜索/最近来过/本周三档）与 `app/src/records-trend.test.ts`（近四周趋势）。`teacher.spec.ts`/`money.spec.ts`/`flow.spec.ts`/`onboarding.spec.ts` 同步到新导航（我的馆里的设置与门面行、我→余额卡、问诊三步按钮）。CI 运行全部浏览器脚本与 Playwright。
 
+V2-20：舌象修复。新增 `e2e/tongue.browser.mjs`，在 **Chromium（华为浏览器 UA，412×915 / 448×924 / 抽样 375，DPR 3）与 WebKit（iPhone 15 Pro，393×852，DPR 3，iPhone UA）** 两个内核上跑：镜子裁剪图 100% 可见（contain、元素按图片宽高比、完整落在框内）、`image/jpg`/大写/空 MIME/长边 6000 图都能送出且请求里是 ≤1600 的 JPEG、模型回复带围栏/说明/0–1000 框/多字段都能解析而乱码失败、1% 面积但短边 160 通过而短边 100 提示靠近、503 一次自动重试成功/连续 503 提示稍后再拍/401 提示检查账户、HEIC 两内核都解不开时给“格式打不开”且不请求模型。非 CI 写两张截图 `docs/screenshots/tongue-mirror-{huawei,iphone}.png`；CI 安装 WebKit 并运行本脚本（`npx playwright install --with-deps chromium webkit`）。`abstractor.browser.mjs` 同步到新文案与 112px 镜子高度。
+
 这里只运行合成身份和资料。M1-15a 合并后接入完整九步问诊与四条硬性验收，使用真实编译中继、真实网关和 Chromium；模型与推送为本地替身，不需要 API Key。
 
 ## 一条命令

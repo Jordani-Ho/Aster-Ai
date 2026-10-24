@@ -5,14 +5,15 @@ import { createIdentity } from '../identity'
 import { openStore, type LocalStore } from '../store'
 import type { VisionClient } from '../llm/vision'
 import { captureTongue, latestTongueCrop, listTongueDays, loadTongue, saveTongue, TONGUE_CROPS } from './index'
-import type { TongueCropCodec } from '../intake/photo'
+import type { PhotoCodec, TongueCropCodec } from '../intake/photo'
+import { TONGUE_TOO_FAR_MESSAGE } from './failures'
 import { addTongue, buildConsultPackage, emptyProfile, markReviewed, startSession, INTAKE_COLLECTIONS } from '../intake/session'
 import template from '../../../../domain/tcm/templates/default.json'
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
 import type { Encounter, Field } from '../record/types'
 import {
   parseTongueAbstract, parseTongueBox, parseTongueFeatures, tongueColorNote, tongueNeedsCheck,
-  tongueSvg, tongueSummary, withTongueFeature, TONGUE_BOX_MIN_RATIO, TONGUE_RETAKE,
+  tongueSvg, tongueSummary, withTongueFeature,
   type TongueAbstract, type TongueFeatures,
 } from '../../../../domain/tcm/tongue'
 import { runRetention } from '../records/retention'
@@ -21,7 +22,7 @@ import { TONGUE_LEVEL_DEFAULT, loadTongueLevel, saveTongueLevel } from './level'
 
 // 全部用合成图、合成身份、fake-indexeddb；不连真实 relay/gateway，也不含真人照片。
 const PNG = readFileSync(new URL('../abstractor/fixtures/tongue.png', import.meta.url))
-const W = 120, H = 120
+const W = 480, H = 480
 const TONGUE_PIXEL = [230, 150, 160, 255]
 const NOSE_PIXEL = [255, 0, 200, 255]
 const BACKGROUND = [248, 248, 244, 255]
@@ -37,14 +38,25 @@ async function newStore(): Promise<LocalStore> {
   return store
 }
 
-// 合成图：舌头占中间 60×60（粉色），左上角一块“鼻子”色块（品红），背景米白。
+// 合成图：舌头占中间 240×240（粉色），左上角一块“鼻子”色块（品红），背景米白。
 function syntheticRaster(): { pixels: Uint8Array; width: number; height: number } {
   const pixels = new Uint8Array(W * H * 4)
   const put = (x: number, y: number, rgba: number[]) => { const at = (y * W + x) * 4; pixels.set(rgba, at) }
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) put(x, y, BACKGROUND)
-  for (let y = 0; y < 30; y++) for (let x = 0; x < 30; x++) put(x, y, NOSE_PIXEL)
-  for (let y = 30; y < 90; y++) for (let x = 30; x < 90; x++) put(x, y, TONGUE_PIXEL)
+  for (let y = 0; y < 120; y++) for (let x = 0; x < 120; x++) put(x, y, NOSE_PIXEL)
+  for (let y = 120; y < 360; y++) for (let x = 120; x < 360; x++) put(x, y, TONGUE_PIXEL)
   return { pixels, width: W, height: H }
+}
+
+// V2-20：captureTongue 现在先走 processPhoto（长边 ≤1600、重编码 JPEG）。单元测试注入合成编解码：
+// 解码报告 480×480、重编码返回最小合法 JPEG 头，裁剪仍用像素级 rasterCodec。
+function syntheticPhotoCodec(raster = syntheticRaster()): PhotoCodec {
+  return {
+    async decode() { return { source: raster, width: raster.width, height: raster.height } },
+    draw() {
+      return { toJpeg: async () => new Uint8Array([0xff, 0xd8, 0xff, 0xd9]) }
+    },
+  }
 }
 
 // 可注入的裁剪编解码：crop 只取矩形内的像素，输出原始 RGBA 字节（便于断言“鼻子像素没进来”）。
@@ -81,13 +93,13 @@ function recordOf(features: Partial<TongueFeatures> = {}, extra: Partial<TongueA
   return parseTongueAbstract({ kind: 'tongue', features: merged, svg: tongueSvg(merged), shichen: '辰', jieqi: '寒露', city: '北京市', ...extra })
 }
 
-describe('V2-08 验收 1–2：只留舌头框内的裁剪图，框太小不生成记录', () => {
+describe('V2-08 验收 1–2（V2-20 改门槛）：只留舌头框内的裁剪图，短边不够不生成记录', () => {
   it('合成图（舌头 + 鼻子色块）处理后只存舌头框内裁剪图，找不到鼻子像素；原图字节清零', async () => {
     const store = await newStore()
     const photo = { bytes: new Uint8Array(PNG), type: 'image/png' }
     const original = photo.bytes!
-    // 舌头框 (0.25, 0.25, 0.5, 0.5) → 像素矩形 (30,30,60,60)，只覆盖舌头，不含左上角鼻子。
-    const { record, crop } = await captureTongue(photo, CONTEXT, model({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 }), { codec: rasterCodec() })
+    // 舌头框 (0.25, 0.25, 0.5, 0.5) → 像素矩形 (120,120,240,240)，只覆盖舌头，不含左上角鼻子；短边 240 ≥160。
+    const { record, crop } = await captureTongue(photo, CONTEXT, model({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 }), { codec: rasterCodec(), photoCodec: syntheticPhotoCodec() })
     expect(photo.bytes).toBeNull()
     expect(original.every(byte => byte === 0)).toBe(true)
     expect(record.crop?.bytes).toBe(crop.length)
@@ -106,18 +118,24 @@ describe('V2-08 验收 1–2：只留舌头框内的裁剪图，框太小不生�
     expect(dump).not.toContain(PNG.toString('base64'))
   })
 
-  it('模型返回的框只占 3% → 提示重拍，不生成记录，原图仍清零', async () => {
+  it('裁剪后短边 96 <160 → 提示靠近一点，不生成记录，原图仍清零；面积不再是门槛', async () => {
     const store = await newStore()
     const photo = { bytes: new Uint8Array(PNG), type: 'image/png' }
     const original = photo.bytes!
-    expect(TONGUE_BOX_MIN_RATIO).toBe(0.05)
-    expect(() => parseTongueBox({ x: 0.1, y: 0.1, width: 0.3, height: 0.1 })).toThrow(TONGUE_RETAKE) // 3% 必须被拒
-    await expect(captureTongue(photo, CONTEXT, model({ x: 0.1, y: 0.1, width: 0.3, height: 0.1 }), { codec: rasterCodec() }))
-      .rejects.toThrow(TONGUE_RETAKE)
+    // 面积仍有 10%，但短边只有 96：V2-20 起按短边判，必须拒。
+    expect(() => parseTongueBox({ x: 0.1, y: 0.1, width: 0.6, height: 0.6 })).not.toThrow()
+    await expect(captureTongue(photo, CONTEXT, model({ x: 0.1, y: 0.1, width: 0.2, height: 0.2 }), { codec: rasterCodec(), photoCodec: syntheticPhotoCodec() }))
+      .rejects.toThrow(TONGUE_TOO_FAR_MESSAGE)
     expect(photo.bytes).toBeNull()
     expect(original.every(byte => byte === 0)).toBe(true)
     expect(await store.list('tongue-records')).toEqual([])
     expect(await store.list(TONGUE_CROPS)).toEqual([])
+  })
+
+  it('0–1000 坐标与多余字段能解析；越界仍拒绝', () => {
+    expect(parseTongueBox({ x: 120, y: 120, width: 240, height: 240, score: 0.9 })).toEqual({ x: 0.12, y: 0.12, width: 0.24, height: 0.24 })
+    expect(() => parseTongueBox({ x: 0.1, y: 0.1, width: 0.95, height: 0.9 })).toThrow()
+    expect(() => parseTongueBox({ x: 100, y: 100, width: 950, height: 900 })).toThrow()
   })
 })
 
@@ -218,7 +236,7 @@ describe('V2-08 验收 5：镜子只留最新裁剪图；问诊裁剪图按保�
 describe('V2-08 验收 6：没有代码把原图写进存储或发给中继', () => {
   it('问诊包与所有集合里都没有原图；只有裁剪图字节在附件通道里', async () => {
     const photo = { bytes: new Uint8Array(PNG), type: 'image/png' }
-    const { record, crop } = await captureTongue(photo, CONTEXT, model({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 }), { codec: rasterCodec() })
+    const { record, crop } = await captureTongue(photo, CONTEXT, model({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 }), { codec: rasterCodec(), photoCodec: syntheticPhotoCodec() })
     const session = addTongue(markReviewed({ ...startSession({ student: 'a'.repeat(64), teacher: 'b'.repeat(64), template: template as TeacherTemplate }), phase: 'confirm' as const }), record)
     const pkg = buildConsultPackage(session, emptyProfile(), [], [{ ref: { ...record.crop! }, data: crop }])
     const wire = JSON.stringify(pkg)
