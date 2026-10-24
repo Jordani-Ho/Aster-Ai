@@ -13,6 +13,7 @@ import { calculateMetric, saveMetric, rateMetric } from './core/pilot'
 import { teacherCases, teacherRecordsOf, type LoadedTeacherRecord } from './core/records/teacher'
 import { loadTeacherTemplate } from './core/drafting/template'
 import { draftEncounter } from './core/drafting'
+import { priorMaterials } from './core/drafting/materials'
 import { reviseEncounter } from './core/drafting/revise'
 import { TonguePair } from './TonguePair'
 import { TeacherCarePlan } from './TeacherCarePlan'
@@ -49,6 +50,7 @@ function MiniTrend({ trend }: { trend: { days: string[]; scores: (number | null)
 export function RemoteReview({ identity, store, consult, llm, send, ledger, onExit }: RemoteReviewProps) {
   const startedAt = useRef(Date.now()), signedAt = useRef<number | null>(null), metricKey = useRef('')
   const [draft, setDraft] = useState<Encounter | null>(null)
+  const [materialNote, setMaterialNote] = useState<string[]>([])
   const [previous, setPrevious] = useState<LoadedTeacherRecord | null>(null)
   const [tongues, setTongues] = useState<TongueAbstract[] | null>(null)
   const [charge, setCharge] = useState('')
@@ -89,11 +91,20 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
         if (llm) {
           setStatus('正在整理草稿，老师看过整张卡片后签字发出。')
           let draftError = ''
-          next = await draftEncounter(pkg, await loadTeacherTemplate(store), await teacherCases(store), llm, { level: 'prescription', onError: text => { draftError = text } })
+          // V2-19：只带这位学生、这件事的材料；旧病历可减，模板与问诊包不可减。
+          const result = await draftEncounter(pkg, {
+            template: await loadTeacherTemplate(store),
+            prior: priorMaterials(rows),
+            cases: await teacherCases(store, { forStudent: consult.encounter.student }),
+          }, llm, { level: 'prescription', onError: text => { draftError = text } })
           if (draftError) throw Error(draftError)
+          if (!active) return
+          setMaterialNote(result.note)
+          next = result.encounter
           setStatus('草稿尚未签字，改稿不会自动发出。')
         } else {
           setStatus('未配置模型：没有 AI 草稿，核对问诊资料后直接签字。')
+          if (active) setMaterialNote([])
           next = structuredClone(ready.encounter)
         }
         const heaven = ready.heaven ?? ready.encounter.heaven
@@ -212,6 +223,7 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
     encounter={draft}
     alias={alias}
     subtitle="四诊已记好 · 下面是智能体的草稿"
+    materialNote={materialNote}
     previousPrescription={previousPrescription}
     previousEventId={previous?.eventId ?? null}
     comparison={comparison}

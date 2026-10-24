@@ -6,7 +6,8 @@
 
 - 集合 `teacher-records`：键为签名事件 id，值为 `{ eventId, encounterId, version, student, createdAt, eventJson }`。`eventJson` 是 kind 2730 的完整签名事件（content 是整份 Encounter），V2 不再要求去标识。
 - 写入：远程 `completeConsultSigning` 与面诊 `signAndHandoverInPerson` 在发送成功后调用 `saveTeacherRecord`；同一事件重放只覆盖相同内容。写入前重算事件 id、验签（E-004）并核对 `teacher`/`p` 标签，学生回发的备份走同一条路。
-- 读：`teacherStudents`（面诊选“已有学生”，按学生公钥去重）、`teacherCases`（起草时的医案检索，投影为 `DraftCase`，id 用签名事件 id）、`latestTeacherRecord`（改方时取上一版事件 id）。`revisedEncounter` 生成下一版：`version + 1`、`supersedes` 指向旧版事件 id，方子变了还把 `previousOf` 指向旧版。
+- 读：`teacherStudents`（面诊选“已有学生”，按学生公钥去重）、`teacherCases`（起草时的医案检索，只取老师亲手改过的病历，投影为 `DraftCase`，id 用签名事件 id）、`latestTeacherRecord`（改方时取上一版事件 id）。`revisedEncounter` 生成下一版：`version + 1`、`supersedes` 指向旧版事件 id，方子变了还把 `previousOf` 指向旧版。
+- V2-19 只向签字学：`teacherCases(store, { forStudent })` 只取老师签了字、且 `judgment`/`plan` 里有老师亲手写过字段（来源 teacher、`note` 不是 `ai_accepted`）的病历；按意见让智能体改过的字段在签字后是 `teacher_directed`，也算“老师改过”。同一 encounter 只取最新版本；当前这位学生自己的病历不重复进医案（它作为旧病历材料带上）；老师亲手改方时写的 `changeReason` 与处方一起给模型。一字未改就签的病历（`ai_accepted`）只计入 `teacherCaseStats(store)` 的「认可」数，不进相似医案，也不接界面。口径来源：`docs/schemas/encounter.md` 第 3 节——接受 AI 草稿时 `note: ai_accepted`，按意见改稿时 `note: teacher_directed`，亲手修改时不写 note。
 - 康币扣费的 `recordHash` 就是这份签名事件 id，账本与医案对得上。
 - 集合 `teacher-students`：老师认得的学生的公钥名单（不含病历内容）；收到问诊或签字医案时自动登记，换手机后靠它逐个向学生要回病历。
 
@@ -46,4 +47,4 @@
 
 ## 验证
 
-`app/src/core/records/records.test.ts`（9 项，全部合成身份/病历与 fake-indexeddb）：验收 0 两条路径各存一份完整病历、起草检索、改方 `previousOf`、扣费 `recordHash`；验收 1 保留 30 天第 31 天两端删除而调养方案还在，学生端收到的签名病历也按期限删、保留期内还在；验收 2 学生清空后自动收回；验收 3 老师医案丢失后从两位学生逐个收回；另加陌生发件人/回包校验与“代码里搜不到旧集合名”的扫描。
+`app/src/core/records/records.test.ts`（10 项，全部合成身份/病历与 fake-indexeddb）：验收 0 两条路径各存一份完整病历、起草检索、改方 `previousOf`、扣费 `recordHash`；验收 1 保留 30 天第 31 天两端删除而调养方案还在，学生端收到的签名病历也按期限删、保留期内还在；验收 2 学生清空后自动收回；验收 3 老师医案丢失后从两位学生逐个收回；V2-19 只向签字学（改过的进医案并带加减理由、按意见改稿算改过、原样确认只计认可、被篡改的签字不进医案）；另加陌生发件人/回包校验与“代码里搜不到旧集合名”的扫描。

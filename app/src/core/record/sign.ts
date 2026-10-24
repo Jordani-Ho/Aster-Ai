@@ -1,5 +1,6 @@
 import { finalizeEvent, getEventHash, getPublicKey, verifyEvent } from 'nostr-tools/pure'
 import type { Encounter, Field } from './types'
+import { AI_ACCEPTED_NOTE, TEACHER_DIRECTED_NOTE } from './notes'
 import { parseTongueAbstract } from '../../../../domain/tcm/tongue'
 
 // 签字病历是一条 kind 2730 的 Nostr 签名事件，content 是完整的 Encounter JSON。
@@ -193,6 +194,7 @@ export function nextVersion(
 }
 
 // 仅由真人点击“签字发出”调用；纯数据转换，不起草、不签名、不访问模型。
+// V2-19：按老师意见改稿的字段（teacher_directed）保留标记，其余剩余草稿标记 ai_accepted。
 export function acceptDraftForSigning(encounter: Encounter): Encounter {
   const result = structuredClone(encounter)
   for (const section of [result.fourExams, result.judgment, result.plan, result.outcome]) {
@@ -200,7 +202,8 @@ export function acceptDraftForSigning(encounter: Encounter): Encounter {
     for (const item of Object.values(section)) {
       for (const field of Array.isArray(item) ? item : [item]) {
         if (field && typeof field === 'object' && 'source' in field && field.source === 'ai_draft') {
-          field.source = 'teacher'; field.note = 'ai_accepted'
+          field.source = 'teacher'
+          field.note = field.note === TEACHER_DIRECTED_NOTE ? TEACHER_DIRECTED_NOTE : AI_ACCEPTED_NOTE
         }
       }
     }

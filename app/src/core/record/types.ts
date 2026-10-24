@@ -75,7 +75,7 @@ export interface Homework {
     | { kind: 'habit'; anchor: string }                // M1-23a：嵌进学生已有的日常习惯（如“拖地时”），不按钟点提醒
   durationDays?: number            // 持续多少天；省略表示直到下次复诊
   source: 'teacher' | 'ai_draft'   // 2026-10-16 补：作业也要有来源标签
-  note?: string                    // 老师接受 AI 草稿时写 'ai_accepted'
+  note?: string                    // 老师接受 AI 草稿时写 'ai_accepted'；按老师意见改稿写 'teacher_directed'
 }
 
 export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: string; bytes: number }

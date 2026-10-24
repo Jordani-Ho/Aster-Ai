@@ -19,16 +19,25 @@ describe('M1-20 整卡改稿与签字边界',()=>{
     const revised=await reviseEncounter(before,'去掉合成药甲',llm)
     expect(revised.plan.prescription.value?.items.map(i=>i.herb)).toEqual(['合成药乙'])
     expect(revised.plan.prescription.source).toBe('ai_draft')
+    // V2-19：按意见改到的字段带 teacher_directed，签字后仍算老师改过。
+    expect(revised.plan.prescription.note).toBe('teacher_directed')
     expect(revised.plan.homework).toEqual(before.plan.homework)
     expect(revised.teacher).toBe(before.teacher);expect(revised.intake).toEqual(before.intake)
     expect(()=>signEncounter(revised,key)).toThrow()
     const final=acceptDraftForSigning(revised)
     expect(pendingDraftFields(final)).toEqual([])
-    expect(final.plan.prescription).toMatchObject({source:'teacher',note:'ai_accepted'})
+    expect(final.plan.prescription).toMatchObject({source:'teacher',note:'teacher_directed'})
     expect(final.plan.homework[0]).toMatchObject({source:'teacher',note:'ai_accepted'})
     expect(final.outcome?.change.source).toBe('teacher')
     expect(JSON.parse(signEncounter(final,key).content)).toEqual(final)
     expect(before).toEqual(original);expect(revised.plan.prescription.source).toBe('ai_draft')
+  })
+  it('改稿改到的作业也带 teacher_directed，签字确认时保留',async()=>{
+    const llm={complete:vi.fn().mockResolvedValue(JSON.stringify({plan:{homework:[{title:'合成作业',detail:'合成要点',schedule:{kind:'daily',time:'21:00'}}]}})),stream:vi.fn()}
+    const revised=await reviseEncounter(draft(),'作业改成每晚九点',llm)
+    expect(revised.plan.homework[0]).toMatchObject({source:'ai_draft',note:'teacher_directed'})
+    const final=acceptDraftForSigning(revised)
+    expect(final.plan.homework[0]).toMatchObject({source:'teacher',note:'teacher_directed'})
   })
   it('格式错误、拒绝、超时不得抹掉原卡片或静默签字',async()=>{
     for(const reply of ['{}','不是JSON',JSON.stringify({plan:{prescription:{value:{items:[]}}}})]) {

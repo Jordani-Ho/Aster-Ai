@@ -39,3 +39,5 @@ settings/personal-model 保存 {provider,baseUrl,model,apiKey,testedAt}，写入
 每次 NIP-98 请求仍用 crypto.getRandomValues 生成 128 位随机 nonce，合法重试不复用旧事件，网关继续拒绝原事件重放。
 
 V2-03 的独立视觉路径见 [vision.md](vision.md)。它只调用本人所选视觉模型，不复用家里后备或图片代理；存储与 UI 接线待 V2-01。
+
+V2-19：上游 HTTP 错误改抛 `LlmRequestError`（带 `status`，消息仍是“模型请求失败：HTTP n”，不带上游回复正文）。`isQuotaExceeded(error)` 只认 402（余额不足）和 429（用量/频率超限），同时认 `personal.ts` 的 `ModelRequestError.status`。起草用它做材料降级重试；改稿、拆四诊、方案、记账没有可减材料，不做额度重试。注意 `personal.ts` 自家模型失败会先自动切家里后备模型，只有两条路都失败才会把额度错误交回调用方。

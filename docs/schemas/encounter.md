@@ -80,7 +80,7 @@ export interface Homework {
     | { kind: 'habit'; anchor: string }                // M1-23a：嵌进学生已有的日常习惯（如“拖地时”），不按钟点提醒
   durationDays?: number            // 持续多少天；省略表示直到下次复诊
   source: 'teacher' | 'ai_draft'   // 2026-10-16 补：作业也要有来源标签
-  note?: string                    // 老师接受 AI 草稿时写 'ai_accepted'
+  note?: string                    // 老师接受 AI 草稿时写 'ai_accepted'；按老师意见改稿写 'teacher_directed'
 }
 
 export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: string; bytes: number }
@@ -102,6 +102,7 @@ export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: st
 ## 3. 三条硬规则（写进代码，不只写进提示词）
 
 1. **签字前，判断和处理部分不能留有 `ai_draft`。** 签字界面要求老师逐项确认：接受时，来源改为 `teacher`，并在 `note` 里写 `ai_accepted`；修改时，来源改为 `teacher`。只要 `judgment`、`plan`、`fourExams` 里还有一项是 `ai_draft`，签字按钮就不可用，签名函数也直接拒绝。`plan.homework` 里的每一条作业同样适用：接受或修改后来源改为 `teacher`，还有一条是 `ai_draft` 就不能签字。
+   - 2026-10-23（V2-19）补：老师让智能体按自己的意见改稿（`reviseEncounter`）改到的字段，签字确认后来源为 `teacher`、`note` 为 `teacher_directed`；其余一字未改就接受的仍是 `ai_accepted`。`teacher_directed` 算“老师改过”（医案检索会用它学），`ai_accepted` 只算“认可”。
 2. **`intake` 只能来自学生。** 老师智能体起草时不得改写 `intake` 和 `profile`。唯一例外是面诊（`kind: 'in_person'`）：学生在老师面前，主诉由老师代录，来源为 `teacher`、`note` 为 `in_person`，学生端标“老师代录”（2026-10-17，M1-12）。
 3. **学生端只显示有有效签名的病历和医嘱**，并且签名人必须是这位学生自己的老师。
 

@@ -97,4 +97,13 @@ describe('V2-16 改方差异（合成数据）', () => {
     expect(next.plan.prescription.note).toBe('ai_accepted')
     expect(next.plan.principle.value).toBe('益气补血')
   })
+
+  it('按意见改稿的字段保留 teacher_directed，其余草稿确认成 ai_accepted', () => {
+    const source = encounter()
+    source.plan.prescription = { ...source.plan.prescription, note: 'teacher_directed' }
+    source.plan.homework = [{ ...source.plan.homework[0], note: 'teacher_directed' }]
+    const next = confirmBlock(confirmBlock(source, 'prescription'), 'homework')
+    expect(next.plan.prescription).toMatchObject({ source: 'teacher', note: 'teacher_directed' })
+    expect(next.plan.homework[0]).toMatchObject({ source: 'teacher', note: 'teacher_directed' })
+  })
 })

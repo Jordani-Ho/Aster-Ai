@@ -1,4 +1,5 @@
 import type { Encounter, Field, Homework, Prescription, Source } from './core/record/types'
+import { AI_ACCEPTED_NOTE, TEACHER_DIRECTED_NOTE } from './core/record/notes'
 import { pendingDraftFields } from './core/record/sign'
 
 // V2-16 核对签字页的纯逻辑：把病历拆成“一块一块”，草稿字段单独标出，
@@ -150,7 +151,9 @@ function clone(encounter: Encounter): Encounter {
 }
 
 function confirmed<T>(field: Field<T>): Field<T> {
-  return { ...field, source: 'teacher', note: 'ai_accepted' }
+  // V2-19：按老师意见改稿的字段保留 teacher_directed，签字后仍算“老师改过”。
+  const note = field.note === TEACHER_DIRECTED_NOTE ? TEACHER_DIRECTED_NOTE : AI_ACCEPTED_NOTE
+  return { ...field, source: 'teacher', note }
 }
 
 // 老师点“就这样”：这一块里的 AI 草稿转成老师确认；原文不改。
@@ -164,7 +167,9 @@ export function confirmBlock(encounter: Encounter, key: ReviewBlockKey): Encount
   } else if (key === 'prescription') {
     if (next.plan.prescription.source === 'ai_draft') next.plan.prescription = confirmed(next.plan.prescription)
   } else if (key === 'homework') {
-    next.plan.homework = next.plan.homework.map(item => (item.source === 'ai_draft' ? { ...item, source: 'teacher', note: 'ai_accepted' } : item))
+    next.plan.homework = next.plan.homework.map(item => (item.source === 'ai_draft'
+      ? { ...item, source: 'teacher', note: item.note === TEACHER_DIRECTED_NOTE ? TEACHER_DIRECTED_NOTE : AI_ACCEPTED_NOTE }
+      : item))
   } else {
     if (next.plan.advice.source === 'ai_draft') next.plan.advice = confirmed(next.plan.advice)
   }
