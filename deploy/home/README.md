@@ -50,13 +50,26 @@ Cloudflare 临时隧道**每次重启都会换网址**；换网址后重新跑 `
 
    登记成功后就可以「邀请学生」；把邀请链接发给另一台设备（学生）打开。
 4. 学生打开邀请链接 → 点「开始使用」→ 接入自己的模型 → 进入镜子页。
+   部署配了社区网关模型（`COMMUNITY_MODEL=1`）时，学生可以直接点「**先用社区模型开始**」，不用另外填 Key。
 
-## 四、日常启动与停止
+## 四、日常启动、停止与更新
 
 - 启动（不重新构建）：`cd deploy/home && docker compose --profile quick up -d`
   但临时隧道地址可能变了；**日常请直接重跑 `./quick-start.sh`**，它会等到网页可用并把新网址打印在最后一行。
 - 停止（数据保留）：`docker compose --profile quick down`
 - 看状态：`docker compose --profile quick ps`
+- **更新代码后（V2-28 起按这个来，不要手工动 `data/` 里的文件）**：
+  ```bash
+  cd ~/projects/Aster-Ai
+  git pull --ff-only
+  cd deploy/home
+  ./update.sh
+  ```
+  `update.sh` 会先备份成员名单与一次性口令（`data/backup/last/`），再重新生成配置、按需重建并重启容器，
+  最后核对名单人数与口令没变；`members.json` 被误删/清空时会先自动恢复，旧邀请不会失效。
+  `SKIP_BUILD=1 ./update.sh` 只重启不重建镜像；`NO_VERIFY=1` 跳过验收探测。
+- 让环境在整机重启后自己起来（WSL 保活、电源设置）与固定网址（Cloudflare 命名隧道）见
+  `docs/内测怎么开始.md` 第三节，命令都可直接粘贴。
 
 ## 五、验收
 
@@ -91,7 +104,15 @@ cd deploy/home
 - **Docker 没运行**：`sudo systemctl start docker`，或退出 WSL 重开后再试。
 - **想强制重建镜像**（改了代码以后）：`docker compose --profile quick build --no-cache relay gateway web`，再跑 `./quick-start.sh`。
 - **登记口令在哪**：`deploy/home/data/teacher-setup-code.txt`；只在本机，注册一次后仍然保留，别外传。
+- **名单/口令会不会被更新弄丢**：不会。`setup.sh` 与 `update.sh` 都会先备份 `data/gateway/members.json`、
+  `data/gateway/seed.json`、`data/teacher-setup-code.txt` 到 `data/backup/last/`；被误删或清空会先自动恢复，
+  更新后再核对人数与口令没变，不对就停下并说明。
+- **学生没有自己的模型 Key**：部署配了上游模型（`.env` 的 `UPSTREAM_API_KEY/BASE_URL/MODEL`）时，
+  `setup.sh` 会写 `COMMUNITY_MODEL=1`，学生端会出现「先用社区模型开始」，不用从电脑传 Key。
 
-## 九、下一步（现在不用做）
+## 九、固定域名与常驻（可选，见 `docs/内测怎么开始.md` 第三节）
 
-固定域名（Cloudflare Zero Trust 命名隧道）与香港/东京服务器是内测稳定后的第二步，届时另开部署卡；本文与脚本只覆盖临时隧道自测。
+- 固定网址：Cloudflare Zero Trust 命名隧道，`.env` 填 `APP_DOMAIN` / `RELAY_DOMAIN` / `CF_TUNNEL_TOKEN`，
+  再 `./start.sh`；以后 `./update.sh` 更新，网址不变。
+- WSL 保活：Windows 任务计划程序登录时拉起 WSL（隐藏运行）+ 接通电源不睡眠，整机重启后按文档验证。
+- 香港/东京服务器迁移仍留到内测稳定后另开部署卡。

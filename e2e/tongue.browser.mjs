@@ -150,6 +150,10 @@ for (const device of DEVICES) {
   expect(Math.abs(geometry.rect.width / geometry.rect.height - geometry.natural.width / geometry.natural.height)).toBeLessThan(0.01)
   expect(geometry.fillsAxis).toBe(true)
   expect(geometry.inside).toBe(true)
+  // V2-28：舌象保存提示在“照镜子”卡里，不出现在“今日作业”卡里；舌象区不再选居住城市。
+  expect((await page.locator('section[aria-label="照镜子"] [role=status]').allTextContents()).join('')).toContain('已保存舌象裁剪图')
+  expect(await page.locator('section[aria-label="今日作业"] [role=status]').count()).toBe(0)
+  expect(await page.locator('select[aria-label="舌象记录的居住城市"]').count()).toBe(0)
   if (device.shot) await page.locator('section[aria-label="照镜子"]').screenshot({ path: SHOTS + device.shot })
   deviceReport.cases.mirror = { ...geometry, added: mirror.added }
 
@@ -262,6 +266,27 @@ for (const device of DEVICES) {
   deviceReport.errors = errors
   expect(errors).toEqual([])
   report[device.name] = deviceReport
+  await context.close()
+}
+
+// V2-28：没填居住城市时，舌象区不再弹城市下拉，而是提示先去「我 → 我的时间」；按钮不可点。
+{
+  const context = await browser.chromium.newContext({ viewport: { width: 375, height: 812 } })
+  const page = await context.newPage()
+  await page.route('https://geocoding-api.open-meteo.com/**', route => route.fulfill({ status: 200, body: '{}' }))
+  await page.route('https://api.open-meteo.com/**', route => route.fulfill({ status: 200, body: '{}' }))
+  await page.goto(`${origin}/@fs/${root}e2e/abstractor.html?city=none`)
+  await page.waitForLoadState('networkidle')
+  await page.waitForTimeout(1800)
+  const noCity = {
+    selects: await page.locator('select[aria-label="舌象记录的居住城市"]').count(),
+    hint: await page.getByText('还没填居住城市', { exact: false }).count(),
+    enabled: await page.getByRole('button', { name: '拍今天的舌象', exact: true }).isEnabled(),
+  }
+  report.cityMissing = noCity
+  expect(noCity.selects).toBe(0)
+  expect(noCity.hint).toBeGreaterThan(0)
+  expect(noCity.enabled).toBe(false)
   await context.close()
 }
 

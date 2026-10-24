@@ -65,6 +65,8 @@ export function StudentToday({
   const [recordLabel, setRecordLabel] = useState('上次')
   const [cropUrl, setCropUrl] = useState('')
   const [status, setStatus] = useState('')
+  // V2-28：舌象保存提示只出现在“照镜子”卡里；打卡提示仍留在“今日作业”。
+  const [mirrorStatus, setMirrorStatus] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   // 刚拍完的舌象不能被“读本机旧记录”的异步结果覆盖（CI 上两者会抢）。
@@ -202,8 +204,9 @@ export function StudentToday({
         setRecord(next); setRecordLabel('今天')
         const blob = new Blob([crop.slice().buffer as ArrayBuffer], { type: 'image/jpeg' })
         setCropUrl(previous => { if (previous) URL.revokeObjectURL(previous); return URL.createObjectURL(blob) })
-        setStatus('已保存舌象裁剪图与候选特征，原图已从应用内清除')
+        setMirrorStatus('已保存舌象裁剪图与候选特征，原图已从应用内清除')
       }} />
+      {mirrorStatus && <p role="status" className="nl-quiet">{mirrorStatus}</p>}
     </section>
 
     <section className="nl-card" aria-label="今日作业">

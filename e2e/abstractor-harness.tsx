@@ -13,9 +13,11 @@ import type { ConsultPackage } from '../app/src/core/record/types'
 async function node(name:string) {const prior=await resumeStore({name});if(prior)return prior;const identity=createIdentity();return {identity,store:await openStore(identity,{name})}}
 const {identity,store}=await node('abstractor-browser'),{identity:teacher,store:target}=await node('abstractor-teacher')
 const scoped=store.scoped('f1-')
+// V2-28：?city=none 用来验证“舌象区不再选城市、没城市时提示先去我的时间选”。
+const NO_CITY=new URLSearchParams(location.search).get('city')==='none'
 await savePersonalModel(store,{provider:'qwen',baseUrl:'https://synthetic.invalid/v1',model:'qwen3-vl-plus',apiKey:'SYNTHETIC',testedAt:new Date().toISOString()})
 for(const current of [store,scoped]) {
- const profile=await loadProfile(current);profile.city={value:'北京市',source:'student'};await saveProfile(current,profile)
+ const profile=await loadProfile(current);profile.city={value:NO_CITY?null:'北京市',source:'student'};await saveProfile(current,profile)
  await addTeacher(current,teacher.publicKey)
  if(!await loadDraft(current))await saveDraft(current,markReviewed({...startSession({student:identity.publicKey,teacher:teacher.publicKey,template:template as TeacherTemplate}),phase:'confirm'}))
 }

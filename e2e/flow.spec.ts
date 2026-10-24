@@ -124,8 +124,19 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
     if(!route.request().postData()?.includes('image_url'))return route.fallback()
     await route.fulfill({contentType:'application/json',body:JSON.stringify({choices:[{message:{content:JSON.stringify({color:'pale',coatingColor:'white',coatingThickness:'thin',shape:'wide',teeth:[],cracks:[],confidence:0.7,box:{x:0.2,y:0.2,width:0.6,height:0.6},lightingNote:false})}}]})})
   })
+  // V2-28：舌象区不再选居住城市（城市来自“我 → 我的时间”/基础信息）。这里直接写入本机档案，
+  // 等价于在设置里选过；随后拍舌象按钮才可用。
+  await student.evaluate(async () => {
+    const storeModule='/src/core/store/index.ts',sessionModule='/src/core/intake/session.ts'
+    const s=await(await import(storeModule)).resumeStore()
+    try {
+      const {loadProfile,saveProfile}=await import(sessionModule)
+      const profile=await loadProfile(s.store)
+      profile.city={value:'北京市',source:'student'}
+      await saveProfile(s.store,profile)
+    } finally {s.store.close();s.identity.privateKey.fill(0)}
+  })
   await student.getByRole('button',{name:/去拍/}).click()
-  await student.getByLabel('舌象记录的居住城市').selectOption('北京市')
   await expect(student.getByRole('button',{name:'拍舌象 / 重拍',exact:true})).toBeEnabled()
   await student.locator('input[type=file]').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:png})
   await expect(student.locator('figure svg')).toHaveCount(1)

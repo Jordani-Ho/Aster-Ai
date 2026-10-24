@@ -66,6 +66,7 @@ V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`
 | `family/members` | 家人清单 `{account,alias,relation,gender,birthDate,city,publicKey,privateKey}` | 私钥直接存本机（V2 不再包裹） |
 | `teacher-template` | 老师本机问诊模板 | 仅模板 |
 | `settings/personal-model` | 本人模型接入 `{provider,baseUrl,model,apiKey,testedAt}` | 凭证随本机明文存储 |
+| `settings/community-model` | 用社区网关模型的标记 `{mode:'gateway',testedAt}` | V2-28：不存密钥；以后接入自己的模型会清掉，以个人模型为准 |
 
 M1-22 家人分片：`store.scoped('f{account}-')` 在同一个库里给集合名加前缀，实体集合名为 `f1-`、`f2-`……；根实例 `list/clearScope` 可覆盖全部分片，但 V2 不再提供整库加密导出/导入。
 
