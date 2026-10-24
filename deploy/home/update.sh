@@ -6,7 +6,7 @@
 #   SKIP_BUILD=1  不重建镜像（只重启容器；网页会在容器启动时按当前代码重建）
 #   NO_VERIFY=1   不跑 verify.sh（默认更新后跑一次验收探测）
 # 关键点：成员名单 data/gateway/members.json、一次性口令 data/gateway/seed.json 与
-#   data/teacher-setup-code.txt 先备份；被误删/清空会先恢复，更新后再核对没变。
+#   data/setup/teacher-setup-code.txt 由 scripts/safeguard-data.mjs 成对处理；更新后再核对没变。
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -28,7 +28,7 @@ count_members() {
 node scripts/safeguard-data.mjs prepare || die "部署数据备份/恢复失败"
 before_members="$(count_members)"
 before_seed="$(hash_of data/gateway/seed.json)"
-before_code="$(hash_of data/teacher-setup-code.txt)"
+before_code="$(hash_of data/setup/teacher-setup-code.txt)"
 log "更新前：成员名单 ${before_members} 人"
 
 # 2) 重新生成配置（不删数据；setup.sh 里也会再备份一次）。

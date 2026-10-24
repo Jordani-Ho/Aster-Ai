@@ -41,14 +41,17 @@ Cloudflare 临时隧道**每次重启都会换网址**；换网址后重新跑 `
 
 1. 手机打开上面打印的网址。
 2. 选「我是老师」，按提示接入自己的模型（Kimi 等，见 `docs/内测怎么开始.md`）。
-3. 进入「管理」→「我是这个社区的老师」→ 输入**一次性部署口令**。
-   口令在这台电脑上：
+3. 进入「管理」→「我是这个社区的老师」→ 输入**一次性部署口令**（第 2 步）。
+   最省事的方式：在部署电脑上打开 `deploy/home/data/setup/teacher-setup.html`，用老师的手机扫码，
+   口令会自动填好；终端里也会直接打印同一个二维码。
+   需要手动粘贴时，口令在这台电脑上：
 
    ```bash
-   cat deploy/home/data/teacher-setup-code.txt
+   cat deploy/home/data/setup/teacher-setup-code.txt
    ```
 
-   登记成功后就可以「邀请学生」；把邀请链接发给另一台设备（学生）打开。
+   登记成功后，口令文件与 `teacher-setup.html` 会被自动删除（口令用过即作废）；
+   之后就可以「邀请学生」，把邀请链接发给另一台设备（学生）打开。
 4. 学生打开邀请链接 → 点「开始使用」→ 接入自己的模型 → 进入镜子页。
    部署配了社区网关模型（`COMMUNITY_MODEL=1`）时，学生可以直接点「**先用社区模型开始**」，不用另外填 Key。
 
@@ -85,7 +88,7 @@ cd deploy/home
 ## 六、数据与隐私
 
 - 所有数据在这台电脑的 `deploy/home/data/`：中继数据库、网关成员与推送订阅、一次性登记口令、验收日志。**不要提交这个目录。**
-- `.env` 里有 VAPID 密钥等，也**不要提交**；`data/teacher-setup-code.txt` 不要发给别人。
+- `.env` 里有 VAPID 密钥等，也**不要提交**；`data/setup/teacher-setup-code.txt` 与 `data/setup/teacher-setup.html` 只在老师登记前存在，不要发给别人。
 - 想彻底重来：`docker compose --profile quick down`，再删除 `data/`（不可恢复；先确认不再需要这些本机资料）。
 - 中继只存端到端加密后的信件；relay/gateway/web 的容器访问日志全部关闭。
 
@@ -103,10 +106,12 @@ cd deploy/home
 - **手机打不开网址**：电脑要保持开机、WSL 不要关；先在本机运行 `./verify.sh` 看第一项是否 PASS。
 - **Docker 没运行**：`sudo systemctl start docker`，或退出 WSL 重开后再试。
 - **想强制重建镜像**（改了代码以后）：`docker compose --profile quick build --no-cache relay gateway web`，再跑 `./quick-start.sh`。
-- **登记口令在哪**：`deploy/home/data/teacher-setup-code.txt`；只在本机，注册一次后仍然保留，别外传。
+- **登记口令在哪**：`deploy/home/data/setup/teacher-setup-code.txt`（扫码网页是同目录的 `teacher-setup.html`）；
+  终端也会打印二维码。老师登记成功后这两份文件会被网关自动删掉（口令用过即作废），所以登记后再找就找不到是正常的。
 - **名单/口令会不会被更新弄丢**：不会。`setup.sh` 与 `update.sh` 都会先备份 `data/gateway/members.json`、
-  `data/gateway/seed.json`、`data/teacher-setup-code.txt` 到 `data/backup/last/`；被误删或清空会先自动恢复，
-  更新后再核对人数与口令没变，不对就停下并说明。
+  `data/gateway/seed.json`、`data/setup/teacher-setup-code.txt` 到 `data/backup/last/`；
+  口令与种子只成对备份、成对恢复，只缺一个会重新生成一对（还没老师登记）或删掉作废口令（已登记）；
+  每次结束都会核对“口令文件哈希 == 种子 tokenHash”，不一致就报错退出并说明怎么处理，不会带病启动。
 - **学生没有自己的模型 Key**：部署配了上游模型（`.env` 的 `UPSTREAM_API_KEY/BASE_URL/MODEL`）时，
   `setup.sh` 会写 `COMMUNITY_MODEL=1`，学生端会出现「先用社区模型开始」，不用从电脑传 Key。
 

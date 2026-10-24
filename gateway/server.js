@@ -1,5 +1,5 @@
 import { MemberStore } from './members.js'
-import { INVITE_ROUTES, validInvite, seedAllowed } from './invite.js'
+import { INVITE_ROUTES, validInvite, seedAllowed, cleanupSetupFiles } from './invite.js'
 import { createPushService, PUSH_ROUTES } from './push/index.js'
 import { createServer } from 'node:http'
 import { appendFileSync, readFileSync } from 'node:fs'
@@ -203,7 +203,7 @@ export function createGateway(config, { fetchUpstream = fetch } = {}) {
             const url=(config.publicUrl ?? 'http://' + req.headers.host) + '/invite/redeem'
             const valid=req.url==='/invite/redeem' ? validInvite(body?.invite,url,members) : seedAllowed(config,members,body?.token,pubkey)
             if(!valid){status=403;reply(res,403,'invitation unavailable')}
-            else {members.add(pubkey);status=200;res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}')}
+            else {members.add(pubkey);if(req.url==='/invite/seed')cleanupSetupFiles(config);status=200;res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}')}
           } else if (req.url === ROUTE || req.url === PROXY_ROUTE) status = await forward(req, res, read.body)
           else if (!push) { status = 503; reply(res, 503, 'push unavailable') }
           else {

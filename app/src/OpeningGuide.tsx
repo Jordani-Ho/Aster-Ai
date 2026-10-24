@@ -7,6 +7,7 @@ import {
   type ModelGateway, type PersonalModel,
 } from './core/llm/personal'
 import { onboardingRequest, normalizeSetupToken } from './core/onboarding'
+import { takeSetupToken } from './core/setup-link'
 import {
   DEFAULT_STOREFRONT, STOREFRONT_LIMITS, STOREFRONT_THEMES, THEMES,
   normalizeStorefront, publishStorefront, saveStorefrontDraft,
@@ -57,7 +58,8 @@ function clockLabel(at: number): string {
 export function OpeningGuide({ identity, store, gateway, modelGateway, modelConfig, onModelSaved, onDone }: OpeningGuideProps) {
   const [loaded, setLoaded] = useState(false)
   const [step, setStep] = useState<GuideStep>(1)
-  const [token, setToken] = useState('')
+  // V2-31：扫码链接 #setup=<口令> 在第 2 步自动填好；读到时立刻从地址栏清掉。
+  const [token, setToken] = useState(() => takeSetupToken())
   const [displayName, setDisplayName] = useState('')
   const [draft, setDraft] = useState<Storefront>(DEFAULT_STOREFRONT)
   const [invite, setInvite] = useState<GuideInvite | null>(null)
@@ -278,8 +280,9 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
         <div className="op-card">
           <label>学生怎么称呼您<input value={displayName} maxLength={STOREFRONT_LIMITS.displayName} disabled={busy} placeholder="例如：阿慈老师" onChange={event => { setDisplayName(event.target.value); setError('') }} /></label>
           <label>登记口令<input type="password" autoComplete="off" disabled={busy} value={token} placeholder="粘贴收到的登记口令（空格和换行会自动去掉）" onChange={event => { setToken(normalizeSetupToken(event.target.value)); setError('') }} /></label>
-          <p className="op-card-note">口令在部署这台电脑上：<code>deploy/home/data/teacher-setup-code.txt</code>，在 WSL 终端里 <code>cat</code> 一下就能看到。</p>
-          <p className="op-card-note">它是一次性引导凭据：证明你是这台服务器的主人，防止别人抢注老师；<strong>用过就作废</strong>。</p>
+          <p className="op-card-note">在部署电脑上打开 <code>data/setup/teacher-setup.html</code>，用这部手机扫码，口令会自动填好。</p>
+          <p className="op-card-note">也可以手动粘贴：口令在部署电脑的 <code>data/setup/teacher-setup-code.txt</code>（在 WSL 终端里 <code>cat</code> 一下就能看到）。</p>
+          <p className="op-card-note">它是一次性引导凭据：证明你是这台服务器的主人，防止别人抢注老师；<strong>用过就作废</strong>，登记成功后口令文件和扫码网页会被自动删掉。</p>
           <p className="op-card-note">直接粘贴即可，前后空格和换行会自动去掉，不用自己编。</p>
         </div>
         <div className="op-note-card">

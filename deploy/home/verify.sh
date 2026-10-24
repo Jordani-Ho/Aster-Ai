@@ -75,9 +75,18 @@ if [ -d data/relay ] && [ -n "$(find data/relay -type f -print -quit)" ]; then
 else
   log "WARN relay 数据目录还是空的（刚启动、还没有事件时正常）"
 fi
-for file in data/relay-config.toml data/gateway-config.json data/gateway/seed.json data/teacher-setup-code.txt; do
+for file in data/relay-config.toml data/gateway-config.json data/gateway/seed.json; do
   if [ -f "$file" ]; then log "PASS 配置文件在位：$file"; else log "FAIL 缺少 $file"; FAIL=1; fi
 done
+# V2-31：口令文件在时必须与种子一致；老师登记后它会被自动删掉，所以不是必须存在。
+if [ -f data/setup/teacher-setup-code.txt ]; then log "PASS 待用口令文件在位：data/setup/teacher-setup-code.txt"; fi
+if node scripts/safeguard-data.mjs verify >/dev/null 2>&1; then
+  log "PASS 口令与网关种子一致（或已登记、口令已作废）"
+else
+  node scripts/safeguard-data.mjs verify || true
+  log "FAIL 口令与网关种子核对失败"
+  FAIL=1
+fi
 
 step "3/5 docker compose logs 隐私扫描（relay / gateway / web）"
 LOG_FILE="data/verify-logs.txt"

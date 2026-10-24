@@ -75,7 +75,7 @@ const report = {}
   await page.getByRole('button', { name: '测试并继续', exact: true }).click()
   await expect(page.getByLabel('登记口令', { exact: true })).toBeVisible()
   const notes = (await page.locator('.op-card-note').allTextContents()).join('\n')
-  expect(notes).toContain('deploy/home/data/teacher-setup-code.txt')
+  expect(notes).toContain('data/setup/teacher-setup-code.txt')
   expect(notes).toContain('用过就作废')
   await page.getByLabel('学生怎么称呼您', { exact: true }).fill('合成阿慈')
   await page.getByLabel('登记口令', { exact: true }).fill('  SYNTHETIC_DEPLOYMENT_TOKEN  ')
