@@ -29,7 +29,7 @@ test('M1-21 account failure shows house notice; switch off gives fixed intake qu
  await page.getByText('今天的完整建议',{exact:true}).click()
  await expect(page.getByRole('region',{name:'每日建议'})).toContainText('SYNTHETIC_DAILY')
  await people.student.context.route('https://model.synthetic.example/**',r=>r.fulfill({status:402,body:'SYNTHETIC_BALANCE_ERROR'}))
- await page.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{for(const r of await s.store.list('mirror'))await s.store.delete('mirror',r.key)}finally{s.store.close();s.identity.privateKey.fill(0)}});await page.reload()
+ await page.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{for(const r of await s.store.list('mirror'))await s.store.delete('mirror',r.key);for(const row of await s.store.list('agent-runs'))if(row.value.taskId==='mirror')await s.store.delete('agent-runs',row.key)}finally{s.store.close();s.identity.privateKey.fill(0)}});await page.reload()
  await expect(page.getByText('今天用的是备用模型，请检查您的模型账户',{exact:true})).toBeVisible()
  expect((await request.post(runtime.controlURL+'/reset',{headers:{authorization:'Bearer '+runtime.resetToken},data:{relayOnly:true,fallbackEnabled:false}})).status()).toBe(200)
  await page.getByRole('button',{name:/不舒服？告诉/}).click();await page.getByLabel('按键盘上的🎤说话就行').fill('SYNTHETIC_NETWORK_FALLBACK');await page.getByRole('button',{name:'说好了，继续',exact:true}).click();await expect(page.getByText('模型暂不可用，已改用固定问句。',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'跳过，直接整理',exact:true})).toBeVisible()

@@ -14,6 +14,8 @@ export interface DraftOptions {
   timeoutMs?: number
   /** 界面应显示此安全错误；未提供时错误也会保留在 symptomSummary.note。 */
   onError?: (message: string) => void
+  /** 仅给执行器安全类别，不传原始异常或模型回复。 */
+  onFailure?: (kind: 'model_account' | 'model_unavailable') => void
 }
 
 /** V2-19：一次起草要带的材料。旧病历与医案可减，模板与问诊包不可减。 */
@@ -109,6 +111,13 @@ async function callModel(llm: LlmClient, messages: ChatMessage[], timeoutMs: num
   } finally { if (timer !== undefined) clearTimeout(timer) }
 }
 
+export function draftMaterialInput(pkg: ConsultPackage, materials: DraftMaterials, level: DraftLevel): DraftMaterialInput {
+  return { prompt, encounter: { profile: pkg.encounter.profile, intake: pkg.encounter.intake, fourExams: pkg.encounter.fourExams }, template: materials.template, level,
+    prior: [...(materials.prior ?? [])],
+    cases: searchCases([pkg.encounter.intake.chiefComplaint.value, pkg.encounter.intake.presentIllness.value].filter(Boolean).join(' '), materials.cases ?? []),
+  }
+}
+
 export async function draftEncounter(pkg: ConsultPackage, materials: DraftMaterials, llm: LlmClient, options: DraftOptions = {}): Promise<DraftResult> {
   const draft = studentDraft(pkg.encounter)
   const level = options.level ?? 'record'
@@ -117,14 +126,7 @@ export async function draftEncounter(pkg: ConsultPackage, materials: DraftMateri
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || !['record', 'pattern', 'prescription'].includes(level)) throw new Error('options')
     // 只传本任务所需的资料；不传身份、附件二进制或未经解析的历史签名事件。
     const limit = budgetLimit()
-    const input: DraftMaterialInput = {
-      prompt,
-      encounter: { profile: draft.profile, intake: draft.intake },
-      template: materials.template,
-      level,
-      prior: [...(materials.prior ?? [])],
-      cases: searchCases([draft.intake.chiefComplaint.value, draft.intake.presentIllness.value].filter(Boolean).join(' '), materials.cases ?? []),
-    }
+    const input = draftMaterialInput(pkg, materials, level)
     const fitted = fitDraftMaterials(input)
     let reply: string
     let note = fitted.note
@@ -161,11 +163,13 @@ export async function draftEncounter(pkg: ConsultPackage, materials: DraftMateri
       draft.plan.homework = homework(plan.homework)
     }
     return { encounter: draft, note }
-  } catch {
+  } catch (error) {
     const message = '起草失败：模型不可用、超时或回复格式错误；已保留学生资料，请重试或由老师填写。'
     const fallback = studentDraft(pkg.encounter)
     fallback.judgment.symptomSummary.note = message
     try { options.onError?.(message) } catch { /* 提示界面失败也不能阻断回退。 */ }
+    const status = error && typeof error === 'object' ? (error as { status?: unknown }).status : null
+    try { options.onFailure?.(status === 401 || status === 403 || isQuotaExceeded(error) ? 'model_account' : 'model_unavailable') } catch { /* 类别观察不阻断回退。 */ }
     return { encounter: fallback, note: [] }
   }
 }

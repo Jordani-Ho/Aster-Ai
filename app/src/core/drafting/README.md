@@ -21,7 +21,7 @@ M1-20 的 draftCarePlan 只把老师的要点整理为 {constitution,points,avoi
 ## V2-19 一事一议、只向签字学、额度上限
 
 - **一事一议**：起草、改稿、拆四诊、方案、记账各自一次模型调用，只带这一位学生、这一件事的材料；每次新建 system+user 两条消息，不带上一次调用的对话，也没有模块级缓存。`draftEncounter` 只接收本次的材料对象。
-- **材料两堆**：不可减 = 这次问诊包（profile/intake）、老师模板、提示词；可减 = 这位学生以前签过字的旧病历（新→旧）与相似医案（最多三份）。旧病历材料由 `materials.ts` 的 `priorMaterials` 从签名病历投影，同一 encounter 只取最新版本，只带证候、方子、医嘱、加减理由等必要内容。
+- **材料两堆**：不可减 = 这次问诊包（profile/intake/fourExams）、老师模板、提示词；可减 = 这位学生以前签过字的旧病历（新→旧）与相似医案（最多三份）。旧病历材料由 `materials.ts` 的 `priorMaterials` 从签名病历投影，同一 encounter 只取最新版本，只带证候、方子、医嘱、加减理由等必要内容。
 - **额度**：每次调用前用 `budget.ts` 估算（汉字 1 token、其他字符 1/3，向上取整，偏高估），上限读 `domain/tcm/agent-budget.json`（默认 16000 = 常见 32k 上下文的一半）。超了先减旧病历（从最早的减），再减相似医案；减了就写进返回的 note，核对页显示一行小字，不悄悄少带。问诊包与模板永远不减；固定材料本身超限也照发。
 - **额度超限**：`core/llm` 的 `isQuotaExceeded` 只认 402/429，不读回复正文。`draftEncounter` 三段降级：正常裁剪 → 上限减半再试一次 → 只剩问诊包与模板（note「没参考旧病历和医案」）→ 仍失败走固定文案回退，不带上游原文。改稿、拆四诊、方案、记账没有可减材料，不做额度重试。
 - **只向签字学**：cases 由 `records/teacher.ts` 的 `teacherCases` 提供，只含老师签过字、且老师亲手改过 judgment/plan 的病历（`Field.note` 不是 `ai_accepted`），带改方加减理由；原样确认的病历只计 `teacherCaseStats`，不进相似医案。

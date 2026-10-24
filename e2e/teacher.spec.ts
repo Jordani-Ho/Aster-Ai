@@ -112,7 +112,7 @@ test('M1-20 signed care plan reaches student mirror next day with fixed browser 
  await openAdvice(student)
  await expect(student.getByRole('region',{name:'每日建议'})).toContainText('SYNTHETIC_DAILY')
  let dailyCalls=0;student.on('request',req=>{if(req.url().includes('/chat/completions')&&req.postData()?.includes('学生每日镜子建议'))dailyCalls++})
- await student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{for(const row of await s.store.list('mirror'))await s.store.delete('mirror',row.key)}finally{s.store.close();s.identity.privateKey.fill(0)};window.dispatchEvent(new Event('aster:data-changed'));window.dispatchEvent(new Event('aster:data-changed'))})
+ await student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{for(const row of await s.store.list('mirror'))await s.store.delete('mirror',row.key);for(const row of await s.store.list('agent-runs'))if(row.value.taskId==='mirror')await s.store.delete('agent-runs',row.key)}finally{s.store.close();s.identity.privateKey.fill(0)};window.dispatchEvent(new Event('aster:data-changed'));window.dispatchEvent(new Event('aster:data-changed'))})
  await expect.poll(()=>student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return (await s.store.list('mirror')).length}finally{s.store.close();s.identity.privateKey.fill(0)}})).toBe(1)
  expect(dailyCalls).toBe(1)
  await student.reload();await openAdvice(student);await expect(student.getByRole('region',{name:'每日建议'})).toContainText('SYNTHETIC_DAILY')

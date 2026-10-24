@@ -5,7 +5,7 @@ import type { DraftCase } from './cases'
 import { budgetLimit, requestTokens } from './budget'
 
 // V2-19：一次起草要带的材料分成两堆。
-// 不可减：这次的问诊包（profile + intake）、老师模板、提示词。
+// 不可减：这次的问诊包（profile + intake + fourExams）、老师模板、提示词。
 // 可减：这位学生以前签过字的旧病历（新→旧）、相似医案。
 // 超上限时先减旧病历（从最早的减，所以这里保持「新→旧」的顺序），再减相似医案。
 export interface PriorPrescription {
@@ -32,7 +32,7 @@ export interface PriorMaterial {
 export interface DraftMaterialInput {
   prompt: string
   /** 这次的问诊包：永远不减。 */
-  encounter: Pick<Encounter, 'profile' | 'intake'>
+  encounter: Pick<Encounter, 'profile' | 'intake' | 'fourExams'>
   template: TeacherTemplate
   level: string
   prior: readonly PriorMaterial[]

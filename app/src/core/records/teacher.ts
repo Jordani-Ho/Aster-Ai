@@ -37,6 +37,7 @@ export interface RecordWriter {
 
 export interface RecordStoreLike extends RecordReader, RecordWriter {
   get(collection: string, key: string): Promise<unknown>
+  delete(collection: string, key: string): Promise<void>
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -83,11 +84,16 @@ export function teacherRecordValue(event: SignedEncounterEvent): TeacherRecord |
 }
 
 // 签字发送成功后调用；同一事件重放只覆盖相同内容。
-export async function saveTeacherRecord(store: RecordWriter, event: SignedEncounterEvent): Promise<TeacherRecord | null> {
+export async function saveTeacherRecord(store: RecordReader & RecordWriter & Pick<RecordStoreLike, 'delete'>, event: SignedEncounterEvent): Promise<TeacherRecord | null> {
   const record = teacherRecordValue(event)
   if (!record) return null
   await store.put(TEACHER_RECORDS, record.eventId, record as unknown as StoreValue)
   if (record.student) await store.put(TEACHER_STUDENTS, record.student, { student: record.student })
+  // 正式病历已保存：删除同一问诊卡各次输入留下的起草副本，不经过智能体执行器。
+  for (const row of await store.list('agent-runs')) {
+    const value = row.value
+    if (object(value) && value.side === 'teacher' && value.taskId === 'drafting' && value.targetId === record.encounterId) await store.delete('agent-runs', row.key)
+  }
   return record
 }
 
