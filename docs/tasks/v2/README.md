@@ -35,5 +35,13 @@
 | [V2-18](V2-18-remind-not-judge.md) | 就医提醒常在，社区不判断急症 | DeepSeek | V2-17 |
 | [V2-19](V2-19-one-task-one-page.md) | 老师智能体：一事一议，只向签字学习，额度有上限 | DeepSeek | V2-18 |
 | [V2-20](V2-20-tongue-fix.md) | 舌象修复：镜子显示完整，拍摄少失败、失败说得清 | DeepSeek | — |
+| [V2-21](V2-21-agent-core.md) | 智能体骨架：角色、记忆、主动、守线 | Codex | V2-19 |
+| [V2-22](V2-22-hall-groundwork.md) | 开馆基础工作：老师智能体进入角色 | Codex | V2-21 |
+| [V2-23](V2-23-student-groundwork.md) | 进馆基础信息：学生智能体进入角色 | Codex | V2-21 |
+| [V2-24](V2-24-herbs.md) | 药材库：老师和学生同一套 | Codex | V2-22 |
+| [V2-25](V2-25-appointments.md) | 预约：老师智能体主动请人来 | Codex | V2-22 |
+| [V2-26](V2-26-voice-two-organize.md) | 问诊录音与两次整理 | Codex | V2-21 |
+| [V2-27](V2-27-student-nudge.md) | 学生智能体的督促 | Codex | V2-21、V2-25 |
+| [V2-28](V2-28-open-hall-foolproof.md) | 建馆傻瓜化与实测小问题 | DeepSeek | — |
 
 第二批（地基合并后再展开）：自我调整（表层配置化）、门面、物流（本地资源）、观察。
