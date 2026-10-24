@@ -54,6 +54,10 @@ services:
       # V2-14：仪表盘公钥/地址；留空时页面不发统计、也不显示入口。
       VITE_DASHBOARD_PUBKEY: ${DASHBOARD_PUBKEY:-}
       VITE_DASHBOARD_URL: ${DASHBOARD_URL:-}
+      # V2-29：setup.sh 在宿主机算好（git 短提交号 / 构建日期）写进 .env；
+      # 容器启动时 entrypoint 跑 npm run build，Vite 从这里读，不用（也读不到）镜像里的 .git。
+      APP_VERSION: ${APP_VERSION:-unknown}
+      APP_BUILD_DATE: ${APP_BUILD_DATE:-}
     depends_on: [gateway]
     logging:
       driver: none

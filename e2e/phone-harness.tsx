@@ -6,6 +6,7 @@ import { SignReview } from '../app/src/SignReview'
 import { TonguePair } from '../app/src/TonguePair'
 import { OpeningGuide } from '../app/src/OpeningGuide'
 import { CommunityDashboard } from '../app/src/CommunityDashboard'
+import { VersionLine } from '../app/src/VersionLine'
 import { StorefrontWelcome } from '../app/src/StorefrontWelcome'
 import { createIdentity } from '../app/src/core/identity'
 import { openStore, resumeStore } from '../app/src/core/store'
@@ -336,6 +337,8 @@ async function main() {
     if (openScene) return <OpeningScene preset={scene === 'open1' ? null : modelPreset} />
     if (scene === 'opening') return <OpeningScene preset={null} />
     if (scene === 'dashboard') return <CommunityDashboard relays={[]} />
+    // V2-29：只渲染版本行，用来验证“宿主机 APP_VERSION → Vite define → 页面”这条链路。
+    if (scene === 'version') return <div className="nl-shell"><VersionLine /></div>
     if (scene === 'welcome') return <StorefrontWelcome storefront={STOREFRONT} teacher={teacher.identity.publicKey} onStart={() => {}} />
     if (scene === 'long') return <SignReview encounter={long} alias="合成小王" previousPrescription={null} onSign={() => {}} onBack={() => {}} />
     if (scene === 'tongue') return <div className="nl-shell"><main className="nl-page"><TonguePair record={tongue} crop={cropped} editable title="舌象 1 · 辰时 · 霜降 · 北京" /></main></div>

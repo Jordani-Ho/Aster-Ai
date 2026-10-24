@@ -21,6 +21,7 @@ const server = await createServer({
 await server.listen()
 const origin = `http://127.0.0.1:${server.httpServer.address().port}`
 const browser = await chromium.launch({ headless: true })
+let envServer = null
 
 async function open(scene) {
   const context = await browser.newContext({ viewport: { width: 375, height: 812 } })
@@ -127,9 +128,34 @@ try {
   }
   // 两端同一来源：文字完全一致。
   expect(versions.student).toBe(versions.teacher)
+
+  // 4) 部署链路：镜像里没有 .git，版本号靠宿主机经环境变量传进来。
+  //    这里模拟 setup.sh 算好 APP_VERSION/APP_BUILD_DATE 后容器启动构建，页面应显示这两个值。
+  process.env.APP_VERSION = 'deadbee'
+  process.env.APP_BUILD_DATE = '01-02'
+  envServer = await createServer({
+    configFile: root + 'app/vite.config.ts', root: root + 'app',
+    server: { host: '127.0.0.1', port: 0 },
+    resolve: { alias: { react: root + 'app/node_modules/react', 'react-dom': root + 'app/node_modules/react-dom' } },
+  })
+  await envServer.listen()
+  const envOrigin = `http://127.0.0.1:${envServer.httpServer.address().port}`
+  {
+    const context = await browser.newContext({ viewport: { width: 375, height: 812 } })
+    const page = await context.newPage()
+    await page.goto(`${envOrigin}/@fs/${root}e2e/phone.html?scene=version`)
+    const version = page.locator('[data-testid=app-version]')
+    await expect(version).toBeVisible({ timeout: 15000 })
+    const injected = (await version.innerText()).trim()
+    expect(injected).toBe('版本 deadbee · 01-02')
+    versions.hostInjected = injected
+    await context.close()
+  }
+
   console.log(JSON.stringify({ gitHead, versions, questions: TWO_QUESTIONS.length }))
-  console.log('PASS: V2-29 跳过直接整理（不再追问、不再调模型、未问项未提供）、逐问流程保持、两端版本号 = ' + gitHead)
+  console.log('PASS: V2-29 跳过直接整理（不再追问、不再调模型、未问项未提供）、逐问流程保持、两端版本号 = ' + gitHead + '、宿主机传值 = ' + versions.hostInjected)
 } finally {
   await browser.close()
   await server.close()
+  if (envServer) await envServer.close()
 }
