@@ -174,6 +174,35 @@ try {
     expect(errors).toEqual([])
     await context.close()
   }
+  // V2-23 新学生：必填基础信息不全时，点“告诉老师”先进基础信息页；填全保存后直接进问诊
+  {
+    const { context, page, errors } = await open('newstudent')
+    await expect(page.getByRole('button', { name: /基础信息还差：性别、出生日期/ })).toBeVisible()
+    await page.getByRole('button', { name: /不舒服？告诉/ }).click()
+    await expect(page.getByRole('heading', { name: '基础信息', exact: true })).toBeVisible()
+    await expect(page.getByText(/第一次问诊前，先把基础信息填好。还差：性别、出生日期/)).toBeVisible()
+    await layout(page)
+    await shot(page, 'phone-student-basics')
+    // iPhone 15 Pro 与华为 Mate 40 Pro 宽度各一张
+    for (const [width, height, name] of [[393, 852, 'phone-student-basics-iphone15pro'], [448, 924, 'phone-student-basics-huawei-448']]) {
+      await page.setViewportSize({ width, height })
+      await layout(page)
+      await shot(page, name)
+    }
+    await page.setViewportSize({ width: 375, height: 812 })
+    // 称呼和居住城市沿用以前填过的（“我的时间”里的城市），不用重填。
+    await expect(page.getByLabel('称呼', { exact: true })).toHaveValue('合成小王')
+    await expect(page.getByLabel('居住城市', { exact: true })).toHaveValue('北京市')
+    await page.getByLabel('男', { exact: true }).check()
+    await page.getByLabel('出生日期', { exact: true }).fill('2099-01-01')
+    await page.getByRole('button', { name: '保存', exact: true }).click()
+    await expect(page.getByRole('alert')).toContainText('出生日期不能晚于今天')
+    await page.getByLabel('出生日期', { exact: true }).fill('1992-03-04')
+    await page.getByRole('button', { name: '保存', exact: true }).click()
+    await expect(page.getByRole('heading', { name: /^告诉/ })).toBeVisible()
+    expect(errors).toEqual([])
+    await context.close()
+  }
   // 10a–10c 问诊三步：说一说 → 再问一句（可跳过）→ 看一眼卡片再发出
   {
     const { context, page, errors } = await open('consult')

@@ -4,6 +4,7 @@ import { loadTeachers, saveTeachers } from '../inbox'
 import { emptyProfile, loadProfile, saveProfile } from '../intake/session'
 import type { Encounter } from '../record/types'
 import { ageAt, cities, toBazi } from '../../../../domain/tcm/bazi'
+import { BASICS_COLLECTION, BASICS_KEY, checkBirthDate, checkRelationAge, loadBasics } from '../basics'
 
 // M1-22 家人子账户：本人是根身份（account 0），每位家人在本机随机生成独立身份，
 // account 序号只用于展示与排序。每位家人的本机资料存进同一个库的独立分片
@@ -12,9 +13,10 @@ export const FAMILY_COLLECTION = 'family'
 export const FAMILY_KEY = 'members'
 export const MAX_FAMILY_MEMBERS = 8
 
-export type FamilyRelation = 'father' | 'mother' | 'child' | 'other'
-export const FAMILY_RELATIONS: readonly FamilyRelation[] = ['father', 'mother', 'child', 'other']
-export const RELATION_LABELS: Record<FamilyRelation, string> = { father: '爸爸', mother: '妈妈', child: '孩子', other: '其他' }
+// V2-23：关系多了配偶、兄弟姐妹、祖父母、孙辈；和年龄要讲得通（见 core/basics checkRelationAge）。
+export type FamilyRelation = 'father' | 'mother' | 'child' | 'spouse' | 'sibling' | 'grandparent' | 'grandchild' | 'other'
+export const FAMILY_RELATIONS: readonly FamilyRelation[] = ['father', 'mother', 'child', 'spouse', 'sibling', 'grandparent', 'grandchild', 'other']
+export const RELATION_LABELS: Record<FamilyRelation, string> = { father: '爸爸', mother: '妈妈', child: '孩子', spouse: '配偶', sibling: '兄弟姐妹', grandparent: '祖父母', grandchild: '孙辈', other: '其他' }
 export type FamilyGender = 'male' | 'female'
 
 export interface FamilyMember {
@@ -70,12 +72,7 @@ function hexString(value: Uint8Array): string {
 
 function validDate(value: unknown): value is string {
   if (typeof value !== 'string' || !DATE.test(value)) return false
-  const [, year, month, day] = DATE.exec(value)!
-  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)))
-  if (date.getUTCFullYear() !== Number(year) || date.getUTCMonth() !== Number(month) - 1 || date.getUTCDate() !== Number(day)) return false
-  const today = new Date()
-  const localToday = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-')
-  return value >= '1900-01-01' && value <= localToday
+  try { checkBirthDate(value); return true } catch { return false }
 }
 
 export function normalizeDraft(draft: FamilyDraft): Required<Omit<FamilyDraft, 'account'>> & { account?: number } {
@@ -84,7 +81,7 @@ export function normalizeDraft(draft: FamilyDraft): Required<Omit<FamilyDraft, '
   if (/[\u0000-\u001f\u007f]/.test(alias)) throw new Error('家人的称呼不能包含换行等控制字符')
   if (!FAMILY_RELATIONS.includes(draft.relation)) throw new Error('请选择家人关系')
   if (draft.gender !== 'male' && draft.gender !== 'female') throw new Error('请选择性别')
-  if (!validDate(draft.birthDate)) throw new Error('请填写有效的出生日期')
+  checkBirthDate(draft.birthDate)
   const city = typeof draft.city === 'string' && draft.city.trim() !== '' ? draft.city.trim() : null
   if (city !== null && !cities.some(item => item.nameZh === city || item.nameEn === city)) throw new Error('请从列表中选择居住城市')
   if (draft.account !== undefined && (!Number.isSafeInteger(draft.account) || draft.account < 1 || draft.account >= 2 ** 31)) throw new Error('家人编号无效')
@@ -154,6 +151,9 @@ async function memberProfile(rootStore: LocalStore, draft: ReturnType<typeof nor
 // 添加家人：随机生成身份 → 写本机家人清单 → 初始化这位家人的本机档案与“我的老师”（与本人同一批）。
 export async function addFamilyMember(rootStore: LocalStore, rootIdentity: Identity, draft: FamilyDraft): Promise<FamilyMember> {
   const value = normalizeDraft(draft)
+  // V2-23：本人填过出生日期时，家人关系与年龄必须讲得通。
+  const owner = await loadBasics(rootStore)
+  if (owner.birthDate) checkRelationAge(value.relation, value.birthDate, owner.birthDate, RELATION_LABELS)
   const members = await loadFamilyMembers(rootStore)
   if (members.length >= MAX_FAMILY_MEMBERS) throw new Error('最多添加 8 位家人')
   if (value.account !== undefined && members.some(member => member.account === value.account)) throw new Error('这个家人编号已经用过')
@@ -174,6 +174,8 @@ export async function addFamilyMember(rootStore: LocalStore, rootIdentity: Ident
   const scoped = memberStore(rootStore, account)
   await saveTeachers(scoped, await loadTeachers(rootStore))
   await saveProfile(scoped, await memberProfile(rootStore, value))
+  // V2-23：家人的基础信息用同一张表，先把添加时已知的几项填进去。
+  await scoped.put(BASICS_COLLECTION, BASICS_KEY, { alias: value.alias, gender: value.gender, birthDate: value.birthDate, birthShichen: null } as unknown as StoreValue)
   await rootStore.put(FAMILY_COLLECTION, FAMILY_KEY, [...members, member] as unknown as StoreValue)
   return member
 }

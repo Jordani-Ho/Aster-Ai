@@ -8,6 +8,8 @@ import { StudentRecordsPage } from './StudentRecordsPage'
 import { StudentRecordsHome } from './StudentRecordsHome'
 import { StudentToday } from './StudentToday'
 import { StudentMe } from './StudentMe'
+import { StudentBasicsPage } from './StudentBasics'
+import { consultGate } from './core/basics'
 import type { FamilyMember } from './core/family'
 import { listCheckins, type Assignment } from './core/homework'
 import { adherenceReport } from './core/adherence'
@@ -41,12 +43,15 @@ export interface StudentShellProps {
 }
 
 type Tab = 'today' | 'records' | 'me'
-type Sub = 'consult' | 'homework' | 'records' | null
+type Sub = 'consult' | 'homework' | 'records' | 'basics' | null
 
 // V2-16 新外壳：学生端底部三个标签“今天 / 记录 / 我”；V2-17 把记录、问诊、我也按设计稿重画。
 export function StudentShell({ store, identity, llm, stack, stackStatus, modelNotice, modelSettings, family = [], active = 0, onSwitch, memberStore: scopedStore, memberIdentity: scopedIdentity, sendConsult, sendEnvelope, onFamilyChanged }: StudentShellProps) {
   const [tab, setTab] = useState<Tab>('today')
   const [sub, setSub] = useState<Sub>(null)
+  // V2-23：基础信息还差哪几项；新学生填全前不能第一次问诊，老用户只提示。
+  const [basicsMissing, setBasicsMissing] = useState<string[]>([])
+  const [basicsNote, setBasicsNote] = useState('')
   const pagesStore = scopedStore ?? store
   const pagesIdentity = scopedIdentity ?? identity
   const activeMember = family.find(member => member.account === active) ?? null
@@ -74,8 +79,27 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
       } catch { /* 上报不是打卡成功条件。 */ }
     })()
   }
+  useEffect(() => {
+    let live = true
+    void consultGate(pagesStore).then(gate => { if (live) setBasicsMissing(gate.missing) }).catch(() => {})
+    return () => { live = false }
+  }, [pagesStore, active, sub])
+
+  const openConsult = () => {
+    void consultGate(pagesStore).then(gate => {
+      if (gate.allowed) { setSub('consult'); return }
+      setBasicsNote(`第一次问诊前，先把基础信息填好。还差：${gate.missing.join('、')}`)
+      setSub('basics')
+    }).catch(() => setSub('consult'))
+  }
+
   useEffect(() => { if (stackStatus === 'ready') reportAdherence() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pagesStore, stackStatus, active, venue.active])
 
+  if (sub === 'basics') {
+    return <StudentBasicsPage key={active} store={pagesStore} title={activeMember ? `${activeMember.alias}的基础信息` : '基础信息'} note={basicsNote}
+      onBack={() => { setBasicsNote(''); setSub(null) }}
+      onSaved={missing => { setBasicsMissing(missing); if (missing.length === 0 && basicsNote) { setBasicsNote(''); setSub('consult') } }} />
+  }
   if (sub === 'records') {
     return <StudentRecordsPage identity={pagesIdentity} store={pagesStore} onBack={() => setSub(null)} />
   }
@@ -93,15 +117,18 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   const style = { '--nl-bg': theme.background, '--nl-accent': theme.primary, '--nl-accent-deep': theme.primary } as CSSProperties
   return <div className="nl-shell" style={style}>
     {modelNotice}
+    {tab === 'today' && basicsMissing.length > 0 && <button type="button" className="nl-card basics-banner" onClick={() => { setBasicsNote(''); setSub('basics') }}>
+      <strong>基础信息还差：{basicsMissing.join('、')}</strong><span>补齐后老师才看得到您的年龄和八字 ›</span>
+    </button>}
     {tab === 'today' && <StudentToday
       store={pagesStore} modelStore={store} settingsStore={store} identity={pagesIdentity} llm={llm}
       teacher={venue.active} teacherCall={venue.call} teacherName={venue.name}
       member={activeMember} family={family} active={active} onSwitch={onSwitch}
-      onConsult={() => setSub('consult')} onHomework={() => setSub('homework')} onCheckedIn={reportAdherence} />}
+      onConsult={openConsult} onHomework={() => setSub('homework')} onCheckedIn={reportAdherence} />}
     {tab === 'records' && <StudentRecordsHome store={pagesStore} identity={pagesIdentity} onOpenAllRecords={() => setSub('records')} />}
     {tab === 'me' && <StudentMe store={store} identity={identity} family={family} active={active} onSwitch={onSwitch}
       venue={venue} ledger={stack?.ledger ?? null} stackStatus={stackStatus} modelSettings={modelSettings}
-      sendEnvelope={sendEnvelope} onFamilyChanged={onFamilyChanged} />}
+      sendEnvelope={sendEnvelope} onFamilyChanged={onFamilyChanged} onOpenBasics={() => { setBasicsNote(''); setSub('basics') }} />}
     <p role="status" className="nl-status" style={{ padding: '0 20px' }}>中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : stackStatus === 'rejected' ? '连接未成功，请联系老师' : '尚未连接'}</p>
     <nav className="nl-tabbar" aria-label="学生底部标签">
       <button type="button" aria-current={tab === 'today' ? 'page' : undefined} onClick={() => setTab('today')}><TodayIcon />今天</button>

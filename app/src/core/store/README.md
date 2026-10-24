@@ -36,6 +36,8 @@ V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`
 | `intake-outbox` | 中继未接通时暂存的问诊包 | `flushIntakeOutbox` 发送成功即删除 |
 | `intake-attachments` | 采集照片处理后的 JPEG 字节（长边 ≤1600、≤500 KB）与问诊舌象的舌头裁剪图（长边 ≤512，V2-08） | 键为附件 id |
 | `profile` | 学生本机档案：称呼、性别、年龄、八字、城市（键 `self`） | 城市用于天气与真太阳时/时区 |
+| `basics` | V2-23 学生基础信息（键 `self`）：称呼、性别、出生日期、时辰、出生地、西医诊断、既往史、用药、过敏、作息；城市以 `profile.city` 为准 | 只留本机；老师端只经 `profile` 收到五项，西医诊断不进问诊包 |
+| `basics-history` | V2-23 出生日期/时辰的修改记录（何时、旧值→新值），键为随机 id | 只留本机 |
 | `student-records` | 学生收到的签名病历索引 `{id,teacher,createdAt,eventJson,version}` | 显示前重新验签；按老师设定的保留期限删除（V2-05） |
 | `settings` | 键 `role`、`teachers`（老师公钥数组）、`time-display`、`mirror-shichen`、`tongue-level`（舌象抽象级别，V2-08 只开放第一级，默认 1）、`retention-days`（老师设定的保留天数）、`last-retention-day`（上次清理日）、`last-backup-request`（上次备份请求日）、`restore-needed`（新进社区后待恢复）、`reidentify-request-at`（最近一次换机请求时间）、`reidentify-rejected`（收到作废通知的时间）、`teacher-labels`（学生本机记的老师称呼/馆名）、`teacher-reidentify-open`（老师生成“老师换手机”链接的时间，30 天内才接受确认） | 家人分片内复制同一“我的老师”名单 |
 | `homework` | 作业 `{homework, startsOn}` | M1-13；保留期限不删作业规则 |

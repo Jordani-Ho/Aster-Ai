@@ -33,11 +33,13 @@ export interface StudentMeProps {
   modelSettings?: ReactNode
   sendEnvelope?: (recipient: string, envelope: import('./core/transport').Envelope) => Promise<unknown>
   onFamilyChanged?: () => void
+  /** V2-23：打开当前身份（本人或正在代管的家人）的基础信息。 */
+  onOpenBasics?: () => void
 }
 
 const RELATION_LABEL: Record<string, string> = RELATION_LABELS
 
-export function StudentMe({ store, identity, family, onSwitch, venue, ledger, stackStatus, modelSettings, sendEnvelope, onFamilyChanged }: StudentMeProps) {
+export function StudentMe({ store, identity, family, onSwitch, venue, ledger, stackStatus, modelSettings, sendEnvelope, onFamilyChanged, onOpenBasics }: StudentMeProps) {
   const [view, setView] = useState<View>('me')
   const [alias, setAlias] = useState('')
   const [members, setMembers] = useState<FamilyMember[]>([])
@@ -128,6 +130,10 @@ export function StudentMe({ store, identity, family, onSwitch, venue, ledger, st
       </button>
     </section>
 
+    {onOpenBasics && <button type="button" className="nl-card me-setting-row" onClick={onOpenBasics}>
+      <span className="me-row-main"><strong>基础信息</strong><span>出生日期、居住城市、病史、作息</span></span>
+      <span className="ts-chevron">›</span>
+    </button>}
     <button type="button" className="nl-card me-setting-row" onClick={() => setView('settings')}>
       <span className="me-row-main"><strong>设置</strong><span>模型、我的时间、通知、换手机</span></span>
       <span className="ts-chevron">›</span>
