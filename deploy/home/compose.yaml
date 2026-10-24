@@ -47,6 +47,8 @@ services:
       PORT: "8080"
       VITE_COMMUNITY_RELAYS: wss://${RELAY_DOMAIN:-placeholder.invalid}
       VITE_MODEL_GATEWAY_URL: https://${APP_DOMAIN:-placeholder.invalid}/v1
+      # V2-28：setup.sh 按上游账户是否配置写 COMMUNITY_MODEL；为 1 时学生可以先用社区模型，不用填自己的 Key。
+      VITE_COMMUNITY_MODEL: ${COMMUNITY_MODEL:-0}
       VITE_PUSH_GATEWAY_URL: https://${APP_DOMAIN:-placeholder.invalid}
       VITE_PUSH_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       # V2-14：仪表盘公钥/地址；留空时页面不发统计、也不显示入口。

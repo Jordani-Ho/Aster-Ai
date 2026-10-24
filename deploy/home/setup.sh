@@ -49,6 +49,9 @@ chmod 700 data data/gateway 2>/dev/null || true
 # relay 容器以 uid 10001 运行，绑定到 ./data/relay 的目录需要可写；这里给最宽松的权限，内测够用。
 chmod 777 data/relay
 
+# ---- 3b. 数据保命（V2-28）：成员名单/一次性口令先备份；被误删或清空就先从上次备份恢复 ----
+node scripts/safeguard-data.mjs prepare || die "部署数据备份/恢复失败（scripts/safeguard-data.mjs）"
+
 [ -f data/relay-config.toml ] || cat > data/relay-config.toml <<'TOML'
 [info]
 relay_url = "ws://localhost:8080/"
@@ -107,6 +110,7 @@ if(!existsSync('data/gateway/seed.json')){const token=randomBytes(32).toString('
 if(existsSync('data/teacher-setup-code.txt'))chmodSync('data/teacher-setup-code.txt',0o600)
 NODE
 log "社区老师首次登记：在本机查看 data/teacher-setup-code.txt，把口令输入手机/电脑的‘我是这个社区的老师’。不要公开此文件。"
+log "复制文件里的那串口令后，直接粘贴到「登记口令」框里即可，不用自己编；前后空格和换行会自动去掉。"
 
 # ---- 7. 网关配置与成员名单 ----
 log "生成网关配置 data/gateway-config.json 与成员名单 data/gateway/members.json…"
@@ -114,6 +118,15 @@ APP_ORIGIN="https://${APP_DOMAIN}" \
 UPSTREAM_BASE_URL="${UPSTREAM_BASE_URL:-}" \
 UPSTREAM_MODEL="${UPSTREAM_MODEL:-}" \
 node scripts/generate-gateway.mjs
+
+# ---- 7b. 社区网关模型开关（V2-28）：只有配了上游账户，学生才能不填自己的 Key 先用 ----
+COMMUNITY_VALUE="$(node --input-type=module -e "import {readFileSync} from 'node:fs';let on=false;try{const c=JSON.parse(readFileSync('data/gateway-config.json','utf8'));on=Boolean(c.upstreamBaseUrl&&c.upstreamModel&&c.fallbackEnabled!==false)}catch{};process.stdout.write(on?'1':'0')")"
+ensure_env COMMUNITY_MODEL "$COMMUNITY_VALUE"
+if [ "$COMMUNITY_VALUE" = "1" ]; then
+  log "社区网关模型：已开启（学生可以先不填自己的 Key）"
+else
+  log "社区网关模型：未开启（学生在网页里接入自己的模型）"
+fi
 
 # ---- 8. 校验 compose 配置能展开 ----
 docker compose config >/dev/null || die "compose 配置校验失败：看上面的报错。"

@@ -7,13 +7,14 @@ export {providers}
 export interface PersonalModel {provider:string; baseUrl:string; model:string; apiKey:string; testedAt:string}
 export interface ModelGateway {baseUrl:string; secretKey:Uint8Array}
 export class ModelRequestError extends Error {constructor(public status:number){super('模型连接未完成')}}
+// V2-28：建馆第 1 步要能分清“密钥不对 / 账户没额度 / 网络不通”，各说一句怎么办；不带上游原文。
 export function connectionError(error:unknown):string {
  const status=error instanceof ModelRequestError?error.status:0
- if(status===401||status===403)return '接入凭证不对或没有权限，请检查账户和所选地区。'
- if(status===402||status===429)return '账户余额不足或用量已达上限，请到服务商账户检查。'
- if(status===400||status===404)return '模型名称或接入地址不对，请核对后再试。'
- if(status>=500)return '服务商暂时没有响应，请稍后重试。'
- return '网络暂时不通，请检查网络后重试。'
+ if(status===401||status===403)return '密钥不对：请到服务商后台重新复制 API Key（注意不要带空格），或确认这个 Key 有权限。'
+ if(status===402||status===429)return '账户没额度：请到服务商后台充值，或看看套餐用量是不是用完了。'
+ if(status===400||status===404)return '地址或模型名不对：核对接口地址和模型名称后再试。'
+ if(status>=500)return '服务商暂时没有响应：等一会儿再试。'
+ return '网络不通：检查网络后重试；手机上可以换个 Wi-Fi 或流量再试。'
 }
 export function normalizeModel(value:unknown):PersonalModel {
  const c=value as PersonalModel
@@ -49,13 +50,17 @@ export async function testConnection(config:PersonalModel,gateway:ModelGateway|n
  const text=await ownClient(config,gateway,10000).complete([{role:'user',content:probe.trim()}])
  if(!text.trim())throw new ModelRequestError(502)
 }
+// V2-28：社区网关模型（部署方配置的上游账户）单独成一个客户端：只用网关、不带 model、不需要用户自己的 Key。
+export function createGatewayClient(gateway:ModelGateway,timeoutMs=10000):LlmClient {
+ return createLlmClient({kind:'gateway',...gateway},async(source,body)=>{
+  const url=source.baseUrl.replace(/\/+$/,'')+'/chat/completions'
+  const response=await fetch(url,{method:'POST',headers:{'content-type':'application/json',authorization:await nip98Authorization(gateway.secretKey,url,'POST',body)},body,signal:AbortSignal.timeout(timeoutMs),credentials:'omit',redirect:'error'})
+  if(!response.ok){void response.body?.cancel();throw new ModelRequestError(response.status)}return response
+ })
+}
 export function createPersonalClient(config:PersonalModel,gateway:ModelGateway|null,onFallback?:(active:boolean)=>void,timeoutMs=10000):LlmClient {
  const own=ownClient(config,gateway,timeoutMs)
- const house=gateway?.baseUrl?createLlmClient({kind:'gateway',...gateway},async(source,body)=>{
-  const url=source.baseUrl.replace(/\/+$/,'')+'/chat/completions'
-  const response=await fetch(url,{method:'POST',headers:{'content-type':'application/json',authorization:await nip98Authorization(gateway!.secretKey,url,'POST',body)},body,signal:AbortSignal.timeout(timeoutMs),credentials:'omit',redirect:'error'})
-  if(!response.ok){void response.body?.cancel();throw new ModelRequestError(response.status)}return response
- }):null
+ const house=gateway?.baseUrl?createGatewayClient(gateway,timeoutMs):null
  async function run(messages:ChatMessage[],onToken:((token:string)=>void)|undefined,options?:ChatOptions){
   let emitted=false
   const token=(text:string)=>{emitted=true;onToken?.(text)}

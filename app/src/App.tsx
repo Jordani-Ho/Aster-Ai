@@ -1,5 +1,6 @@
 import { PilotSettings } from './PilotSettings'
 import {createPersonalClient, loadPersonalModel, type PersonalModel} from './core/llm/personal'
+import {clearCommunityModel, communityError, createCommunityClient, loadCommunityModel, saveCommunityModel, testCommunityModel, type CommunityModel} from './core/llm/community'
 import {ModelSettings} from './ModelSettings'
 import { LedgerSettings } from './LedgerSettings'
 import './homework.css'
@@ -52,6 +53,10 @@ const gateway = gatewayBase(env.VITE_MODEL_GATEWAY_URL ?? pushGatewayUrl)
 
 export function App() {
   const [modelConfig,setModelConfig]=useState<PersonalModel|null|undefined>(undefined)
+  // V2-28：部署开了社区网关模型时，学生可以先不填自己的 Key；只用本机标记，不存密钥。
+  const [communityConfig,setCommunityConfig]=useState<CommunityModel|null|undefined>(undefined)
+  const [communityBusy,setCommunityBusy]=useState(false)
+  const [communityNotice,setCommunityNotice]=useState('')
   const [backupModel,setBackupModel]=useState(false)
   const [role, setRole] = useState<Role | null>(null)
   // V2-15：老师第一次进来先走建馆引导；老部署已有门面/学生/问诊的直接视为已开馆。
@@ -202,6 +207,7 @@ export function App() {
     if(!identity||!storeRef.current)return
     let cancelled=false;setBackupModel(false)
     void loadPersonalModel(storeRef.current).then(c=>{if(!cancelled)setModelConfig(c)}).catch(()=>{if(!cancelled)setModelConfig(null)})
+    void loadCommunityModel(storeRef.current).then(c=>{if(!cancelled)setCommunityConfig(c)}).catch(()=>{if(!cancelled)setCommunityConfig(null)})
     return()=>{cancelled=true}
   },[identity])
 
@@ -299,9 +305,25 @@ export function App() {
   const memberOptions = family.map(member => ({ account: member.account, alias: member.alias }))
   const refreshFamily = () => { if (storeRef.current) void loadFamilyMembers(storeRef.current).then(setFamily).catch(() => {}) }
   const modelGateway=useMemo(()=>identity&&env.VITE_MODEL_GATEWAY_URL?{baseUrl:env.VITE_MODEL_GATEWAY_URL,secretKey:identity.privateKey}:null,[identity])
-  const llm=useMemo(()=>modelConfig?createPersonalClient(modelConfig,modelGateway,setBackupModel):null,[modelConfig,modelGateway])
+  // 部署用 COMMUNITY_MODEL=1 告诉网页“社区网关模型已接好”；学生据此可以不填自己的 Key。
+  const communityOffered=Boolean(modelGateway&&env.VITE_COMMUNITY_MODEL==='1')
+  const saveOwnModel=(config:PersonalModel)=>{
+    const local=storeRef.current
+    if(local)void clearCommunityModel(local).catch(()=>{})
+    setCommunityConfig(null);setCommunityNotice('');setModelConfig(config)
+  }
+  // 先用社区模型：先试一句，能用才记标记并进入首页；不能用就说清是哪种情况。
+  const startWithCommunity=async()=>{
+    const local=storeRef.current
+    if(!local||!modelGateway||communityBusy)return
+    setCommunityBusy(true);setCommunityNotice('')
+    try{await testCommunityModel(modelGateway);setCommunityConfig(await saveCommunityModel(local))}
+    catch(cause){setCommunityNotice(communityError(cause))}
+    finally{setCommunityBusy(false)}
+  }
+  const llm=useMemo(()=>modelConfig?createPersonalClient(modelConfig,modelGateway,setBackupModel):communityConfig&&modelGateway?createCommunityClient(modelGateway):null,[modelConfig,communityConfig,modelGateway])
   const modelNotice=<>{backupModel&&<p role="status" style={{fontSize:12}}>今天用的是备用模型，请检查您的模型账户</p>}</>
-  const modelSettings=store?<details><summary>我的大模型</summary><ModelSettings key={modelConfig?.testedAt??'new'} store={store} gateway={modelGateway} current={modelConfig??null} onSaved={config=>setModelConfig(config)}/></details>:null
+  const modelSettings=store?<details><summary>我的大模型</summary><ModelSettings key={modelConfig?.testedAt??'community-'+(communityConfig?.testedAt??'new')} store={store} gateway={modelGateway} current={modelConfig??null} onSaved={saveOwnModel}/></details>:null
   // V2-14：只读社区仪表盘。没有解密钥匙时不显示任何数据，也不渲染任何操作控件。
   if (dashboardRoute) return <CommunityDashboard relays={defaultRelays} />
   // V2-07：换机找回链接先走认回页；学生没点“是”之前不改名单、不接受新老师公钥。
@@ -319,9 +341,13 @@ export function App() {
     return <main style={{ fontFamily: 'system-ui', padding: 16, maxWidth: 480, margin: '0 auto' }}><h1>知衡</h1><p>正在准备…</p></main>
   }
   if (role === 'teacher' && store && identity && hallOpened === false) {
-    return <OpeningGuide identity={identity} store={store} gateway={gateway} modelGateway={modelGateway} modelConfig={modelConfig} onModelSaved={setModelConfig} onDone={() => setHallOpened(true)} />
+    return <OpeningGuide identity={identity} store={store} gateway={gateway} modelGateway={modelGateway} modelConfig={modelConfig} onModelSaved={saveOwnModel} onDone={() => setHallOpened(true)} />
   }
-  if(identity&&role&&store&&!modelConfig)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1>{modelNotice}{modelConfig===undefined?<p>正在读取接入设置…</p>:<ModelSettings initial store={store} gateway={modelGateway} current={null} onSaved={setModelConfig}/>}</main>
+  if(identity&&role&&store&&!modelConfig&&!communityConfig){
+    if(modelConfig===undefined||communityConfig===undefined)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1><p>正在读取接入设置…</p></main>
+    return <ModelSettings initial store={store} gateway={modelGateway} current={null} onSaved={saveOwnModel}
+      community={communityOffered?{available:true,busy:communityBusy,error:communityNotice,onStart:()=>void startWithCommunity()}:undefined} />
+  }
   // V2-16：学生端三个底部标签（今天/记录/我），老师端三个标签（今天/学生/我的馆）。模型由 M1-21 的 personal client 提供。
   // M1-22：学生壳用“当前家人”的分片存储与身份，设置区仍用根身份；家人切换在今天页顶部。
   if (store && identity && role === 'student') return <StudentShell store={store} identity={identity} llm={llm} stack={stack} stackStatus={activeStatus} modelNotice={modelNotice} modelSettings={modelSettings} family={memberOptions} active={active} onSwitch={setActive} memberStore={activeStore ?? store} memberIdentity={activeIdentity ?? identity} sendConsult={activeStack?.sendConsult} sendEnvelope={activeStack?.send} onFamilyChanged={refreshFamily} />

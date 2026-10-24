@@ -9,7 +9,7 @@ test('M1-21 role then mandatory real account test; 401/402/network plain errors 
  try{
  await page.goto('/');await page.getByRole('button',{name:'我是学生',exact:true}).click();await expect(page.getByRole('heading',{name:'接入您的大模型',exact:true})).toBeVisible();await expect(page.locator('[data-page=student-today]')).toHaveCount(0);await expect(page.getByRole('button',{name:'进入首页',exact:true})).toHaveCount(0)
  await form(page)
- for(const [status,text] of [[401,'接入凭证不对'],[402,'账户余额不足'],[0,'网络暂时不通']] as const){mode=status;await page.getByRole('button',{name:'测试连接',exact:true}).click();await expect(page.getByRole('alert')).toContainText(text);await expect(page.getByRole('button',{name:'进入首页',exact:true})).toHaveCount(0);expect(await page.locator('body').innerText()).not.toMatch(/SYNTHETIC_RAW|密钥|公钥/)}
+ for(const [status,text] of [[401,'密钥不对'],[402,'没额度'],[0,'网络不通']] as const){mode=status;await page.getByRole('button',{name:'测试连接',exact:true}).click();await expect(page.getByRole('alert')).toContainText(text);await expect(page.getByRole('button',{name:'进入首页',exact:true})).toHaveCount(0);expect(await page.locator('body').innerText()).not.toMatch(/SYNTHETIC_RAW|SYNTHETIC_PERSONAL_TOKEN|公钥/)}
  expect(house).toBe(0)
  await context.unroute('https://model.synthetic.example/**');await context.route('https://model.synthetic.example/**',fulfillFromModel)
  await page.getByRole('button',{name:'测试连接',exact:true}).click();await expect(page.getByText('✓ 连接成功',{exact:true})).toBeVisible()
@@ -42,7 +42,7 @@ test('M1-21 settings changes require retest and failed change preserves encrypte
  expect(await region.getByLabel('接入凭证',{exact:true}).inputValue()).toBe('')
  await region.getByLabel('接入凭证',{exact:true}).fill('SYNTHETIC_NEW_TOKEN')
  await people.student.context.route('https://model.synthetic.example/**',r=>r.fulfill({status:401,body:'SYNTHETIC_REJECTED'}))
- await region.getByRole('button',{name:'测试连接',exact:true}).click();await expect(region.getByRole('alert')).toContainText('接入凭证不对');await expect(region.getByRole('button',{name:'保存接入',exact:true})).toHaveCount(0)
+ await region.getByRole('button',{name:'测试连接',exact:true}).click();await expect(region.getByRole('alert')).toContainText('密钥不对');await expect(region.getByRole('button',{name:'保存接入',exact:true})).toHaveCount(0)
  const token=()=>page.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return (await s.store.get('settings','personal-model')).apiKey}finally{s.store.close();s.identity.privateKey.fill(0)}})
  expect(await token()).toBe('SYNTHETIC_PERSONAL_TOKEN')
  await people.student.context.unroute('https://model.synthetic.example/**');await people.student.context.route('https://model.synthetic.example/**',fulfillFromModel)

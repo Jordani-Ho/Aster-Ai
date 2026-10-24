@@ -63,9 +63,9 @@
 .op-link-details { margin-top: 14px; text-align: left; }
 .op-link-details label { margin-top: 10px; }
 .op-link-details button { display: inline-flex; align-items: center; justify-content: center; margin-top: 8px; min-height: 44px; padding: 0 16px; }
-/* 进馆首屏（09） */
-.sf-welcome { max-width: 480px; margin: 0 auto; min-height: 100dvh; box-sizing: border-box; display: flex; flex-direction: column; padding: calc(38px + env(safe-area-inset-top)) 26px 0; font-family: var(--nl-sans, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif); }
-.sf-body { flex: 1; }
+/* 进馆首屏（09）：V2-28 底部“开始使用”按视口高度固定在底、含安全区；内容区自己滚动。 */
+.sf-welcome { max-width: 480px; margin: 0 auto; height: 100dvh; max-height: 100dvh; overflow: hidden; box-sizing: border-box; display: flex; flex-direction: column; padding: calc(38px + env(safe-area-inset-top)) 26px 0; font-family: var(--nl-sans, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif); }
+.sf-body { flex: 1; min-height: 0; overflow-y: auto; }
 .sf-emblem { display: inline-grid; place-items: center; width: 92px; height: 92px; border-radius: 26px; background: rgba(255, 255, 255, .55); color: var(--venue-primary, #245a3f); margin-bottom: 26px; }
 .sf-emblem .venue-emblem { width: 44px; height: 44px; }
 .sf-body .storefront-invite { margin: 0 0 8px; font-size: 17px; color: #56645b; }
@@ -73,11 +73,25 @@
 .sf-body .storefront-intro { font-size: 19px; line-height: 1.9; color: #3d4a42; margin: 0 0 22px; white-space: pre-line; }
 .sf-divider { display: block; width: 44px; height: 2px; background: #c9c2b2; margin: 6px 0 26px; }
 .sf-lines { font-size: 17px; line-height: 2; color: #56645b; margin: 0; }
-.sf-foot { padding: 24px 0 calc(20px + env(safe-area-inset-bottom)); text-align: center; }
+.sf-foot { flex: 0 0 auto; padding: 14px 0 calc(14px + env(safe-area-inset-bottom)); text-align: center; background: inherit; }
 .sf-foot .storefront-start { width: 100%; min-height: 56px; border: 0; border-radius: 18px; background: var(--venue-primary, #245a3f); color: #fffdf8; font-size: 19px; font-weight: 600; }
 .sf-foot .storefront-hint { font-size: 14px; color: #6b746c; margin: 14px 0 0; }
 .sf-foot .storefront-error { color: #8a3a2b; font-size: 14px; }
-.sf-compact { display: block; min-height: 0; padding: 0; background: transparent !important; }
+.sf-compact { display: block; height: auto; max-height: none; overflow: visible; min-height: 0; padding: 0; background: transparent !important; }
+/* V2-28：学生首次接入模型的整页：内容区滚动，底部按钮固定在视口底（含安全区）。 */
+.model-start { --nl-bg: #faf8f3; --nl-ink: #1f2a24; --nl-accent: #2f5d4a; --nl-accent-deep: #1f4335; max-width: 480px; margin: 0 auto; height: 100dvh; max-height: 100dvh; overflow: hidden; box-sizing: border-box; display: flex; flex-direction: column; background: var(--nl-bg, #faf8f3); color: var(--nl-ink, #1f2a24); font-family: var(--nl-sans, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif); padding: calc(14px + env(safe-area-inset-top)) 20px 0; }
+.model-start-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 8px; }
+.model-start-title { font-family: var(--nl-serif, "Songti SC", serif); font-size: 26px; margin: 2px 0 10px; }
+.model-start h2 { font-size: 20px; margin: 12px 0 4px; }
+.model-start label { display: block; margin: 10px 0; font-size: 15px; }
+.model-start input, .model-start select { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid #d8d2c4; border-radius: 12px; background: #fff; }
+.model-start-foot { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 0 calc(12px + env(safe-area-inset-bottom)); background: var(--nl-bg, #faf8f3); border-top: 1px solid #e6e0d2; }
+.model-start-foot button { min-height: 48px; font: inherit; border-radius: 14px; border: 1px solid #d8d2c4; background: #fffdf8; color: #1f2a24; font-weight: 600; }
+.model-start-foot .nl-primary { background: #2f5d4a; border-color: #2f5d4a; color: #fdfcf7; }
+.model-community { background: #eef3ee; border: 1px solid #d8e2d6; border-radius: 18px; padding: 14px 16px; margin: 10px 0 16px; }
+.model-community h2 { margin-top: 0; }
+.model-community .nl-primary { width: 100%; min-height: 52px; border-radius: 14px; border: 0; background: #2f5d4a; color: #fdfcf7; font: inherit; font-size: 17px; font-weight: 600; }
+.model-community .nl-quiet { font-size: 14px; color: #6b746c; margin: 12px 0 0; }
 .sf-compact-card { display: flex; gap: 12px; background: #fffdf8; border: 1px solid #e6e0d2; border-radius: 18px; padding: 14px; align-items: flex-start; }
 .sf-compact-card .sf-emblem-small { flex: 0 0 46px; width: 46px; height: 46px; border-radius: 50%; background: #e9efe8; display: grid; place-items: center; color: var(--venue-primary, #245a3f); }
 .sf-compact-card .sf-emblem-small .venue-emblem { width: 24px; height: 24px; }
