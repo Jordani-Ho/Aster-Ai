@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>智能体架构蓝图</title>
+<style>
+body{margin:0;background:#faf8f3;color:#1f2a24;font-family:"Noto Sans CJK SC",system-ui,sans-serif}
+.wrap{width:1500px;padding:44px 52px;box-sizing:border-box}
+h1{font-family:"Noto Serif CJK SC",serif;font-size:40px;margin:0 0 6px;color:#2f5d4a}
+.sub{font-size:18px;color:#5b665f;margin-bottom:28px}
+.row{display:grid;grid-template-columns:1fr 240px 1fr;gap:24px;align-items:stretch}
+.side{border-radius:24px;padding:22px;display:flex;flex-direction:column;gap:14px}
+.t{background:#fff;border:2.5px solid #2f5d4a}.s{background:#fff;border:2.5px solid #2b5a7a}
+.side h2{margin:0;font-family:"Noto Serif CJK SC",serif;font-size:28px}
+.t h2{color:#2f5d4a}.s h2{color:#2b5a7a}
+.role{font-size:15px;color:#5b665f;margin-top:-6px}
+.core{border-radius:16px;padding:14px 16px;display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.t .core{background:#eef3ef}.s .core{background:#edf2f6}
+.core .lab{grid-column:1/-1;font-weight:700;font-size:15px}
+.cell{background:#fff;border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.55}
+.cell b{display:block;font-size:16px;margin-bottom:2px}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tools .lab{width:100%;font-weight:700;font-size:15px;color:#6e6656}
+.tool{border:1.5px dashed #b9ae94;border-radius:999px;padding:5px 12px;font-size:14px;background:#fffdf7}
+.mid{display:flex;flex-direction:column;justify-content:center;gap:14px}
+.relay{background:#1f2a24;color:#fff;border-radius:18px;padding:14px;text-align:center;font-size:16px;font-weight:700}
+.msg{font-size:13.5px;line-height:1.5;background:#fff;border:1px solid #e3ddd0;border-radius:12px;padding:10px}
+.msg .dir{font-weight:700;color:#2f5d4a}
+.loop{margin-top:26px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:15px}
+.loop .lab{font-weight:700;margin-right:6px}
+.step{background:#fff;border:1px solid #c9c2b2;border-radius:999px;padding:6px 14px}
+.arr{color:#8a958e}
+.foot{margin-top:22px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:15px;line-height:1.6}
+.foot div{border-top:2px solid #c9b98f;padding-top:10px}
+</style></head><body><div class="wrap">
+<h1>智能体架构</h1>
+<div class="sub">两端的核心是智能体（Codex 写）；其余都是可插拔的工具（DeepSeek 写）</div>
+<div class="row">
+  <div class="side t">
+    <h2>老师智能体</h2><div class="role">老师时间的放大器</div>
+    <div class="core"><div class="lab">智能体本身</div>
+      <div class="cell"><b>角色</b>替老师处理杂务；按老师的基础模板做事</div>
+      <div class="cell"><b>记忆</b>只向签字学：签了字的医案、改稿习惯、学生档案</div>
+      <div class="cell"><b>主动</b>按排班主动邀约；整理问诊；起草病历方案；药材提醒</div>
+      <div class="cell"><b>守线</b>签字只老师本人；不判断急症；原始材料签字后即毁</div>
+    </div>
+    <div class="tools"><div class="lab">工具（可插拔）</div>
+      <span class="tool">排班表</span><span class="tool">药材库</span><span class="tool">钱账</span><span class="tool">天时</span><span class="tool">统计</span><span class="tool">语音转文字</span>
+    </div>
+    <div class="cell" style="background:#f7f4ec"><b>开馆＝进入角色</b>模型 · 模板 · 工作时间/节假日/排班 · 药材库 · 邀约方式（自动 / 过目） · 保留期限</div>
+  </div>
+  <div class="mid">
+    <div class="relay">中继<br><span style="font-weight:400;font-size:13px">端到端加密</span></div>
+    <div class="msg"><span class="dir">学生 → 老师</span><br>问诊包（原话、整理、舌象、录音）<br>坚持小结 · 邀约回复<br>家里的药材（可选）</div>
+    <div class="msg"><span class="dir" style="color:#2b5a7a">老师 → 学生</span><br>签字病历 · 调养方案 · 作业<br>邀约（2 小时不回就下一位）<br>老师智能体的整理（供学习）</div>
+  </div>
+  <div class="side s">
+    <h2>学生智能体</h2><div class="role">学生习惯的辅导员</div>
+    <div class="core"><div class="lab">智能体本身</div>
+      <div class="cell"><b>角色</b>以我为主改变不良习惯，不惯着、不顺着</div>
+      <div class="cell"><b>记忆</b>本人档案（含西医病名）、病历方案、照镜子与打卡；感受只留本机</div>
+      <div class="cell"><b>主动</b>照镜子＝验算；督促作业与复诊；催回邀约；对标老师的整理</div>
+      <div class="cell"><b>守线</b>不判断急症；不冒充老师；不撒谎、不吓唬、不羞辱</div>
+    </div>
+    <div class="tools"><div class="lab">工具（可插拔）</div>
+      <span class="tool">舌象</span><span class="tool">问诊录音</span><span class="tool">药材库</span><span class="tool">天时</span><span class="tool">语音转文字</span>
+    </div>
+    <div class="cell" style="background:#f7f4ec"><b>进馆＝进入角色</b>称呼 · 性别 · 出生年月日时 · 出生地 · 居住城市 · 西医诊断 · 既往史 · 在用药 · 过敏 · 作息 · 家里药材（可选）</div>
+  </div>
+</div>
+<div class="loop"><span class="lab">做一件事（一事一议）</span>
+  <span class="step">触发</span><span class="arr">→</span><span class="step">只取这件事的材料</span><span class="arr">→</span><span class="step">规则或模型</span><span class="arr">→</span><span class="step">草稿</span><span class="arr">→</span><span class="step">真人确认 / 模板允许自动</span><span class="arr">→</span><span class="step">发出或记下</span><span class="arr">→</span><span class="step">忘掉</span>
+</div>
+<div class="foot">
+  <div><b>智能体本身只有四件事：</b>角色、记忆、主动、守线。不属于这四件的，都是工具。</div>
+  <div><b>工具只管数据和规则，</b>不自己判断；换外壳时拆成技能，别人可以重写。</div>
+  <div><b>签字、入账、退款</b>的确认永远是人按的，路径上不调模型。</div>
+</div>
+</div></body></html>
