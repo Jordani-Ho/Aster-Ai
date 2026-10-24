@@ -31,6 +31,8 @@ services:
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:change-me@example.com}
     volumes:
       - ./data/gateway:/app/data
+      # V2-31：网关只多挂一个 data/setup（一份一次性口令 + 扫码页），首次登记成功后删掉这两份文件。
+      - ./data/setup:/app/setup
       - ./data/gateway-config.json:/app/config.json:ro
     logging:
       driver: none

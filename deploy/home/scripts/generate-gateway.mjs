@@ -34,6 +34,8 @@ const config = {
   proxyAllowedUrls: (process.env.MODEL_PROXY_ALLOWED_URLS ?? '').split(',').map(value => value.trim()).filter(Boolean),
   membersFile: '/app/data/members.json',
   seedTokenFile: '/app/data/seed.json',
+  // V2-31：首次登记成功后，网关删掉这个目录里的一次性口令与扫码页（只删两个固定文件名）。
+  setupDir: '/app/setup',
   maxBodyBytes: 1048576,
   upstreamTimeoutMs: 120000,
   rateLimit: { windowMs: 60000, maxPerWindow: 20 },

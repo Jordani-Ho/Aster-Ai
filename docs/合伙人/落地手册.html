@@ -123,8 +123,10 @@ relay.域名 {
 
 <h2>四、装好以后交给老师</h2>
 <ol>
-  <li>在部署机器上取一次性登记口令：<code>cat deploy/home/data/teacher-setup-code.txt</code>，只交给老师本人。</li>
-  <li>把应用网址发给老师。老师打开 → 选“我是老师” → 接入自己的模型 → 进“管理”→“我是这个社区的老师”→ 输入口令。</li>
+  <li>让老师用手机扫部署电脑上的 <code>deploy/home/data/setup/teacher-setup.html</code> 二维码（终端也会打印同一个二维码），
+    口令会自动填好；需要手动粘贴时口令在 <code>deploy/home/data/setup/teacher-setup-code.txt</code>，只交给老师本人。
+    老师登记成功后这两份文件会自动删除（口令用过即作废）。</li>
+  <li>把应用网址发给老师。老师打开 → 选“我是老师” → 接入自己的模型 → 进“管理”→“我是这个社区的老师”→ 第 2 步口令已填好，点“登记”。</li>
   <li>看到“社区已建立，可以邀请学生”就完成了。接下来老师自己改门面、邀请学生。</li>
 </ol>
 

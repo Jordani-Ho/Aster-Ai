@@ -1,6 +1,6 @@
 import {it} from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs'
+import {mkdtempSync,mkdirSync,existsSync,writeFileSync,readFileSync,rmSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {createHash} from 'node:crypto'
@@ -13,7 +13,7 @@ const listen=s=>new Promise(r=>s.listen(0,'127.0.0.1',()=>r('http://127.0.0.1:'+
 const close=s=>new Promise(r=>{s.closeAllConnections?.();s.close(r)})
 function invite(key,url,expires=Math.floor(Date.now()/1000)+604800){return finalizeEvent({kind:27235,created_at:Math.floor(Date.now()/1000),tags:[['u',url+'/invite/redeem'],['method','POST'],['expiration',String(expires)],['nonce',crypto.randomUUID()]],content:'{"type":"aster.invite","version":1}'},key)}
 async function post(base,path,key,body){const text=JSON.stringify(body),event=finalizeEvent({kind:27235,created_at:Math.floor(Date.now()/1000),tags:[['u',base+path],['method','POST'],['payload',createHash('sha256').update(text).digest('hex')],['nonce',crypto.randomUUID()]],content:''},key);return fetch(base+path,{method:'POST',headers:{'content-type':'application/json',authorization:'Nostr '+Buffer.from(JSON.stringify(event)).toString('base64')},body:text})}
-async function fixture(run,seed=false){const dir=mkdtempSync(join(tmpdir(),'aster-invite-')),file=join(dir,'members.json'),logFile=join(dir,'gateway.log'),seedTokenFile=join(dir,'seed.json');writeFileSync(file,JSON.stringify(seed?[]:[getPublicKey(teacher)]));writeFileSync(seedTokenFile,JSON.stringify({tokenHash:createHash('sha256').update('SYNTHETIC_DEPLOYMENT_TOKEN').digest('hex')}));const upstream=createServer((req,res)=>res.end('{"choices":[]}')),up=await listen(upstream);const gateway=createGateway({membersFile:file,seedTokenFile,logFile,upstreamBaseUrl:up,upstreamModel:'synthetic',upstreamApiKeyEnv:'UNUSED',rateLimit:{windowMs:60000,maxPerWindow:100}}),url=await listen(gateway);try{await run({url,file,logFile,seedTokenFile})}finally{await close(gateway);await close(upstream);rmSync(dir,{recursive:true,force:true})}}
+async function fixture(run,seed=false,withSetup=false){const dir=mkdtempSync(join(tmpdir(),'aster-invite-')),file=join(dir,'members.json'),logFile=join(dir,'gateway.log'),seedTokenFile=join(dir,'seed.json'),setupDir=join(dir,'setup');writeFileSync(file,JSON.stringify(seed?[]:[getPublicKey(teacher)]));writeFileSync(seedTokenFile,JSON.stringify({tokenHash:createHash('sha256').update('SYNTHETIC_DEPLOYMENT_TOKEN').digest('hex')}));if(withSetup){mkdirSync(setupDir);writeFileSync(join(setupDir,'teacher-setup-code.txt'),'SYNTHETIC_DEPLOYMENT_TOKEN');writeFileSync(join(setupDir,'teacher-setup.html'),'<html>synthetic setup</html>');writeFileSync(join(setupDir,'keep.txt'),'keep')}const upstream=createServer((req,res)=>res.end('{"choices":[]}')),up=await listen(upstream);const gateway=createGateway({membersFile:file,seedTokenFile,setupDir,logFile,upstreamBaseUrl:up,upstreamModel:'synthetic',upstreamApiKeyEnv:'UNUSED',rateLimit:{windowMs:60000,maxPerWindow:100}}),url=await listen(gateway);try{await run({url,file,logFile,seedTokenFile,setupDir})}finally{await close(gateway);await close(upstream);rmSync(dir,{recursive:true,force:true})}}
 it('redeem adds member atomically and authorizes model immediately without restarting; reusable for another student',()=>fixture(async({url,file,logFile})=>{
  assert.equal((await post(url,'/v1/chat/completions',student,{messages:[]})).status,403)
  const ticket=invite(teacher,url)
@@ -37,3 +37,15 @@ it('deployment token claims exactly one seed identity and permits same-identity 
  assert.ok(!readFileSync(logFile,'utf8').includes('SYNTHETIC_DEPLOYMENT_TOKEN'))
 },true))
 it('failed atomic rename keeps original member file and no speculative membership',()=>{const dir=mkdtempSync(join(tmpdir(),'aster-members-')),file=join(dir,'members.json');writeFileSync(file,JSON.stringify([getPublicKey(teacher)]));try{const store=new MemberStore(file,()=>{throw Error('synthetic crash')});assert.throws(()=>store.add(getPublicKey(student)));assert.equal(store.has(getPublicKey(student)),false);assert.deepEqual(JSON.parse(readFileSync(file)),[getPublicKey(teacher)])}finally{rmSync(dir,{recursive:true,force:true})}})
+// V2-31：首次登记成功后删掉本机的口令与 teacher-setup.html；只删这两个已知文件，不动同目录其它文件。
+it('V2-31 首次登记成功后删除本机口令与 teacher-setup.html，日志仍不含口令',()=>fixture(async({url,seedTokenFile,logFile,setupDir})=>{
+ assert.equal(existsSync(join(setupDir,'teacher-setup-code.txt')),true)
+ assert.equal((await post(url,'/invite/seed',teacher,{token:'SYNTHETIC_DEPLOYMENT_TOKEN'})).status,200)
+ assert.equal(existsSync(join(setupDir,'teacher-setup-code.txt')),false)
+ assert.equal(existsSync(join(setupDir,'teacher-setup.html')),false)
+ assert.equal(existsSync(join(setupDir,'keep.txt')),true)
+ const seed=JSON.parse(readFileSync(seedTokenFile,'utf8'))
+ assert.equal(seed.tokenHash,createHash('sha256').update('SYNTHETIC_DEPLOYMENT_TOKEN').digest('hex'))
+ assert.equal(seed.usedFor,getPublicKey(teacher))
+ assert.ok(!readFileSync(logFile,'utf8').includes('SYNTHETIC_DEPLOYMENT_TOKEN'))
+},true,true))

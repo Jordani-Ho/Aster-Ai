@@ -33,6 +33,7 @@ import { StudentShell } from './StudentShell'
 import { loadFamilyMembers, memberIdentity, memberStore, type FamilyMember } from './core/family'
 import { markRestoreNeeded } from './core/records/backup'
 import { runRetentionOnce } from './core/records/retention'
+import { takeSetupToken } from './core/setup-link'
 
 const TeacherShell = lazy(() => import('./TeacherShell').then(module => ({default:module.TeacherShell})))
 
@@ -86,6 +87,10 @@ export function App() {
     if (!('serviceWorker' in navigator)) return
     void navigator.serviceWorker.register('/sw.js').catch(() => {})
   }, [])
+
+  // V2-31：扫码登记链接的 #setup=<口令> 由建馆引导读取；这里兜底清掉，
+  // 避免在其它入口打开时把口令留在地址栏（口令一次性、用完作废）。
+  useEffect(() => { if (location.hash.startsWith('#setup=')) takeSetupToken() }, [])
 
   // V2-14：只记录错误类型，不记内容；统计只读这些次数。
   useEffect(() => {

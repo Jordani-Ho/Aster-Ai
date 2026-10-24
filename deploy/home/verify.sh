@@ -28,11 +28,13 @@ SELF_MEMBER_FILE="data/self-member.json"
 mkdir -p data
 
 # 验收用自测成员：只为探测“成员请求 202 / 成员 AUTH”，不是成员白名单、也不写中继配置。
-# 生成一次后存在 data/self-member.json 复用；公钥加入网关成员名单（网关每次请求都重读该文件）。
+# 生成一次后存在 data/self-member.json 复用；公钥每次都幂等补进网关成员名单（V2-31 修：
+# 以前只在首次生成时写名单，名单被重置成 0 人后 verify 会 403；现在已存在也补、去重）。
 ensure_self_member() {
   if [ -f "$SELF_MEMBER_FILE" ]; then
     MEMBER_SECRET="$(node -p "JSON.parse(require('fs').readFileSync('$SELF_MEMBER_FILE','utf8')).secret")"
     MEMBER_PUBKEY="$(node -p "JSON.parse(require('fs').readFileSync('$SELF_MEMBER_FILE','utf8')).pubkey")"
+    { [ ${#MEMBER_SECRET} -eq 64 ] && [ ${#MEMBER_PUBKEY} -eq 64 ]; } || die "data/self-member.json 内容不对：删掉它再跑 ./verify.sh 会重新生成。"
   else
     log "生成验收用自测成员（只用于探测，不加入中继白名单）…"
     local out
@@ -41,17 +43,24 @@ ensure_self_member() {
     MEMBER_PUBKEY="$(printf '%s\n' "$out" | sed -n '2p')"
     { [ ${#MEMBER_SECRET} -eq 64 ] && [ ${#MEMBER_PUBKEY} -eq 64 ]; } || die "自测成员密钥生成失败，输出：$out"
     SECRET="$MEMBER_SECRET" PUBKEY="$MEMBER_PUBKEY" node --input-type=module <<'NODE'
-import {readFileSync,writeFileSync,mkdirSync} from 'node:fs'
-const file='data/self-member.json'
-writeFileSync(file, JSON.stringify({secret: process.env.SECRET, pubkey: process.env.PUBKEY}), {mode:0o600})
-mkdirSync('data/gateway',{recursive:true})
-const membersFile='data/gateway/members.json'
-let members=[]
-try{members=JSON.parse(readFileSync(membersFile,'utf8'));if(!Array.isArray(members))members=[]}catch{}
-if(!members.includes(process.env.PUBKEY))members.push(process.env.PUBKEY)
-writeFileSync(membersFile, JSON.stringify(members), {mode:0o600})
+import {writeFileSync} from 'node:fs'
+writeFileSync('data/self-member.json', JSON.stringify({secret: process.env.SECRET, pubkey: process.env.PUBKEY}), {mode:0o600})
 NODE
   fi
+  # V2-31：不管 self-member.json 是不是早就有了，都确保公钥在名单里（幂等、去重）。
+  PUBKEY="$MEMBER_PUBKEY" node --input-type=module <<'NODE'
+import {existsSync,readFileSync,writeFileSync,mkdirSync} from 'node:fs'
+const file='data/gateway/members.json'
+mkdirSync('data/gateway',{recursive:true})
+let members=[]
+try{const value=JSON.parse(readFileSync(file,'utf8'));if(Array.isArray(value))members=value.filter(item=>typeof item==='string')}catch{}
+const unique=[...new Set(members)]
+if(!unique.includes(process.env.PUBKEY)){
+  unique.push(process.env.PUBKEY)
+  writeFileSync(file, JSON.stringify(unique), {mode:0o600})
+  console.log('已把验收自测成员补进网关成员名单（幂等，只为探测）。')
+}
+NODE
 }
 
 ensure_self_member
@@ -75,9 +84,18 @@ if [ -d data/relay ] && [ -n "$(find data/relay -type f -print -quit)" ]; then
 else
   log "WARN relay 数据目录还是空的（刚启动、还没有事件时正常）"
 fi
-for file in data/relay-config.toml data/gateway-config.json data/gateway/seed.json data/teacher-setup-code.txt; do
+for file in data/relay-config.toml data/gateway-config.json data/gateway/seed.json; do
   if [ -f "$file" ]; then log "PASS 配置文件在位：$file"; else log "FAIL 缺少 $file"; FAIL=1; fi
 done
+# V2-31：口令文件在时必须与种子一致；老师登记后它会被自动删掉，所以不是必须存在。
+if [ -f data/setup/teacher-setup-code.txt ]; then log "PASS 待用口令文件在位：data/setup/teacher-setup-code.txt"; fi
+if node scripts/safeguard-data.mjs verify >/dev/null 2>&1; then
+  log "PASS 口令与网关种子一致（或已登记、口令已作废）"
+else
+  node scripts/safeguard-data.mjs verify || true
+  log "FAIL 口令与网关种子核对失败"
+  FAIL=1
+fi
 
 step "3/5 docker compose logs 隐私扫描（relay / gateway / web）"
 LOG_FILE="data/verify-logs.txt"

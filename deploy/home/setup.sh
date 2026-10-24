@@ -3,7 +3,7 @@
 # 在 WSL2 里以普通用户运行：./setup.sh
 # 不调用 sudo，不安装任何东西；Docker 需要先按 README 第 1 步装好。
 # 第二版没有旧版的成员名单与预留位置：中继用 community_open（仍强制 NIP-42 认证），
-# 人员靠邀请链接登记；老师第一次登记用 data/teacher-setup-code.txt 的一次性口令。
+# 人员靠邀请链接登记；老师第一次登记用 data/setup/teacher-setup-code.txt 的一次性口令（可扫码填入）。
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -107,13 +107,9 @@ log "生成中继配置 data/relay-config.toml（relay_url=wss://$RELAY_DOMAIN/�
 ( cd ../.. && RELAY_COMMUNITY_OPEN="${RELAY_COMMUNITY_OPEN:-true}" RELAY_PUBLIC_URL="wss://${RELAY_DOMAIN}/" node relay/configure.mjs )
 mv -f ../../relay/config.local.toml data/relay-config.toml
 
-# 一次性部署口令只留本机。重跑不覆盖口令或已认领记录。
-node --input-type=module <<'NODE'
-import {existsSync,writeFileSync,chmodSync} from 'node:fs';import {randomBytes,createHash} from 'node:crypto';
-if(!existsSync('data/gateway/seed.json')){const token=randomBytes(32).toString('base64url');writeFileSync('data/gateway/seed.json',JSON.stringify({tokenHash:createHash('sha256').update(token).digest('hex')}),{mode:0o600});writeFileSync('data/teacher-setup-code.txt',token+'\n',{mode:0o600})}
-if(existsSync('data/teacher-setup-code.txt'))chmodSync('data/teacher-setup-code.txt',0o600)
-NODE
-log "社区老师首次登记：在本机查看 data/teacher-setup-code.txt，把口令输入手机/电脑的‘我是这个社区的老师’。不要公开此文件。"
+# 一次性部署口令只留本机。V2-31：seed.json 与 data/setup/teacher-setup-code.txt 由
+# scripts/safeguard-data.mjs 成对维护（第 3b 步已处理），这里不再各自生成。
+log "社区老师首次登记：口令在 data/setup/teacher-setup-code.txt，扫码网页在 data/setup/teacher-setup.html。不要公开这些文件。"
 log "复制文件里的那串口令后，直接粘贴到「登记口令」框里即可，不用自己编；前后空格和换行会自动去掉。"
 
 # ---- 7. 网关配置与成员名单 ----
@@ -145,6 +141,19 @@ APP_BUILD_DATE_VALUE="$HOST_APP_BUILD_DATE"
 ensure_env APP_VERSION "$APP_VERSION_VALUE"
 ensure_env APP_BUILD_DATE "$APP_BUILD_DATE_VALUE"
 log "版本号：$APP_VERSION_VALUE · $APP_BUILD_DATE_VALUE（web 容器启动构建时注入页面）"
+
+# ---- 7d. 扫码登记（V2-31）：还没老师登记时，终端打印二维码并生成本机 teacher-setup.html ----
+SETUP_URL=""
+case "$APP_DOMAIN" in
+  ""|placeholder.invalid) : ;;
+  *) SETUP_URL="https://$APP_DOMAIN" ;;
+esac
+if ! APP_URL="$SETUP_URL" node scripts/setup-link.mjs; then
+  warn "二维码没有生成成功，仍可在建馆第 2 步手动粘贴口令（data/setup/teacher-setup-code.txt）。"
+fi
+
+# ---- 7e. 口令与种子核对（V2-31）：口令文件哈希必须等于种子 tokenHash；不一致就报错退出 ----
+node scripts/safeguard-data.mjs verify || die "口令与网关种子核对失败，按上面的说明处理后重跑（不能带着不一致的状态启动）。"
 
 # ---- 8. 校验 compose 配置能展开 ----
 docker compose config >/dev/null || die "compose 配置校验失败：看上面的报错。"
