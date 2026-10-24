@@ -138,5 +138,8 @@ export async function getDailyMirror(store: LocalStore, input: MirrorInput): Pro
     run: async (materials) => dailyMirror({ ...materials, ...(llm ? { llm } : {}), now: () => now }),
     deliver: async (result: MirrorResult) => { await store.put(MIRROR_COLLECTION, date, result as unknown as StoreValue) },
   })
-  return (await createRunner({ store, side: 'student', maxTokens: budgetLimit() }).run(task, { targetId: 'self', now })).output
+  const result = (await createRunner({ store, side: 'student', maxTokens: budgetLimit() }).run(task, { targetId: 'self', now })).output
+  // 页面缓存丢失时复用已完成的任务产出，不重复调用模型。
+  if (!await store.get(MIRROR_COLLECTION, date)) await store.put(MIRROR_COLLECTION, date, result as unknown as StoreValue)
+  return result
 }

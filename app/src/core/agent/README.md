@@ -24,7 +24,7 @@ agent-failures 只留 `{at, kind}` 最近 100 条，没有对象身份、输入�
 ## 已接入的两件事
 
 - `drafting/agent.ts` → drafting 任务：对象是问诊卡 encounter.id，不能把“同一学生”当作一天只能问诊一次。远程核对和面诊起草都走这里；沿用 V2-19 的裁材料、额度重试与安全失败提示。只保存模型新增的四诊、判断、方案、材料提示；老师已经录入的 intake/profile 由调用方只读拼回，绝不让模型写 source:teacher。草稿进入原来的 SignReview，签字、钱账入账和退款仍完全在骨架外，不经 runner.confirm。
-- `mirror/getDailyMirror` → mirror 任务：对象 self，家人的 LocalStore 分片天然隔离。同日缓存和固定建议回退不变，只在本机落结果，不发送感受或模型上下文。dailyMirror 仍是无存储的生成工具；应用入口使用 getDailyMirror。
+- `mirror/getDailyMirror` → mirror 任务：对象 self，家人的 LocalStore 分片天然隔离。同日缓存和固定建议回退不变，只在本机落结果，不发送感受或模型上下文。dailyMirror 仍是无存储的生成工具；应用入口使用 getDailyMirror。页面缓存丢失时从已完成任务恢复，不重复生成；测试若要模拟重新生成，需同时清理该镜子任务记录。
 
 ## 打开时补做，后台不假装在线
 
