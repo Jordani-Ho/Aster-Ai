@@ -10,7 +10,7 @@ import {
 import { sendInPersonRecord, listStudentAdherence, type SendEnvelope, type StudentAdherence } from './core/inbox'
 import { teacherCases, teacherRecordsOf, type LoadedTeacherRecord } from './core/records/teacher'
 import { loadTeacherTemplate } from './core/drafting/template'
-import { draftEncounter as draftWithModel } from './core/drafting'
+import { draftWithAgent } from './core/drafting/agent'
 import { priorMaterials } from './core/drafting/materials'
 import { reviseEncounter } from './core/drafting/revise'
 import { recordSignedObservation, type ObservationNote } from './core/kangbi'
@@ -151,7 +151,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
       if (llm) {
         setStatus('正在整理草稿，老师看过整张卡片后签字发出。')
         let draftError = ''
-        const generated = await draftWithModel(inPersonConsultPackage(confirmed), {
+        const generated = await draftWithAgent(store, inPersonConsultPackage(confirmed), {
           template: await loadTeacherTemplate(store),
           // V2-19：这位学生以前签过字的旧病历（可减）；医案只取老师亲手改过的（可减）。
           prior: priorMaterials(records),

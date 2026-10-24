@@ -7,6 +7,9 @@ import type { Weather } from '../weather'
 import type { Checkin } from '../homework'
 import { localDay } from '../homework/schedule'
 import { last14DayTrend, stressHighStreak, type SelfRating, type StressRating, type Trend } from './trend'
+import { createRunner } from '../agent/runner'
+import { AgentError, defineTask, materialTokens } from '../agent/tasks'
+import { budgetLimit } from '../drafting/budget'
 
 export {
   recordSelfRating, recordStressRating, listSelfRatings, listStressRatings,
@@ -121,10 +124,19 @@ export async function dailyMirror(input: MirrorInput): Promise<MirrorResult> {
 
 // 同一天只生成一次：先查本机缓存，命中直接返回；否则生成后写缓存。
 export async function getDailyMirror(store: LocalStore, input: MirrorInput): Promise<MirrorResult> {
-  const date = localDay(input.now?.() ?? new Date())
+  const now = input.now?.() ?? new Date()
+  if (!(now instanceof Date) || !Number.isFinite(+now) || !Array.isArray(input.recentCheckins) || !Array.isArray(input.recentSymptoms) || (input.recentStress !== undefined && !Array.isArray(input.recentStress)) || typeof input.jieqi !== 'string') throw new AgentError('input')
+  const date = localDay(now)
   const cached = await store.get(MIRROR_COLLECTION, date)
   if (cached) return cached as unknown as MirrorResult
-  const result = await dailyMirror(input)
-  await store.put(MIRROR_COLLECTION, date, result as unknown as StoreValue)
-  return result
+  const { llm, now: _clock, ...values } = input
+  const data = Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined)) as unknown as Omit<MirrorInput, 'llm' | 'now'>
+  const task = defineTask({
+    id: 'mirror', side: 'student', trigger: { kind: 'open' }, confirm: 'template',
+    gather: async () => data,
+    tokens: (materials: typeof data) => materialTokens({ ...materials, prompt: materials.prompt ?? prompt }),
+    run: async (materials) => dailyMirror({ ...materials, ...(llm ? { llm } : {}), now: () => now }),
+    deliver: async (result: MirrorResult) => { await store.put(MIRROR_COLLECTION, date, result as unknown as StoreValue) },
+  })
+  return (await createRunner({ store, side: 'student', maxTokens: budgetLimit() }).run(task, { targetId: 'self', now })).output
 }

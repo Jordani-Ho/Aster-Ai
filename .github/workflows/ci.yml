@@ -84,6 +84,8 @@ jobs:
         run: node e2e/tongue.browser.mjs
       - name: V2-04 money browser integration
         run: node e2e/money.browser.mjs
+      - name: V2-21 agent browser integration
+        run: node e2e/agent.browser.mjs
       - name: V2-09 storefront browser integration
         run: node e2e/storefront.browser.mjs
       - name: V2-15 opening-guide browser integration

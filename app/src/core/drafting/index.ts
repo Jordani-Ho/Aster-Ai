@@ -109,6 +109,13 @@ async function callModel(llm: LlmClient, messages: ChatMessage[], timeoutMs: num
   } finally { if (timer !== undefined) clearTimeout(timer) }
 }
 
+export function draftMaterialInput(pkg: ConsultPackage, materials: DraftMaterials, level: DraftLevel): DraftMaterialInput {
+  return { prompt, encounter: { profile: pkg.encounter.profile, intake: pkg.encounter.intake }, template: materials.template, level,
+    prior: [...(materials.prior ?? [])],
+    cases: searchCases([pkg.encounter.intake.chiefComplaint.value, pkg.encounter.intake.presentIllness.value].filter(Boolean).join(' '), materials.cases ?? []),
+  }
+}
+
 export async function draftEncounter(pkg: ConsultPackage, materials: DraftMaterials, llm: LlmClient, options: DraftOptions = {}): Promise<DraftResult> {
   const draft = studentDraft(pkg.encounter)
   const level = options.level ?? 'record'
@@ -117,14 +124,7 @@ export async function draftEncounter(pkg: ConsultPackage, materials: DraftMateri
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || !['record', 'pattern', 'prescription'].includes(level)) throw new Error('options')
     // 只传本任务所需的资料；不传身份、附件二进制或未经解析的历史签名事件。
     const limit = budgetLimit()
-    const input: DraftMaterialInput = {
-      prompt,
-      encounter: { profile: draft.profile, intake: draft.intake },
-      template: materials.template,
-      level,
-      prior: [...(materials.prior ?? [])],
-      cases: searchCases([draft.intake.chiefComplaint.value, draft.intake.presentIllness.value].filter(Boolean).join(' '), materials.cases ?? []),
-    }
+    const input = draftMaterialInput(pkg, materials, level)
     const fitted = fitDraftMaterials(input)
     let reply: string
     let note = fitted.note
