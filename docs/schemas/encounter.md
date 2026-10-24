@@ -11,6 +11,11 @@ V2-03（B 类，随 #34 交 Claude 审核）：`Encounter.intake` 新增可选 `
 
 V2-08（B 类）：每份 `TongueAbstract` 增加两个可选字段——`lightingNote?: true`（拍摄光线偏色，界面显示“颜色仅供参考”）与 `crop?: {id,type:'photo',sha256,bytes}`（舌头裁剪图引用，走既有附件通道，不含原图）。特征每项新增 `uncertain`（不确定）；`teeth`/`cracks` 的取值扩展为 `[]`（未见）、`null`（有、位置不确定）、`'uncertain'`（不确定）或位置名数组。V2-03 旧记录里的 `unknown` 仍可读、按不确定显示，新记录不再写。仍无数据迁移。
 
+V2-30（B 类，已批）：`Encounter` 新增可选 `postures: PostureRecord[]`（最多 10 条）。只随面诊（`kind: 'in_person'`）签字保存；远程问诊包不带；老病历没有该字段照常收。每条为 `{id,student,teacher,at,segments,metrics,values,note?}`：
+- `segments[].frame` 只有关键点坐标（0–1 归一化，y 向下）与来源 `phone|studio`、视角 `front|side|video`、时间；照片/视频识别后当场清掉，不入库、不进附件通道。
+- 老师标注（`marks[].point/reason`）、辅助线（`guides[].kind`）与拖动改点（`overrides[point]={x,y,source:'teacher'}`）随记录保存；`values` 是签字时的指标快照，改点后按新坐标重算。
+- 类型与严格校验在 `domain/tcm/posture.ts`；`signEncounter` 会拒绝非面诊携带 `postures`、格式不对或不属于该学生的记录。没有数据迁移。
+
 下面的定义已经放在 `app/src/core/record/types.ts`（由技术合伙人建立，与本文逐字一致）。各任务卡直接引用，不要重复定义；发现问题在合并请求里提出。
 
 ```ts

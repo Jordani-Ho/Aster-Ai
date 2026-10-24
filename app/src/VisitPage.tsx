@@ -18,6 +18,7 @@ import { formatHeavenTime, heavenNow, heavenStampOf, type HeavenTime } from './c
 import { EXAM_KEYS, splitFourExams, type ExamKey } from './four-exams'
 import { confirmHeardExams, setExamDraft } from './review-model'
 import { SignReview } from './SignReview'
+import { PostureTool } from './PostureTool'
 import { uiError } from './core/onboarding/ui'
 import './newui.css'
 
@@ -62,6 +63,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [comparison, setComparison] = useState<ObservationNote>(null)
+  const [postureOpen, setPostureOpen] = useState(false)
   const textarea = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
@@ -168,6 +170,8 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
         setStatus('未配置模型：本次没有 AI 草稿，核对四诊后即可签字。')
         setMaterialNote([])
       }
+      // V2-30：体态记录不经过模型起草，核对面诊草稿时原样带进签字。
+      if (confirmed.postures?.length) drafted = { ...drafted, postures: confirmed.postures }
       apply(confirmed)
       setDraft(drafted); setPhase('review')
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -197,6 +201,13 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
       <p className="nl-quiet">签名病历已发给学生。照片与代录内容仍在本机，按保留期限统一清理。</p>
       <button type="button" className="nl-primary" onClick={onExit}>返回今天</button>
     </div></div>
+  }
+
+  if (postureOpen && encounter) {
+    return <PostureTool identity={identity} store={store} student={encounter.student} encounter={encounter}
+      onClose={() => setPostureOpen(false)}
+      onChangePostures={list => apply({ ...encounter, postures: list })}
+      onAddHomework={homework => apply({ ...encounter, plan: { ...encounter.plan, homework: [...encounter.plan.homework, homework] } }, '已把动作加进这次面诊的作业草稿。')} />
   }
 
   if (phase === 'review' && draft && encounter) {
@@ -271,6 +282,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
           })}
         </div>
         <p className="nl-help">点任意一格可以改。说完四诊，智能体按您以往的思想起草判断和方子。</p>
+        <button type="button" className="nl-link-button" onClick={() => setPostureOpen(true)}>体态：拍一段 / 导入骨架（这次 {encounter.postures?.length ?? 0} 条）</button>
       </div>
       <footer className="nl-visit-foot">
         <button type="button" className="nl-mic" aria-label="话筒：唤起语音输入" onClick={() => { textarea.current?.focus() }}>
