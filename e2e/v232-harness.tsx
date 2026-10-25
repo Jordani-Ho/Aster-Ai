@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import template from '../domain/tcm/templates/default.json'
 import type { TeacherTemplate } from '../domain/tcm/templates/types'
 import type { Envelope } from '../app/src/core/transport'
-import { createIdentity, type Identity } from '../app/src/core/identity'
+import { identityFromPrivateKey, type Identity } from '../app/src/core/identity'
 import { openStore, type LocalStore } from '../app/src/core/store'
 import { createWiring } from '../app/src/core/wiring'
 import { ConsultPage } from '../app/src/ConsultPage'
@@ -20,11 +20,14 @@ import type { ConsultPackage } from '../app/src/core/record/types'
 // 只用合成身份、合成图与可注入的骨骼检测器桩；老师端指标是自己加的“左右膝高低差”。
 type IdentityNode = ReturnType<typeof createWiring>
 
-const teacher = createIdentity()
-const student = createIdentity()
-const member = createIdentity()
-const manager = createIdentity()
-const optionalStudent = createIdentity()
+// 固定合成身份：Vite 首次启动可能在页面加载后自动重载一次（依赖预构建），
+// 身份必须跨刷新不变，否则固定库名会被判成“本地存储属于其他身份”。这些私钥只在测试里用。
+const key = (seed: number) => Uint8Array.from({ length: 32 }, (_, index) => (seed * 37 + index * 11) & 0xff)
+const teacher = identityFromPrivateKey(key(1))
+const student = identityFromPrivateKey(key(2))
+const member = identityFromPrivateKey(key(3))
+const manager = identityFromPrivateKey(key(4))
+const optionalStudent = identityFromPrivateKey(key(5))
 
 const teacherStore = await openStore(teacher, { name: 'v232-teacher' })
 const studentStore = await openStore(student, { name: 'v232-student' })

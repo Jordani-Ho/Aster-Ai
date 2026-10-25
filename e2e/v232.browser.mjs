@@ -50,7 +50,8 @@ async function open(viewport = { width: 393, height: 852 }) {
   await page.goto(`${origin}/@fs/${root}e2e/v232.html`)
   await page.waitForFunction(() => Boolean(globalThis.__v232))
   await page.waitForLoadState('networkidle')
-  await page.waitForTimeout(600)
+  // Vite 首次启动可能在页面加载后自动重载一次（依赖预构建）；等稳定再操作，身份已固定，重载不会冲突。
+  await page.waitForTimeout(2500)
   return { context, page, errors, requests }
 }
 const imageInput = 'input[aria-label="拍摄或选择体态照片/视频"]'
