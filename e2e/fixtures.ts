@@ -59,10 +59,10 @@ export async function openCommunity(page:Page):Promise<string>{
 async function actualActor(page:Page){return page.evaluate(async()=>{const p='/src/core/store/index.ts',{resumeStore}=await import(p),session=await resumeStore();try{return {pubkey:session.identity.publicKey,key:[...session.identity.privateKey]}}finally{session.store.close();session.identity.privateKey.fill(0)}})}
 export const test=base.extend<{people:{teacher:Person;student:Person};seedLedger:boolean;communityOpen:boolean}>({
  seedLedger:[false,{option:true}],communityOpen:[true,{option:true}],
- people:async({browser,baseURL,request,seedLedger,communityOpen},use)=>{
+ people:async({browser,baseURL,request,seedLedger,communityOpen,timezoneId},use)=>{
   const headers={authorization:'Bearer '+runtime.resetToken}
   expect((await request.post(runtime.controlURL+'/reset',{headers,data:{communityOpen:true}})).status()).toBe(200)
-  const tc=await browser.newContext({viewport:{width:375,height:812},baseURL}),sc=await browser.newContext({viewport:{width:375,height:812},baseURL})
+  const tc=await browser.newContext({viewport:{width:375,height:812},baseURL,timezoneId}),sc=await browser.newContext({viewport:{width:375,height:812},baseURL,timezoneId})
   try{
    await mockModel(tc);await mockModel(sc)
    const teacher={context:tc,page:await tc.newPage(),actor:actors.teacher},student={context:sc,page:await sc.newPage(),actor:actors.student}

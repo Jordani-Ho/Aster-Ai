@@ -3,7 +3,10 @@ import { actors } from './actors.mjs'
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { Page } from '@playwright/test'
-test.use({ seedLedger: true })
+// 普通问诊在本地正午附近运行，避开子时归前一天；不改真实时间，保留网关鉴权窗口。
+// 凌晨有效日另由固定 UTC 00:30 的 phone.browser 回归覆盖。
+const offset = new Date().getUTCHours() - 12
+test.use({ seedLedger: true, timezoneId: `Etc/GMT${offset >= 0 ? '+' : '-'}${Math.abs(offset)}` })
 // V2-16 新外壳：老师 今天/学生/我的馆；学生 今天/记录/我。
 async function settings(page: Page) {
   const manage = page.getByRole('button', { name: '我的馆', exact: true })
