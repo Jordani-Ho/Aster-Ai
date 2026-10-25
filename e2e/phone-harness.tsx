@@ -21,6 +21,7 @@ import { addTeacher } from '../app/src/core/inbox'
 import { addFamilyMember, loadFamilyMembers } from '../app/src/core/family'
 import { saveTongue } from '../app/src/core/tongue'
 import { loadProfile, saveProfile } from '../app/src/core/intake/session'
+import { effectiveDay } from '../app/src/core/homework/schedule'
 import type { LlmClient } from '../app/src/core/llm'
 import type { Wiring } from '../app/src/core/wiring'
 import type { TongueAbstract } from '../domain/tcm/tongue'
@@ -83,7 +84,7 @@ const student = partner.identity
 await teacher.store.put('settings', 'role', { role: 'teacher' })
 
 const now = new Date()
-const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-')
+const today = effectiveDay(now)
 const weekday = (now.getDay() + 6) % 7
 const weekStart = (() => { const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekday); return [monday.getFullYear(), String(monday.getMonth() + 1).padStart(2, '0'), String(monday.getDate()).padStart(2, '0')].join('-') })()
 const daysAgoDate = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 10, 0, 0)

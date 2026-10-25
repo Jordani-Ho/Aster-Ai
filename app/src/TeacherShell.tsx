@@ -10,6 +10,7 @@ import { TeacherManagement } from './TeacherManagement'
 import { TeacherStudentsPage } from './TeacherStudentsPage'
 import { VisitPage } from './VisitPage'
 import { RemoteReview } from './RemoteReview'
+import { HallGroundwork, GroundworkNotice } from './HallGroundwork'
 import './newui.css'
 import './newui2.css'
 import './teacher.css'
@@ -33,6 +34,8 @@ export interface TeacherShellProps {
 export function TeacherShell({ identity, store, stack, llm, gateway, status, settings }: TeacherShellProps) {
   const [tab, setTab] = useState<Tab>('today')
   const [flow, setFlow] = useState<Flow>(null)
+  const [groundwork, setGroundwork] = useState(false)
+  if (groundwork) return <div className="nl-shell"><div className="nl-page"><button type="button" className="nl-back" onClick={() => setGroundwork(false)}>返回今天</button><HallGroundwork store={store} onDone={() => setGroundwork(false)} /></div></div>
 
   if (flow?.kind === 'visit') return <VisitPage identity={identity} store={store} llm={llm} send={stack?.send as SendEnvelope | undefined} initialStudent={flow.student} onExit={() => setFlow(null)} />
   if (flow?.kind === 'remote') {
@@ -41,6 +44,7 @@ export function TeacherShell({ identity, store, stack, llm, gateway, status, set
   }
 
   return <div className="nl-shell">
+    {tab === 'today' && <div className="nl-page"><GroundworkNotice store={store} onOpen={() => setGroundwork(true)} /></div>}
     {tab === 'today' && <TeacherToday identity={identity} store={store} status={status}
       onStartVisit={() => setFlow({ kind: 'visit' })} onOpenRemote={consult => setFlow({ kind: 'remote', consult })} />}
     {tab === 'students' && <TeacherStudentsPage identity={identity} store={store} llm={llm} send={stack?.send as SendEnvelope | undefined} ledger={stack?.ledger ?? null} onVisit={student => setFlow({ kind: 'visit', student })} />}

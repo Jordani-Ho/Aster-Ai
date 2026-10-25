@@ -44,6 +44,11 @@ export async function openCommunity(page:Page):Promise<string>{
  await page.getByLabel('一句介绍',{exact:true}).fill('一起照顾日常作息。')
  await page.getByRole('button',{name:'就用这个名字',exact:true}).click()
  await expect(page.getByText('✓ 模型已接好',{exact:true})).toBeVisible()
+ await expect(page.getByRole('button',{name:'开馆',exact:true})).toBeDisabled()
+ for(const label of ['模板','排班','邀约方式','药材库','保留期限','模型']){
+  await page.getByRole('button',{name:'就这样，保存'+label,exact:true}).click()
+ }
+ await expect(page.getByRole('button',{name:'开馆',exact:true})).toBeEnabled()
  await page.getByRole('button',{name:'开馆',exact:true}).click()
  await expect(page.getByRole('heading',{name:'请第一位学生进来',exact:true})).toBeVisible()
  await page.locator('details.op-link-details > summary').click()
@@ -54,10 +59,10 @@ export async function openCommunity(page:Page):Promise<string>{
 async function actualActor(page:Page){return page.evaluate(async()=>{const p='/src/core/store/index.ts',{resumeStore}=await import(p),session=await resumeStore();try{return {pubkey:session.identity.publicKey,key:[...session.identity.privateKey]}}finally{session.store.close();session.identity.privateKey.fill(0)}})}
 export const test=base.extend<{people:{teacher:Person;student:Person};seedLedger:boolean;communityOpen:boolean}>({
  seedLedger:[false,{option:true}],communityOpen:[true,{option:true}],
- people:async({browser,baseURL,request,seedLedger,communityOpen},use)=>{
+ people:async({browser,baseURL,request,seedLedger,communityOpen,timezoneId},use)=>{
   const headers={authorization:'Bearer '+runtime.resetToken}
   expect((await request.post(runtime.controlURL+'/reset',{headers,data:{communityOpen:true}})).status()).toBe(200)
-  const tc=await browser.newContext({viewport:{width:375,height:812},baseURL}),sc=await browser.newContext({viewport:{width:375,height:812},baseURL})
+  const tc=await browser.newContext({viewport:{width:375,height:812},baseURL,timezoneId}),sc=await browser.newContext({viewport:{width:375,height:812},baseURL,timezoneId})
   try{
    await mockModel(tc);await mockModel(sc)
    const teacher={context:tc,page:await tc.newPage(),actor:actors.teacher},student={context:sc,page:await sc.newPage(),actor:actors.student}

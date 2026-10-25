@@ -1,11 +1,23 @@
-import {describe,it,expect} from 'vitest'
-import {openStore} from '../store'
-import {createIdentity} from '../identity'
-import {loadTeacherTemplate,saveTeacherTemplate} from './template'
-import {indexedDB} from 'fake-indexeddb'
+import { it, expect } from 'vitest'
+import { IDBFactory } from 'fake-indexeddb'
+import { openStore } from '../store'
+import { createIdentity } from '../identity'
+import { loadTeacherTemplate } from './template'
+import { saveTemplateDraft, publishTemplate } from '../templates'
+import { defaultSchema } from '../../../../domain/tcm/templates/schema'
 import initial from '../../../../domain/tcm/templates/default.json'
-describe('管理页本机模板',()=>{it('真实加密存储往返，下次起草可读取；非法模板不覆盖',async()=>{
- const identity=createIdentity()
- const store=await openStore(identity,{factory:indexedDB,name:'m120-template-'+crypto.randomUUID()})
- try{expect(await loadTeacherTemplate(store)).toEqual(initial);const saved={...initial,name:'合成模板',notes:'合成老师要点',focus:['九问旧病']};await saveTeacherTemplate(store,saved);expect(await loadTeacherTemplate(store)).toEqual(saved);await expect(saveTeacherTemplate(store,{...saved,focus:[]})).rejects.toThrow();expect(await loadTeacherTemplate(store)).toEqual(saved)}finally{store.close();identity.privateKey.fill(0)}
-})})
+it('旧病历入口只读沿用老设置，新模板发布后读取同一版本库', async () => {
+  const store = await openStore(createIdentity(), { factory: new IDBFactory() })
+  try {
+    expect(await loadTeacherTemplate(store)).toEqual(initial)
+    await store.put('settings', 'teacher-template', { ...initial, name: '合成旧模板' })
+    const schema = defaultSchema('record'); schema.tone.style = 'SYNTHETIC_NEW'
+    const draft = await saveTemplateDraft(store, 'record', '合成新版', schema)
+    expect((await loadTeacherTemplate(store)).name).toBe('合成旧模板')
+    await publishTemplate(store, draft.id)
+    const active = await loadTeacherTemplate(store)
+    expect(active.name).toBe('合成新版'); expect(active.notes).toBe('SYNTHETIC_NEW')
+    expect(active.workflow?.record).toEqual(schema)
+    expect(active.recordOrder.slice(0, 4)).toEqual(['intake.chiefComplaint', 'intake.presentIllness', 'intake.history', 'intake.medsAllergies'])
+  } finally { store.close() }
+})

@@ -7,6 +7,8 @@ import type { LedgerView } from './core/ledger/sync'
 import { parseChainFields } from './core/ledger'
 import { formatMoney } from './core/ledger/money'
 import { InviteSettings } from './InviteSettings'
+import { HallGroundwork, GroundworkNotice } from './HallGroundwork'
+import { assertInviteReady } from './core/hall/groundwork'
 import { StorefrontSettings } from './StorefrontSettings'
 import { RetentionSettings } from './RetentionSettings'
 import { ReidentifyLinks, TeacherReidentifyInbox } from './ReidentifyPages'
@@ -33,7 +35,7 @@ export interface TeacherManagementProps {
   settings: ReactNode
 }
 
-type View = 'hall' | 'invite' | 'storefront' | 'ledger' | 'settings' | 'retention' | 'reidentify' | 'stats' | 'mirror'
+type View = 'hall' | 'invite' | 'storefront' | 'ledger' | 'settings' | 'retention' | 'reidentify' | 'stats' | 'mirror' | 'groundwork'
 
 interface Totals { currency: string; balance: number; income: number; charge: number; ready: boolean }
 
@@ -66,10 +68,12 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
   const [view, setView] = useState<View>('hall')
   const [own, setOwn] = useState<Storefront | null>(null)
   const [totals, setTotals] = useState<Totals | null>(null)
+  const [inviteReady, setInviteReady] = useState(false)
 
   useEffect(() => {
     let active = true
     const refresh = () => {
+      void assertInviteReady(store).then(() => { if (active) setInviteReady(true) }).catch(() => { if (active) setInviteReady(false) })
       void loadOwnStorefront(store, identity).then(value => {
         if (!active) return
         setOwn(value.current ? verifyStorefrontEvent(value.current, identity.publicKey)?.storefront ?? null : null)
@@ -83,6 +87,7 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
     return () => { active = false; window.removeEventListener('aster:data-changed', refresh) }
   }, [store, identity, ledger])
 
+  if (view === 'groundwork') return <SubPage title="开馆基础工作" onBack={() => setView('hall')}><HallGroundwork store={store} onDone={() => setView('hall')} /></SubPage>
   if (view === 'invite') return <SubPage title="邀请学生" onBack={() => setView('hall')}>
     <p className="nl-quiet">第 2 位及以后的学生；邀请 7 天内有效，可邀请多位。</p>
     <InviteSettings identity={identity} gateway={gateway} store={store} />
@@ -111,6 +116,7 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
   </SubPage>
   if (view === 'settings') return <SubPage title="设置" onBack={() => setView('hall')}>
     <ul className="hall-list">
+      <li><button type="button" className="nl-row" onClick={() => setView('groundwork')}>开馆基础工作</button></li>
       <li><button type="button" className="nl-row" onClick={() => setView('retention')}><span className="nl-row-main"><strong>记录保留多久</strong><span>记录按设定天数滚动删除</span></span><span className="ts-chevron">›</span></button></li>
       <li><button type="button" className="nl-row" onClick={() => setView('reidentify')}><span className="nl-row-main"><strong>换手机</strong><span>生成认回链接、处理待认回请求</span></span><span className="ts-chevron">›</span></button></li>
       <li><button type="button" className="nl-row" onClick={() => setView('stats')}><span className="nl-row-main"><strong>向社区分享运行统计</strong><span>只发计数、时长和错误类型</span></span><span className="ts-chevron">›</span></button></li>
@@ -134,7 +140,8 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
       </span>
       <span className="ts-badge ok">已开馆</span>
     </section>
-    <button type="button" className="nl-primary hall-invite" onClick={() => setView('invite')}>＋ 邀请学生</button>
+    <button type="button" className="nl-primary hall-invite" disabled={!inviteReady} onClick={() => setView('invite')}>＋ 邀请学生</button>
+    <GroundworkNotice store={store} onOpen={() => setView('groundwork')} />
     <button type="button" className="nl-row hall-row" onClick={() => setView('storefront')}>
       <span className="nl-row-main"><strong>门面</strong><span>馆名、颜色、介绍和话术</span></span>
       <span className="ts-chevron">›</span>

@@ -14,7 +14,7 @@ options.level 默认 record：只允许四诊与症状摘要。pattern 再允许
 
 测试全部使用合成资料及模拟 LlmClient，无真实网关请求。
 
-M1-20：reviseEncounter(input, instruction, llm) 加载 prompts/teacher/revise-draft.md，只接受 fourExams/judgment/plan/已有 outcome 的字段补丁。省略字段保留原值，value:null 表示明确清空；格式不合法、超时或无有效补丁时抛安全错误且保留整张原卡。更新字段与作业强制 ai_draft，不采纳模型来源、身份、profile、intake、附件或版本；不签字、不发送。template.ts 读写本机加密 settings/teacher-template，限制名称/要点长度，保留默认病历顺序与模板 id，读入后供下次起草使用。无新依赖。
+M1-20：reviseEncounter(input, instruction, llm) 加载 prompts/teacher/revise-draft.md，只接受 fourExams/judgment/plan/已有 outcome 的字段补丁。省略字段保留原值，value:null 表示明确清空；格式不合法、超时或无有效补丁时抛安全错误且保留整张原卡。更新字段与作业强制 ai_draft，不采纳模型来源、身份、profile、intake、附件或版本；不签字、不发送。V2-22 起 template.ts 只读取统一的本机四类版本模板；旧 settings/teacher-template 仅未发布新版时只读沿用，不再编辑或双写。生效骨架随请求进入模型，留待老师的现有病历块不接纳模型输出。无新依赖。
 
 M1-20 的 draftCarePlan 只把老师的要点整理为 {constitution,points,avoid,source:ai_draft}；模型不能指定版本、时间、签名或确认来源。字段与条数受限，超时/格式错误保留原卡片，提示词为 prompts/teacher/draft-careplan.md。签发交给 careplan/issue.ts 的真人点击回调。
 

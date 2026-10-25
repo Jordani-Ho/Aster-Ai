@@ -5,6 +5,7 @@ export interface TeacherTemplate {
   focus: string[]
   prescriptionStyle?: string
   notes: string
+  workflow?: Partial<Record<import('./schema').TemplateType, import('./schema').TemplateSchema>>
 }
 
 export const shichenNames: readonly string[] = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥']
