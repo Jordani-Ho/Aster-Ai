@@ -2,7 +2,7 @@
 
 `createInbox({identity, store, ledger})` 把同一个 `createTransport` 收到的信封按 `type` 分发：
 
-- `consult.package` → 老师端问诊箱（`consult-package`），只存 `AttachmentRef`，不存照片字节。V2-06 起信封里还带 `heaven`（学生发送那一刻的时辰/节气/城市）：收件时严格校验，格式不对整包丢弃；缺了照常收（旧格式），存进 `StoredConsult.heaven` 供起草页显示。
+- `consult.package` → 老师端问诊箱（`consult-package`），只存 `AttachmentRef`，不存照片字节。V2-06 起信封里还带 `heaven`（学生发送那一刻的时辰/节气/城市）：收件时严格校验，格式不对整包丢弃；缺了照常收（旧格式），存进 `StoredConsult.heaven` 供起草页显示。V2-33 远程问诊另带可选的 `homeHerbs` 数量快照，与 `Encounter` 分开；收到后按 `encounter.id` 写入老师端 `teacher-herb-snapshots`，旧的状态格式兼容，畸形快照整份忽略且问诊照常收。
 - `consult.attachment` → 老师端附件（payload `{ encounterId, ref, data: base64 }`）。照片按 `id` + `sha256` 匹配问诊包里的引用，**现场重算 sha256**，字节长度或哈希不符就丢弃；到齐前 `assertConsultReady` 抛“照片还在路上”。
 - `record.signed` → 学生端先查“我的老师”白名单（本机 `settings` 的 `teachers`）：发件人不在名单里直接丢弃（验签、写库之前就拦住）；在名单里才 `verifySignedEncounter`（签名人必须是这位老师），通过后写入 `student-records`，并把 `plan.homework` 写进 M1-13 的 `homework` 集合（`startsOn` 取收到当天；同一 `encounter.id` 的新版本替换旧作业，迟到的旧版本不覆盖新版本）。
 - `retention.setting`（V2-05）→ 学生端按老师公钥保存保留期限（`teacher-retention`），用于滚动删除自己的记录；发件人必须与载荷里的老师公钥一致。
@@ -21,6 +21,7 @@
 ## 发送
 
 - `sendConsultPackage(send, pkg)`：先发问诊包（只带引用），再每张照片单独一条 `consult.attachment`（base64），避开中继单条 2 MB 上限。
+- V2-33 的 `homeHerbs` 随远程问诊包加密传送，并在老师端与问诊包并存；它不属于签名病历内容。起草和核对页按病历 id 读取库存快照。
 - `flushIntakeOutbox(store, send)`：M1-05 接通后把 `intake-outbox` 里的替身待发件真实发出，成功后才删除。
 - `completeConsultSigning`：签字 → 发送 → 成功提示：`signEncounter(final)` 后把 `record.signed` 发给问诊包发件人；发送成功后把**完整签名病历**存进 `teacher-records`（起草检索、previousOf、recordHash 都从它读），有 AI 草稿时顺带更新老师的改稿习惯摘要；再按需记一笔 `charge`（`recordHash` 为签名事件 id）。问诊包与照片仍保留，按老师设定的保留期限删除。
 

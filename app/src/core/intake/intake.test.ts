@@ -171,6 +171,20 @@ describe('M1-09 学生采集验收', () => {
     expect(Object.prototype.hasOwnProperty.call(pkg, LEGACY_MARK_FIELD)).toBe(false)
   })
 
+  it('V2-33 本机坏库存快照整份略过，不挡学生确认发送；Encounter 不含快照字段', async () => {
+    const state = await confirmedOffline()
+    const malformed = [
+      { name: '合成可用药', quantity: 20, unit: '克' },
+      { name: '合成坏库存', quantity: -1, unit: '克' },
+    ] as never
+    const pkg = buildConsultPackage(state, emptyProfile(), [], [], undefined, { homeHerbs: malformed })
+    expect(pkg.homeHerbs).toBeUndefined()
+    expect(pkg.encounter).not.toHaveProperty('homeHerbs')
+    const store = new MemoryStore(), send = vi.fn().mockResolvedValue(undefined)
+    await expect(confirmAndSend(store, state, emptyProfile(), [], [], send, undefined, { homeHerbs: malformed })).resolves.toMatchObject({ encounter: { id: state.encounterId } })
+    expect(send).toHaveBeenCalledOnce()
+  })
+
   it('4 带 GPS EXIF 的合成 JPEG 重编码后为不含原 EXIF 的 JPEG，不超过 500 KB，长边 ≤1600', async () => {
     // 原图字节里带合成 EXIF/GPS 标记。
     const dirty = syntheticJpeg({ exif: true })

@@ -16,7 +16,8 @@ import { parsePeriodObservation, type PeriodObservation } from '../../../../doma
 import { sanitizeStudentPostures, type PostureRecord } from '../../../../domain/tcm/posture'
 import { saveTeacherRecord, rememberTeacherStudent } from '../records/teacher'
 import { updateFingerprint } from '../records/fingerprint'
-import { cleanSharedHomeHerbs } from '../herbs'
+import { cleanSharedHomeHerbs, type SharedHomeHerb } from '../herbs'
+import { saveTeacherHerbSnapshot } from '../herbs/snapshots'
 import { receiveRetentionSetting, RETENTION_TYPE } from '../records/retention'
 import { listIdentityLinks, saveIdentityLink } from '../identity/links'
 import {
@@ -76,7 +77,7 @@ export interface ConsultEnvelopePayload {
   observation?: unknown
   /** V2-32：学生在家拍的体态骨架（只有关键点）；老包没有这个字段照常收。 */
   postures?: unknown
-  /** V2-24：学生主动附上的药名与“够 / 快没了”，不含数量。 */
+  /** V2-33：学生远程问诊时自动附带的药材库存快照；V2-24 旧包仍可只带状态。 */
   homeHerbs?: unknown
 }
 
@@ -106,7 +107,7 @@ export interface StoredConsult {
   observation?: PeriodObservation | null
   /** V2-32：学生自己拍的体态骨架；收包时已清洗成只有关键点与感觉。 */
   postures?: PostureRecord[]
-  homeHerbs?: { name: string; status: '够' | '快没了' }[]
+  homeHerbs?: SharedHomeHerb[]
 }
 
 export interface ConsultReadiness {
@@ -272,14 +273,14 @@ function recordValue(value: unknown): { id: string; teacher: string; createdAt: 
 }
 
 // 老师端起草前必须带上的问诊包（只有引用，不带照片字节）。
-export function draftPackage(consult: StoredConsult): ConsultPackage {
+export function draftPackage(consult: StoredConsult, homeHerbs: SharedHomeHerb[] | undefined = consult.homeHerbs): ConsultPackage {
   const heaven = consult.heaven ?? consult.encounter.heaven
   return {
     encounter: structuredClone(consult.encounter),
     history: [...consult.history],
     attachments: [],
     ...(heaven ? { heaven: { ...heaven } } : {}),
-    ...(consult.homeHerbs ? { homeHerbs: structuredClone(consult.homeHerbs) } : {}),
+    ...(homeHerbs ? { homeHerbs: structuredClone(homeHerbs) } : {}),
   }
 }
 
@@ -305,7 +306,7 @@ export function consultEnvelope(pkg: ConsultPackage): Envelope {
       ...((pkg.heaven ?? pkg.encounter.heaven) ? { heaven: structuredClone(pkg.heaven ?? pkg.encounter.heaven) } : {}),
       ...(pkg.observation ? { observation: structuredClone(pkg.observation) } : {}),
       ...(pkg.postures && pkg.postures.length > 0 ? { postures: structuredClone(pkg.postures) } : {}),
-    ...(pkg.homeHerbs?.length ? { homeHerbs: structuredClone(pkg.homeHerbs) } : {}),
+      ...(pkg.homeHerbs?.length ? { homeHerbs: structuredClone(pkg.homeHerbs) } : {}),
     } satisfies ConsultEnvelopePayload,
   }
 }
@@ -538,7 +539,7 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
       if (clean.length > 0) postures = clean
     } catch { postures = undefined }
   }
-  let homeHerbs: { name: string; status: '够' | '快没了' }[] | undefined
+  let homeHerbs: SharedHomeHerb[] | undefined
   try { homeHerbs = cleanSharedHomeHerbs(value.homeHerbs) } catch { homeHerbs = undefined }
   const stored: StoredConsult = {
     encounter: heaven && !value.encounter.heaven ? { ...value.encounter, heaven: { ...heaven } } : value.encounter,
@@ -556,6 +557,8 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
     ...(homeHerbs?.length ? { homeHerbs } : {}),
   }
   await store.put(INBOX_COLLECTIONS.consult, value.encounter.id, stored as unknown as StoreValue)
+  // V2-33：库存快照单独按 encounter id 旁车保存，不进入 Encounter/签名内容。
+  await saveTeacherHerbSnapshot(store, value.encounter.id, homeHerbs)
   // V2-05：老师认得的学生的名单（只存公钥；换手机后靠它逐个向学生要回病历）。
   await rememberTeacherStudent(store, value.encounter.student)
 }

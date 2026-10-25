@@ -117,6 +117,10 @@ async function cleanTeacher(store: LocalStore, cutoff: number): Promise<Record<s
     const draft = value as { createdAt?: unknown }
     return !olderThan(draft?.createdAt, cutoff)
   })
+  // V2-33：库存旁车跟病历 id 走；签字病历或仍保留的问诊包任一存在，就保留快照。
+  const snapshotEncounterIds = new Set((await listTeacherRecords(store)).map(record => record.encounter.id))
+  for (const row of await store.list('consult-package')) snapshotEncounterIds.add(row.key)
+  deleted['teacher-herb-snapshots'] = await dropRows(store, 'teacher-herb-snapshots', key => snapshotEncounterIds.has(key))
   // 照片按“仍被剩余记录引用”来判断，避免留下无主字节。
   const referenced = new Set<string>()
   for (const row of await store.list('consult-package')) {

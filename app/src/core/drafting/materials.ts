@@ -2,6 +2,7 @@ import type { ChatMessage } from '../llm'
 import type { Encounter, Field, Prescription } from '../record/types'
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
 import type { DraftCase } from './cases'
+import type { SharedHomeHerb } from '../herbs'
 import { budgetLimit, requestTokens } from './budget'
 
 // V2-19：一次起草要带的材料分成两堆。
@@ -33,6 +34,8 @@ export interface DraftMaterialInput {
   prompt: string
   /** 这次的问诊包：永远不减。 */
   encounter: Pick<Encounter, 'profile' | 'intake' | 'fourExams'>
+  /** V2-33：本次远程问诊的家中药材快照，固定材料，不能被额度裁剪。 */
+  homeHerbs: readonly SharedHomeHerb[]
   template: TeacherTemplate
   level: string
   prior: readonly PriorMaterial[]
@@ -92,7 +95,7 @@ function messagesOf(input: DraftMaterialInput, prior: PriorMaterial[], cases: Dr
     { role: 'system', content: input.prompt },
     {
       role: 'user',
-      content: JSON.stringify({ encounter: input.encounter, template: input.template, prior, cases, level: input.level }),
+      content: JSON.stringify({ encounter: input.encounter, homeHerbs: input.homeHerbs, template: input.template, prior, cases, level: input.level }),
     },
   ]
 }

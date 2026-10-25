@@ -10,7 +10,9 @@ export interface HerbUnits { qianInTenthsGram: number | null; liangInTenthsGram:
 export interface HerbStore extends Pick<LocalStore, 'get' | 'list' | 'put' | 'atomic'> {}
 export const DEFAULT_HERB_UNITS: HerbUnits = herbUnitDefaults
 export interface PrescriptionLine { herb: string; quantity: number; unit: HerbUnit }
-export interface SharedHomeHerb { name: string; status: '够' | '快没了' }
+export interface LegacySharedHomeHerb { name: string; status: '够' | '快没了' }
+export interface SharedHomeHerbSnapshot { name: string; quantity: number; unit: HerbUnit }
+export type SharedHomeHerb = LegacySharedHomeHerb | SharedHomeHerbSnapshot
 export const HERBS = 'herbs'
 export const HERB_LEDGER = 'herb-ledger'
 export const HERB_SETTINGS = 'herb-settings'
@@ -237,10 +239,18 @@ function fromSmallestUnit(amount: number, unit: HerbUnit, config: HerbUnits): nu
   if (unit === '两') return amount / (config.liangInTenthsGram ?? 1)
   return amount
 }
-export function shareHomeHerbs(herbs: Herb[], selectedIds: string[]): SharedHomeHerb[] {
-  if (!Array.isArray(selectedIds)) throw Error('请选择要附上的药材')
-  const selected = new Set(selectedIds)
-  return herbs.filter(herb => selected.has(herb.id) && herb.enabled).map(herb => ({ name: herb.name, status: herb.quantity > herb.threshold ? '够' : '快没了' }))
+/** 远程问诊自动附上可准确表示的库存；钱、两换算未配置时只发克与份数。 */
+export function snapshotHomeHerbs(herbs: readonly Herb[], units: HerbUnits): SharedHomeHerbSnapshot[] {
+  const config = validateHerbUnits(units)
+  const result: SharedHomeHerbSnapshot[] = []
+  for (const herb of herbs) {
+    if (!herb.enabled) continue
+    if ((herb.unit === '钱' && config.qianInTenthsGram === null) || (herb.unit === '两' && config.liangInTenthsGram === null)) continue
+    const quantity = fromSmallestUnit(herb.quantity, herb.unit, config)
+    validateHerbAmount(quantity, herb.unit, true)
+    result.push({ name: herb.name, quantity, unit: herb.unit })
+  }
+  return result
 }
 export function cleanSharedHomeHerbs(value: unknown): SharedHomeHerb[] | undefined {
   if (value === undefined) return undefined
@@ -249,14 +259,75 @@ export function cleanSharedHomeHerbs(value: unknown): SharedHomeHerb[] | undefin
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw Error('附带的家中药材格式无效')
     const row = item as Record<string, unknown>
     const name = normalizeHerbName(row.name)
-    if (name.length > 40 || (row.status !== '够' && row.status !== '快没了')) throw Error('附带的家中药材格式无效')
-    return { name, status: row.status }
+    if (name.length > 40) throw Error('附带的家中药材格式无效')
+    if (row.unit !== undefined) {
+      validateHerbUnit(row.unit)
+      validateHerbAmount(row.quantity, row.unit, true)
+      return { name, quantity: row.quantity as number, unit: row.unit }
+    }
+    if (row.status === '够' || row.status === '快没了') return { name, status: row.status }
+    throw Error('附带的家中药材格式无效')
   })
   return rows.length ? rows as SharedHomeHerb[] : undefined
 }
 export function labelPrescriptionHerbs(lines: PrescriptionLine[], shared: SharedHomeHerb[] = []): { herb: string; label: '学生家里有' | '要另抓' }[] {
   const available = new Set(shared.map(item => normalizeHerbName(item.name)))
   return lines.map(line => ({ herb: line.herb, label: available.has(normalizeHerbName(line.herb)) ? '学生家里有' : '要另抓' }))
+}
+
+export interface PrescriptionStockLabel { herb: string; text: string; kind: 'enough' | 'shortage' | 'buy' | 'unknown' }
+
+function quantityLabel(smallest: number, unit: HerbUnit): string {
+  if (MASS_UNITS.includes(unit)) return `${(smallest / 10).toFixed(1).replace(/\.0$/, '')} 克`
+  return `${smallest}${unit}`
+}
+
+/** 只做库存对照，不改处方；不确定的单位或剂量明确留给老师/学生核对。 */
+export function assessPrescriptionStock(
+  lines: readonly { herb: string; dose: string }[], shared: readonly SharedHomeHerb[], units: HerbUnits,
+): PrescriptionStockLabel[] {
+  const config = validateHerbUnits(units)
+  return lines.map(item => {
+    let dose: PrescriptionLine
+    try { dose = parsePrescriptionDose(item.herb, item.dose) }
+    catch { return { herb: item.herb, text: `剂量无法识别，跳过库存判断：${item.dose}`, kind: 'unknown' } }
+    if ((dose.unit === '钱' && config.qianInTenthsGram === null) || (dose.unit === '两' && config.liangInTenthsGram === null)) {
+      return { herb: item.herb, text: '钱、两的换算尚未确认，暂不核对库存', kind: 'unknown' }
+    }
+    const match = shared.find(row => normalizeHerbName(row.name) === normalizeHerbName(item.herb))
+    if (!match) return { herb: item.herb, text: `要另抓 ${item.dose}`, kind: 'buy' }
+    if ('status' in match) return { herb: item.herb, text: match.status === '够' ? '学生家里有' : '要另抓', kind: match.status === '够' ? 'enough' : 'buy' }
+    if ((match.unit === '钱' && config.qianInTenthsGram === null) || (match.unit === '两' && config.liangInTenthsGram === null)) {
+      return { herb: item.herb, text: '钱、两的换算尚未确认，暂不核对库存', kind: 'unknown' }
+    }
+    const sameMass = MASS_UNITS.includes(match.unit) && MASS_UNITS.includes(dose.unit)
+    const sameCount = !MASS_UNITS.includes(match.unit) && match.unit === dose.unit
+    if (!sameMass && !sameCount) return { herb: item.herb, text: `单位无法换算，需核对（家里 ${match.quantity}${match.unit}，处方 ${item.dose}）`, kind: 'unknown' }
+    const available = match.quantity === 0 ? 0 : toSmallestUnit(match.quantity, match.unit, config)
+    const needed = toSmallestUnit(dose.quantity, dose.unit, config)
+    if (available >= needed) {
+      const doseCount = Math.floor(available / needed)
+      return { herb: item.herb, text: `家里有 ${quantityLabel(available, match.unit)}，够 ${doseCount} 剂`, kind: 'enough' }
+    }
+    return { herb: item.herb, text: `家里不够，差 ${quantityLabel(needed - available, dose.unit)}`, kind: 'shortage' }
+  })
+}
+
+/** 当前方子下次服用所需的库存提醒；绝不建议改量或改方。 */
+export function studentHerbReminders(herbs: readonly Herb[], units: HerbUnits, prescription: readonly { herb: string; dose: string }[] = []): string[] {
+  const config = validateHerbUnits(units)
+  const reminders: string[] = []
+  for (const herb of herbs) {
+    if (!herb.enabled || herb.quantity > herb.threshold) continue
+    if ((herb.unit === '钱' && config.qianInTenthsGram === null) || (herb.unit === '两' && config.liangInTenthsGram === null)) continue
+    reminders.push(`${herb.name}库存偏低，剩余 ${quantityLabel(herb.quantity, herb.unit)}`)
+  }
+  for (const line of assessPrescriptionStock(prescription, snapshotHomeHerbs(herbs, config), config)) {
+    if (line.kind === 'shortage') reminders.push(`${line.herb}${line.text.replace('家里不够，', '不够下一剂，')}`)
+    else if (line.kind === 'buy') reminders.push(`${line.herb}需要补货：${line.text.replace('要另抓 ', '')}`)
+    else if (line.kind === 'unknown') reminders.push(`${line.herb}${line.text}`)
+  }
+  return [...new Set(reminders)]
 }
 export async function reversePrescription(store: Pick<HerbStore, 'atomic'>, ref: string, key: string, at = new Date()): Promise<HerbLedger[]> {
   if (!ref.trim() || !key.trim()) throw Error('作废病历编号无效')

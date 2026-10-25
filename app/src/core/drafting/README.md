@@ -1,6 +1,6 @@
 # 老师起草
 
-`draftEncounter(pkg, materials, llm, options?)` 直接使用 record/types 的 Encounter 和 ConsultPackage、M1-07 的 LlmClient；materials 是 `{ template, prior?, cases? }`，返回 `{ encounter, note }`（note 是减了材料的提示行）。调用方传入自己的已配置客户端；起草函数不配置凭据、不持久化问诊资料、不签字、不发消息；本机模板读写见下文 template.ts。
+`draftEncounter(pkg, materials, llm, options?)` 直接使用 record/types 的 Encounter 和 ConsultPackage、M1-07 的 LlmClient；materials 是 `{ template, prior?, cases?, homeHerbs? }`，返回 `{ encounter, note }`（note 是减了材料的提示行）。V2-33 的库存快照是不可删减的固定材料；输入幂等指纹包含 intake、fourExams、profile 与库存快照哈希，改动库存后会重新起草。同一快照复用原草稿。调用方传入自己的已配置客户端；起草函数不配置凭据、不持久化问诊资料、不签字、不发消息；本机模板读写见下文 template.ts。
 
 options.level 默认 record：只允许四诊与症状摘要。pattern 再允许证候、病机、依据和治则；prescription 再允许方子、作业与医嘱。重起草从学生资料建立全新草稿，不沿用已存在的老师判断或结果。模型字段来源强制 ai_draft，缺失为 unknown/null，非法字段注明原因。
 

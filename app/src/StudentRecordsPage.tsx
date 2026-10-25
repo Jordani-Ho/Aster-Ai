@@ -9,7 +9,7 @@ import { intakeDisplayLabel } from './core/record/in-person'
 import type { Encounter } from './core/record/types'
 import type { LocalStore } from './core/store'
 import './records.css'
-import { deductPrescription, listHerbs, loadHerbUnits, matchPrescriptionToInventory, parsePrescriptionDose } from './core/herbs'
+import { brewOneWithStudentAgent, getStudentHerbAdvice, type StudentHerbAdvice } from './core/herbs/agent'
 
 function textField(field: { value: string | null } | undefined): string {
   return field && field.value !== null && field.value !== '' ? field.value : '未知'
@@ -59,25 +59,41 @@ function RecordBody({ record, store }: { record: ReceivedRecord; store: LocalSto
   </>
 }
 
-function RecordCard({ group, store }: { group: GroupedRecord; store: LocalStore }) {
+function RecordCard({ group, store, herbStore }: { group: GroupedRecord; store: LocalStore; herbStore: LocalStore }) {
   const latest = group.versions[0]
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
+  const [advice, setAdvice] = useState<StudentHerbAdvice | null>(null)
   const prescription = latest.encounter.plan.prescription.value
+  useEffect(() => {
+    let active = true
+    const refresh = () => { void getStudentHerbAdvice(herbStore, prescription).then(value => { if (active) setAdvice(value) }).catch(() => {}) }
+    refresh()
+    window.addEventListener('aster:data-changed', refresh)
+    return () => { active = false; window.removeEventListener('aster:data-changed', refresh) }
+  }, [herbStore, latest.encounter.id, latest.event.id, prescription])
   const brewOne = async () => {
     if (!prescription || busy) return
     setBusy(true); setNotice('')
     try {
-      const [herbs, units] = await Promise.all([listHerbs(store), loadHerbUnits(store)])
-      const lines = matchPrescriptionToInventory(prescription.items.map(item => parsePrescriptionDose(item.herb, item.dose)), herbs, units)
-      const result = await deductPrescription(store, lines, latest.event.id, 'brew-' + crypto.randomUUID().replaceAll('-', ''), { units })
-      if (result.shortages.length) setNotice('库存不足：' + result.shortages.map(item => `${item.herb}差 ${item.missing}${item.unit}`).join('、') + '；本剂未扣。')
-      else { setNotice('已记下煎了一剂。'); window.dispatchEvent(new Event('aster:data-changed')) }
+      const result = await brewOneWithStudentAgent(herbStore, latest.encounter.id, prescription, crypto.randomUUID().replaceAll('-', ''))
+      const messages = [
+        ...(result.shortages.length ? ['库存不足：' + result.shortages.map(item => `${item.herb}差 ${item.missing}${item.unit}`).join('、') + '；本剂未扣。'] : []),
+        ...result.skipped,
+      ]
+      if (result.deducted > 0) messages.unshift('已记下煎了一剂。')
+      setNotice(messages.join(' ') || '没有库存扣减；请核对家里库存。')
+      window.dispatchEvent(new Event('aster:data-changed'))
     } catch (cause) { setNotice(cause instanceof Error ? cause.message : '没有扣库存，请检查剂量和药材单位。') }
     finally { setBusy(false) }
   }
   return <article className="record-card">
     <RecordBody record={latest} store={store} />
+    {advice?.labels.length ? <section className="record-section" aria-label="家里库存对照">
+      <h3>家里库存对照</h3>
+      <ul>{advice.labels.map((item, index) => <li key={`${item.herb}-${index}`}>{item.herb} · {item.text}</li>)}</ul>
+      {advice.reminders.length > 0 && <p role="status" className="record-detail">补货提醒：{advice.reminders.join('；')}</p>}
+    </section> : null}
     {prescription?.items.length ? <div className="record-brew"><button type="button" disabled={busy} onClick={() => void brewOne()}>{busy ? '正在记…' : '煎了一剂'}</button>{notice && <p role="status">{notice}</p>}</div> : null}
     {group.versions.length > 1 && <details className="record-revisions">
       <summary>旧版本 {group.versions.length - 1} 份（保留不删）</summary>
@@ -90,6 +106,8 @@ function RecordCard({ group, store }: { group: GroupedRecord; store: LocalStore 
 
 export interface StudentRecordsPageProps {
   identity: Identity
+  /** 根身份的家人共用药材库；病历本身仍从当前身份分片读取。 */
+  herbStore: LocalStore
   store: LocalStore
   onBack: () => void
   /** V2-16：挪进“记录”标签时不需要返回按钮。 */
@@ -97,7 +115,7 @@ export interface StudentRecordsPageProps {
 }
 
 // 学生端病历页：只显示 verifySignedEncounter 通过的病历；同一份病历的修订折叠保留。
-export function StudentRecordsPage({ identity, store, onBack, embedded = false }: StudentRecordsPageProps) {
+export function StudentRecordsPage({ identity, store, herbStore, onBack, embedded = false }: StudentRecordsPageProps) {
   const [groups, setGroups] = useState<GroupedRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -120,6 +138,6 @@ export function StudentRecordsPage({ identity, store, onBack, embedded = false }
     {error && <p role="alert" className="records-error">{error}</p>}
     {loading && <p className="records-note">正在读取本机病历…</p>}
     {!loading && groups.length === 0 && <p className="records-note">还没有收到的病历。老师签字交还后会出现在这里。</p>}
-    {groups.map(group => <RecordCard key={group.encounterId} group={group} store={store} />)}
+    {groups.map(group => <RecordCard key={group.encounterId} group={group} store={store} herbStore={herbStore} />)}
   </main>
 }

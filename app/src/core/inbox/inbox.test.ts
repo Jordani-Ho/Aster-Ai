@@ -42,6 +42,7 @@ import {
   toBase64,
 } from './index'
 import { createWiring } from '../wiring'
+import { loadTeacherHerbSnapshot } from '../herbs/snapshots'
 import { startInPersonEncounter, recordIntakeField } from '../record/in-person'
 import { newStudentPostureRecord, newStudentPostureSegment } from '../posture'
 import type { PostureFrame } from '../../../../domain/tcm/posture'
@@ -266,6 +267,44 @@ it('1b 老师收件箱按学生提交时间排序；旧包里的旧标记字段�
   // 按学生提交时间（encounter.createdAt）排，不是老师收到的时间。
   const ordered = sortConsultsBySubmittedAt(consults)
   expect(ordered.map(consult => consult.encounter.id)).toEqual(['1'.repeat(32), '2'.repeat(32)])
+})
+
+it('V2-33 数量快照随问诊包收下并按病历 id 单独保存；旧状态兼容，坏快照不挡问诊', async () => {
+  const { student, teacherStore } = await nodes()
+  const pkg = await syntheticPackage(0)
+  const encounterId = pkg.encounter.id
+  pkg.homeHerbs = [{ name: '合成黄芪', quantity: 300, unit: '克' }]
+  const envelope = consultEnvelope(pkg)
+  expect((envelope.payload as Record<string, unknown>).encounter).not.toHaveProperty('homeHerbs')
+  await student.send(teacherPub, envelope)
+  const received = await waitFor(async () => {
+    const item = (await listConsults(teacherStore)).find(value => value.encounter.id === encounterId)
+    return item && await loadTeacherHerbSnapshot(teacherStore, encounterId) ? item : null
+  })
+  expect(received.homeHerbs).toEqual([{ name: '合成黄芪', quantity: 300, unit: '克' }])
+  expect(await loadTeacherHerbSnapshot(teacherStore, encounterId)).toEqual(received.homeHerbs)
+  const draft = draftPackage(received)
+  expect(draft.homeHerbs).toEqual(received.homeHerbs)
+  expect(draft.encounter).not.toHaveProperty('homeHerbs')
+
+  const legacy = await syntheticPackage(1)
+  legacy.encounter = { ...legacy.encounter, id: 'd'.repeat(32) }
+  legacy.homeHerbs = [{ name: '合成旧药', status: '够' }]
+  await student.send(teacherPub, consultEnvelope(legacy))
+  const old = await waitFor(async () => (await listConsults(teacherStore)).find(item => item.encounter.id === legacy.encounter.id) ?? null)
+  expect(old.homeHerbs).toEqual([{ name: '合成旧药', status: '够' }])
+
+  const malformed = await syntheticPackage(2)
+  malformed.encounter = { ...malformed.encounter, id: 'e'.repeat(32) }
+  malformed.homeHerbs = [
+    { name: '合成可用药', quantity: 20, unit: '克' },
+    { name: '合成坏数据', quantity: -1, unit: '克' },
+  ]
+  await student.send(teacherPub, consultEnvelope(malformed))
+  const bad = await waitFor(async () => (await listConsults(teacherStore)).find(item => item.encounter.id === malformed.encounter.id) ?? null)
+  expect(bad.encounter.id).toBe(malformed.encounter.id)
+  expect(bad.homeHerbs).toBeUndefined()
+  expect(await loadTeacherHerbSnapshot(teacherStore, malformed.encounter.id)).toBeUndefined()
 })
 
 it('2 老师起草、签字、填扣费 3：学生病历页、作业、账本余额与对账码都对上', async () => {

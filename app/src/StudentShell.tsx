@@ -9,6 +9,7 @@ import { StudentRecordsHome } from './StudentRecordsHome'
 import { StudentToday } from './StudentToday'
 import { StudentMe } from './StudentMe'
 import { StudentBasicsPage } from './StudentBasics'
+import { HerbLibrary } from './HerbLibrary'
 import { consultGate } from './core/basics'
 import type { FamilyMember } from './core/family'
 import { listCheckins, type Assignment } from './core/homework'
@@ -43,7 +44,7 @@ export interface StudentShellProps {
 }
 
 type Tab = 'today' | 'records' | 'me'
-type Sub = 'consult' | 'homework' | 'records' | 'basics' | null
+type Sub = 'consult' | 'homework' | 'records' | 'basics' | 'herbs' | null
 
 // V2-16 新外壳：学生端底部三个标签“今天 / 记录 / 我”；V2-17 把记录、问诊、我也按设计稿重画。
 export function StudentShell({ store, identity, llm, stack, stackStatus, modelNotice, modelSettings, family = [], active = 0, onSwitch, memberStore: scopedStore, memberIdentity: scopedIdentity, sendConsult, sendEnvelope, onFamilyChanged }: StudentShellProps) {
@@ -109,7 +110,13 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
       onSaved={missing => { setBasicsMissing(missing); if (missing.length === 0 && basicsNote) { setBasicsNote(''); setSub('consult') } }} />
   }
   if (sub === 'records') {
-    return <StudentRecordsPage identity={pagesIdentity} store={pagesStore} onBack={() => setSub(null)} />
+    return <StudentRecordsPage identity={pagesIdentity} store={pagesStore} herbStore={store} onBack={() => setSub(null)} />
+  }
+  if (sub === 'herbs') {
+    return <div className="nl-shell" style={{ '--nl-bg': theme.background, '--nl-accent': theme.primary } as CSSProperties}>
+      <header className="nl-flow-head"><button type="button" className="nl-back" aria-label="返回问诊" onClick={() => setSub('consult')}>‹</button><div><h1>家里的药</h1><small>一家共用一份库存</small></div></header>
+      <div className="nl-flow-body"><HerbLibrary store={store} role="学生" /></div>
+    </div>
   }
   if (sub === 'homework') {
     return <Suspense fallback={<div className="nl-shell"><p className="nl-page nl-quiet">正在打开今日作业…</p></div>}>
@@ -118,7 +125,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   }
   if (sub === 'consult') {
     return <div className="nl-shell" style={{ '--nl-bg': theme.background, '--nl-accent': theme.primary } as CSSProperties}>
-      <ConsultPage key={active} store={pagesStore} modelStore={store} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} teacher={venue.active} teacherName={venue.call} onBack={() => setSub(null)} />
+      <ConsultPage key={active} store={pagesStore} modelStore={store} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} teacher={venue.active} teacherName={venue.call} onBack={() => setSub(null)} onOpenHerbs={() => setSub('herbs')} />
     </div>
   }
 

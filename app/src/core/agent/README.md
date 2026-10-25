@@ -25,6 +25,7 @@ agent-failures 只留 `{at, kind}` 最近 100 条，没有对象身份、输入�
 
 - `drafting/agent.ts` → drafting 任务：对象是问诊卡 encounter.id，不能把“同一学生”当作一天只能问诊一次。远程核对和面诊起草都走这里；输入指纹取 intake、fourExams、profile 递归按对象键排序的 JSON SHA-256（数组顺序保留），输入变更后重新起草。签字发送成功并保存正式病历后，records/teacher 清除该 encounter 的全部起草任务副本；签字或发送失败保留。沿用 V2-19 的裁材料、额度重试与安全失败提示。只保存模型新增的四诊、判断、方案、材料提示；老师已经录入的 intake/profile 由调用方只读拼回，绝不让模型写 source:teacher。草稿进入原来的 SignReview，签字、钱账入账和退款仍完全在骨架外，不经 runner.confirm。
 - `mirror/getDailyMirror` → mirror 任务：对象 self，家人的 LocalStore 分片天然隔离。同日缓存和固定建议回退不变，只在本机落结果，不发送感受或模型上下文。dailyMirror 仍是无存储的生成工具；应用入口使用 getDailyMirror。页面缓存丢失时从已完成任务恢复，不重复生成；测试若要模拟重新生成，需同时清理该镜子任务记录。
+- `herbs/agent.ts` → `herb-advice` 与 `herb-brew` 两个学生端规则任务。建议任务按当前签名方子和根库存生成家中药材对照、低库存与下一剂提醒；煎药任务按一次点击的 action id 幂等调用药材库原子扣减。它们不调用模型、不向老师同步库存；家人与本人共用根库存。
 
 ## 打开时补做，后台不假装在线
 

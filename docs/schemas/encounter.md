@@ -18,6 +18,8 @@ V2-30（B 类，已批）：`Encounter` 新增可选 `postures: PostureRecord[]`
 
 V2-32（B 类，已批）：`Encounter.postures` 扩展为**远程问诊也可带**，但只能是学生自己拍的骨架；每条 `PostureRecord` 增加可选 `capturedBy?: 'student' | 'teacher'`（旧记录没有按 `teacher` 处理）。远程问诊（`kind: 'remote_async'`）签字时每条必须 `capturedBy: 'student'` 且不带老师标注（`marks/guides/overrides`），否则 `signEncounter` 拒绝；`values` 仍是老师签字时按自己公式算的快照。传输侧 `ConsultPackage` 新增可选 `postures: PostureRecord[]`（最多两条，不带图片字节、不带指标数值），只随问诊包走、不进附件通道；老包没有这个字段照常收。学生端“记录”页只显示骨架与“学生在家拍”，不显示指标数值。没有数据迁移。
 
+V2-33（B 类）：`ConsultPackage` 新增可选 `homeHerbs: SharedHomeHerb[]`，仅用于远程问诊传输老师本机所需的家中药材快照。它是问诊包元数据，不属于 `Encounter`，不进入签名病历；老师端另按 `encounter.id` 保存侧车，按问诊包与签名病历的保留期限清理。学生库存数量只从本机根库存读取，家人共用，不实时同步。
+
 下面的定义已经放在 `app/src/core/record/types.ts`（由技术合伙人建立，与本文逐字一致）。各任务卡直接引用，不要重复定义；发现问题在合并请求里提出。
 
 ```ts
@@ -127,6 +129,7 @@ export interface ConsultPackage {
   history: string[]             // 学生授权附带的历史病历（签名事件 JSON 字符串），默认同一位老师的近 3 次
   attachments: { ref: AttachmentRef; data: Uint8Array }[]
   postures?: PostureRecord[]    // V2-32：学生在家拍的体态骨架（最多两条；只有关键点/视角/时间/感觉，不带图片字节与指标数值）
+  homeHerbs?: SharedHomeHerb[]  // V2-33：远程问诊家中库存快照，只在问诊包传输，不属于 Encounter 或签名内容
 }
 ```
 
