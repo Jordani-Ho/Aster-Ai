@@ -2,6 +2,7 @@ import type { LocalStore, StoreValue } from '../store'
 import { loadPersonalModel } from '../llm/personal'
 import { loadTemplates } from '../templates'
 import { validRetentionDays } from '../records/retention'
+import { listHerbs } from '../herbs'
 
 export interface Period { start: string; end: string }
 export interface Schedule {
@@ -111,9 +112,10 @@ export function groundworkMissing(value: Groundwork): string[] {
 /** 每次以已保存内容核对，不能仅凭勾选就邀请；不写入、不迁移旧部署。 */
 export async function groundworkStatus(store: LocalStore): Promise<{ value: Groundwork; missing: string[] }> {
   const value = await loadGroundwork(store)
-  const [templates, model, retention] = await Promise.all([loadTemplates(store), loadPersonalModel(store), store.get('settings', 'retention-days')])
+  const [templates, model, retention, herbs] = await Promise.all([loadTemplates(store), loadPersonalModel(store), store.get('settings', 'retention-days'), listHerbs(store)])
   const checked = value.checked.filter(key => key !== 'templates' || ['inquiry', 'record', 'treatment', 'prescription'].every(type => templates.some(row => row.type === type && row.status === 'active')))
     .filter(key => key !== 'model' || model !== null).filter(key => key !== 'retention' || validRetentionDays(retention))
+    .filter(key => key !== 'herbs' || value.herbs === 'none' || value.herbs === 'ready' && herbs.length > 0)
   return { value, missing: groundworkMissing({ ...value, checked }) }
 }
 export async function assertInviteReady(store: LocalStore): Promise<void> {

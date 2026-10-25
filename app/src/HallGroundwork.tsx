@@ -7,6 +7,8 @@ import { loadRetentionDays, saveRetentionDays } from './core/records/retention'
 import { loadPersonalModel } from './core/llm/personal'
 import { TemplateStudio } from './TemplateStudio'
 import './groundwork.css'
+import { HerbLibrary } from './HerbLibrary'
+import { listHerbs } from './core/herbs'
 
 type Item = keyof typeof GROUNDWORK_ITEMS
 const keys = Object.keys(GROUNDWORK_ITEMS) as Item[]
@@ -25,8 +27,8 @@ export function HallGroundwork({ store, onReady, onDone }: { store: LocalStore; 
     if (!active) return
     setValue(status.value); setMissing(status.missing); setDays(retention); setItem(keys.find(key => status.missing.includes(GROUNDWORK_ITEMS[key])) ?? 'model'); onReady?.(!status.missing.length)
   })().catch(cause => { if (active) setError(`读取失败：${cause.message}`) }); return () => { active = false } }, [store])
-  const persist = async (key: Item) => {
-    if (!value) return
+  const persist = async (key: Item, candidate = value) => {
+    if (!candidate) return
     setBusy(true); setError(''); setNotice('')
     try {
       if (key === 'templates') {
@@ -39,14 +41,18 @@ export function HallGroundwork({ store, onReady, onDone }: { store: LocalStore; 
       }
       if (key === 'model' && !await loadPersonalModel(store)) throw Error('模型还没接好，请到模型设置测试连接')
       if (key === 'retention') await saveRetentionDays(store, days)
-      const checked = [...new Set([...value.checked, key])]
-      await saveGroundwork(store, { ...value, checked })
+      const next = key === 'herbs' && candidate.herbs === 'pending'
+        ? { ...candidate, herbs: (await listHerbs(store)).length ? 'ready' as const : 'pending' as const }
+        : candidate
+      if (key === 'herbs' && next.herbs === 'pending') throw Error('先录入至少一味药材，或选择“不备药”')
+      const checked = [...new Set([...next.checked, key])]
+      await saveGroundwork(store, { ...next, checked })
       await refresh(true); setEdited(false); setNotice('已保存。'); window.dispatchEvent(new Event('aster:data-changed'))
     } catch (cause) { setError(`没保存成功：${cause instanceof Error ? cause.message : '本机存储不可用'}`); onReady?.(false) }
     finally { setBusy(false) }
   }
   if (!value) return <section aria-label="开馆基础工作"><p>{error || '正在读取基础工作…'}</p>{error && <button type="button" onClick={() => void refresh(true).catch(cause => setError(cause.message))}>重新读取</button>}</section>
-  if (herbOpen) return <section className="groundwork" aria-label="药材库准备"><h2>药材库</h2><p>药材库还未开放，暂不能录入或确认已建库。您可以先保存待建库，或返回选择“不备药”。</p><button type="button" onClick={() => setHerbOpen(false)}>返回基础工作</button></section>
+  if (herbOpen) return <section className="groundwork" aria-label="药材库准备"><HerbLibrary store={store} role="老师" /><button type="button" onClick={() => { setHerbOpen(false); void refresh() }}>返回基础工作</button></section>
   const patch = (next: Partial<Groundwork>) => { setValue({ ...value, ...next }); setEdited(true); setNotice(''); onReady?.(false) }
   const schedule = value.schedule
   const editPeriods = (day: string, periods: Period[]) => patch({ schedule: { ...schedule, week: { ...schedule.week, [day]: periods } } })

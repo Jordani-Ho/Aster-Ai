@@ -14,12 +14,13 @@ import { PushSettings } from './PushSettings'
 import { SelfCheck } from './SelfCheck'
 import { VersionLine } from './VersionLine'
 import { themeOf } from './core/storefront'
+import { HerbLibrary } from './HerbLibrary'
 import type { TeacherVenue } from './core/storefront/active'
 import './newui.css'
 
 // V2-17 学生·我（12）：我的老师（多馆切换）、家人、在老师这里的余额、设置。
 // 设置里保留本人感受、模型、时间、通知；余额只读本机账本，没有就写“还没记过账”。
-type View = 'me' | 'settings' | 'family' | 'ledger'
+type View = 'me' | 'settings' | 'family' | 'ledger' | 'herbs'
 
 export interface StudentMeProps {
   store: LocalStore
@@ -85,6 +86,7 @@ export function StudentMe({ store, identity, family, onSwitch, venue, ledger, st
   if (view === 'ledger') return <SubPage title="在老师这里的余额" onBack={close}>
     <LedgerSettings managed identity={identity} store={store} ledger={ledger as never} status={stackStatus} teacher={venue.active} teacherName={venue.call} />
   </SubPage>
+  if (view === 'herbs') return <SubPage title="家里的药" onBack={close}><HerbLibrary store={store} role="学生" /></SubPage>
 
   return <div className="nl-page me-page" style={{ ['--me-accent' as string]: theme.primary }}>
     <div className="nl-top"><small>自己的节奏，慢慢来</small></div>
@@ -129,6 +131,10 @@ export function StudentMe({ store, identity, family, onSwitch, venue, ledger, st
         <span className="ts-chevron">›</span>
       </button>
     </section>
+    <button type="button" className="nl-card me-setting-row" onClick={() => setView('herbs')}>
+      <span className="me-row-main"><strong>家里的药</strong><span>记录和整理自己的药材</span></span>
+      <span className="ts-chevron">›</span>
+    </button>
 
     {onOpenBasics && <button type="button" className="nl-card me-basics-row" onClick={onOpenBasics}>
       <span className="me-row-main"><strong>基础信息</strong><span>出生日期、居住城市、病史、作息</span></span>

@@ -185,6 +185,8 @@ export interface SignInPersonOptions {
   store: RecordStoreLike
   /** AI 草稿（有的话）：用于记“草案 → 定稿”的思想指纹摘要。 */
   draft?: Encounter
+  /** V2-24：面诊扣库存必须先于发送成功；发送失败由返回的回滚函数冲回。 */
+  beforeSend?: (signed: SignedEncounterEvent) => Promise<void | (() => Promise<void>)>
 }
 
 // 签字并交还：signEncounter 后把 record.signed（面诊还有每张照片的 record.attachment）发给学生。
@@ -192,7 +194,9 @@ export interface SignInPersonOptions {
 export async function signAndHandoverInPerson(options: SignInPersonOptions): Promise<SignedEncounterEvent> {
   assertInPerson(options.encounter)
   const signed = signEncounter(options.encounter, options.privateKey)
-  await options.send('record.signed', signed)
+  const rollback = await options.beforeSend?.(signed)
+  try { await options.send('record.signed', signed) }
+  catch (cause) { if (rollback) await rollback(); throw cause }
   await saveTeacherRecord(options.store, signed)
   if (options.draft) await updateFingerprint(options.store, options.encounter.teacher, options.draft, options.encounter)
   return signed

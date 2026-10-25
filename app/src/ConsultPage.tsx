@@ -27,6 +27,7 @@ import { intakeDefaults, refreshProfile } from './core/basics'
 import { PostureAtHome } from './PostureAtHome'
 import { CareReminder } from './CareReminder'
 import { buildPeriodObservation } from './core/kangbi'
+import { listHerbs, shareHomeHerbs, type Herb } from './core/herbs'
 import './newui.css'
 import './student.css'
 
@@ -79,12 +80,15 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
   const [sent, setSent] = useState(false)
   // V2-23：基础信息里的既往史、用药过敏，问诊卡里自动带上（学生可改）。
   const [defaults, setDefaults] = useState<{ history: string | null; medsAllergies: string | null }>({ history: null, medsAllergies: null })
+  const [homeHerbs, setHomeHerbs] = useState<Herb[]>([])
+  const [sharedHerbIds, setSharedHerbIds] = useState<string[]>([])
 
   useEffect(() => {
     void loadTeachers(store).then(setTeachers).catch(() => {})
     void refreshProfile(store).then(setProfile).catch(() => { void loadProfile(store).then(setProfile).catch(() => {}) })
     void intakeDefaults(store).then(setDefaults).catch(() => {})
     void heavenNow(store).then(setHeaven).catch(() => {})
+    void listHerbs(store).then(setHomeHerbs).catch(() => {})
     void loadDraft(store).then(draft => { if (draft) { setSession(draft); setStatus(draft.phase === 'confirm' ? '已读回上次未发出的卡片。' : '已读回上次未发送的草稿。') } }).catch(() => {})
   }, [store])
 
@@ -186,7 +190,8 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
       }
       let observation: ConsultPackage['observation']
       try { observation = await buildPeriodObservation(store, { teacher: session.teacher }) } catch { observation = undefined }
-      await confirmAndSend(store, session, currentProfile, history, attachments, sendFn, trend, observation ? { ...options, observation } : options)
+      const shared = shareHomeHerbs(homeHerbs, sharedHerbIds)
+      await confirmAndSend(store, session, currentProfile, history, attachments, sendFn, trend, { ...options, ...(observation ? { observation } : {}), ...(shared.length ? { homeHerbs: shared } : {}) })
       setSent(true)
       setSession({ ...session, phase: 'sent' })
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -263,6 +268,15 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
             </label>)}
           </div>}
         </section>
+
+        {homeHerbs.length > 0 && <details className="cf-card" aria-label="附上家里的药">
+          <summary>可选：附上家里有哪些药</summary>
+          <p className="nl-quiet">只发送你勾选的药名和“够 / 快没了”，不会发送数量。</p>
+          {homeHerbs.filter(herb => herb.enabled).map(herb => <label key={herb.id} className="cf-field">
+            <input type="checkbox" checked={sharedHerbIds.includes(herb.id)} onChange={event => setSharedHerbIds(ids => event.target.checked ? [...new Set([...ids, herb.id])] : ids.filter(id => id !== herb.id))} />
+            {herb.name} · {herb.quantity > herb.threshold ? '够' : '快没了'}
+          </label>)}
+        </details>}
 
         <section className="cf-card cf-tongue" aria-label="这次的舌象">
           <div><strong>这次的舌象</strong><p className="nl-quiet">{session.tongues?.length ? `已拍 ${session.tongues.length} 张 · 可继续补拍` : '还没拍 · 可稍后补充'}</p></div>

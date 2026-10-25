@@ -20,6 +20,7 @@ import { confirmHeardExams, setExamDraft } from './review-model'
 import { SignReview } from './SignReview'
 import { PostureTool } from './PostureTool'
 import { uiError } from './core/onboarding/ui'
+import { deductPrescription, listHerbs, loadHerbUnits, matchPrescriptionToInventory, parsePrescriptionDose, prescriptionStockNotes, reversePrescription } from './core/herbs'
 import './newui.css'
 
 // V2-16 面诊进行中（02）：选学生 → 老师说一段、智能体拆进望闻问切四格 → 说完了看草稿。
@@ -150,6 +151,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
     try {
       const confirmed = confirmHeardExams(encounter)
       let drafted = confirmed
+      let notes: string[] = []
       if (llm) {
         setStatus('正在整理草稿，老师看过整张卡片后签字发出。')
         let draftError = ''
@@ -160,7 +162,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
           cases: await teacherCases(store, { forStudent: confirmed.student }),
         }, llm, { level: 'prescription', onError: text => { draftError = text } })
         if (draftError) throw Error(draftError)
-        setMaterialNote(generated.note)
+        notes = generated.note
         // 老师自己说、自己确认过的四诊优先于模型从主诉里推的四诊。
         drafted = {
           ...generated.encounter,
@@ -168,10 +170,14 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
         }
       } else {
         setStatus('未配置模型：本次没有 AI 草稿，核对四诊后即可签字。')
-        setMaterialNote([])
       }
       // V2-30：体态记录不经过模型起草，核对面诊草稿时原样带进签字。
       if (confirmed.postures?.length) drafted = { ...drafted, postures: confirmed.postures }
+      if (drafted.plan.prescription.value?.items.length) {
+        try { notes = [...notes, ...await prescriptionStockNotes(store, drafted.plan.prescription.value.items)] }
+        catch { notes = [...notes, '库存暂时无法核对，不影响继续起草。'] }
+      }
+      setMaterialNote(notes)
       apply(confirmed)
       setDraft(drafted); setPhase('review')
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -184,7 +190,17 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
       await sendInPersonRecord(store, sendEnvelope, encounter.student, payload)
     }
     try {
-      const signed = await signAndHandoverInPerson({ encounter: final, privateKey: identity.privateKey, send: sendRecord, store, draft })
+      const signed = await signAndHandoverInPerson({ encounter: final, privateKey: identity.privateKey, send: sendRecord, store, draft,
+        beforeSend: async event => {
+          const prescription = final.plan.prescription.value
+          if (!prescription?.items.length) return
+          const [herbs, units] = await Promise.all([listHerbs(store), loadHerbUnits(store)])
+          const lines = matchPrescriptionToInventory(prescription.items.map(item => parsePrescriptionDose(item.herb, item.dose)), herbs, units)
+          const result = await deductPrescription(store, lines, event.id, 'in-person-sign-' + event.id, { units })
+          if (result.shortages.length) throw Error('库存不足，整张方子都未扣：' + result.shortages.map(item => `${item.herb}差 ${item.missing}${item.unit}`).join('、') + '。请补充库存后再签字。')
+          return async () => { await reversePrescription(store, event.id, 'sign-send-failed-' + event.id) }
+        },
+      })
       try {
         await recordSignedObservation(store, {
           id: signed.id, student: final.student, teacher: identity.publicKey, at: new Date(),

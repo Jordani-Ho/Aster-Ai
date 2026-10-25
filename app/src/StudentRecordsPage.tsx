@@ -9,6 +9,7 @@ import { intakeDisplayLabel } from './core/record/in-person'
 import type { Encounter } from './core/record/types'
 import type { LocalStore } from './core/store'
 import './records.css'
+import { deductPrescription, listHerbs, loadHerbUnits, matchPrescriptionToInventory, parsePrescriptionDose } from './core/herbs'
 
 function textField(field: { value: string | null } | undefined): string {
   return field && field.value !== null && field.value !== '' ? field.value : '未知'
@@ -60,8 +61,24 @@ function RecordBody({ record, store }: { record: ReceivedRecord; store: LocalSto
 
 function RecordCard({ group, store }: { group: GroupedRecord; store: LocalStore }) {
   const latest = group.versions[0]
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+  const prescription = latest.encounter.plan.prescription.value
+  const brewOne = async () => {
+    if (!prescription || busy) return
+    setBusy(true); setNotice('')
+    try {
+      const [herbs, units] = await Promise.all([listHerbs(store), loadHerbUnits(store)])
+      const lines = matchPrescriptionToInventory(prescription.items.map(item => parsePrescriptionDose(item.herb, item.dose)), herbs, units)
+      const result = await deductPrescription(store, lines, latest.event.id, 'brew-' + crypto.randomUUID().replaceAll('-', ''), { units })
+      if (result.shortages.length) setNotice('库存不足：' + result.shortages.map(item => `${item.herb}差 ${item.missing}${item.unit}`).join('、') + '；本剂未扣。')
+      else { setNotice('已记下煎了一剂。'); window.dispatchEvent(new Event('aster:data-changed')) }
+    } catch (cause) { setNotice(cause instanceof Error ? cause.message : '没有扣库存，请检查剂量和药材单位。') }
+    finally { setBusy(false) }
+  }
   return <article className="record-card">
     <RecordBody record={latest} store={store} />
+    {prescription?.items.length ? <div className="record-brew"><button type="button" disabled={busy} onClick={() => void brewOne()}>{busy ? '正在记…' : '煎了一剂'}</button>{notice && <p role="status">{notice}</p>}</div> : null}
     {group.versions.length > 1 && <details className="record-revisions">
       <summary>旧版本 {group.versions.length - 1} 份（保留不删）</summary>
       {group.versions.slice(1).map(record => <div key={record.event.id} className="record-revision">

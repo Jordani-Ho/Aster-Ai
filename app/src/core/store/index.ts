@@ -10,6 +10,13 @@ export type StoreValue = JsonValue | Uint8Array
 export type { StoreOptions } from './database'
 export interface StoredIdentity { privateKey: string; publicKey: string; npub: string }
 
+export interface LocalStoreTransaction {
+  get(collection: string, key: string): Promise<StoreValue | undefined>
+  list(collection: string): Promise<{ key: string; value: StoreValue }[]>
+  put(collection: string, key: string, value: StoreValue): void
+  delete(collection: string, key: string): void
+}
+
 const NAME = /^[a-z][a-z0-9_-]{0,63}$/i
 const KEY = /^[A-Za-z0-9_-]{1,64}$/
 
@@ -69,6 +76,34 @@ export class LocalStore {
       validateAddress(address, key)
       await transaction(this.db, ['records'], 'readwrite', async tx => { tx.objectStore('records').delete([address, key]) })
     })
+  }
+  /** 多条本机记录在同一个 IndexedDB 事务中读写；用于库存等必须全成全败的操作。 */
+  atomic<T>(body: (records: LocalStoreTransaction) => Promise<T>): Promise<T> {
+    return this.enqueue(async () => transaction(this.db, ['records'], 'readwrite', tx => {
+      const records = tx.objectStore('records')
+      const address = (collection: string, key?: string) => {
+        const name = this.address(collection)
+        validateAddress(name, key ?? 'validation')
+        return name
+      }
+      return body({
+        get: async (collection, key) => {
+          const name = address(collection, key)
+          const record = await requestResult(records.get([name, key]))
+          return record === undefined ? undefined : structuredClone(record.v) as StoreValue
+        },
+        list: async collection => {
+          const name = address(collection)
+          const rows = await requestResult(records.index('c').getAll(name))
+          return rows.map(record => ({ key: record.k, value: structuredClone(record.v) as StoreValue }))
+        },
+        put: (collection, key, value) => {
+          const name = address(collection, key)
+          records.put({ c: name, k: key, v: structuredClone(value) })
+        },
+        delete: (collection, key) => { records.delete([address(collection, key), key]) },
+      })
+    }))
   }
   // 删除某个分片的全部记录（移除家人时清掉他的本机资料）。
   clearScope(prefix: string): Promise<void> {

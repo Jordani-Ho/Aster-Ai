@@ -5,6 +5,7 @@ import { removeStudentPostureSegment, sanitizeStudentPostures, type PostureRecor
 import type { LlmClient } from '../llm'
 import { isHeavenStamp } from '../heaven/stamp'
 import type { AttachmentRef, ConsultPackage, Encounter, Field } from '../record/types'
+import { cleanSharedHomeHerbs } from '../herbs'
 import { emptyFields, missingFocuses, organizeIntake, MAX_ROUNDS, INTAKE_KEYS, type FollowupQuestion, type IntakeFields, type IntakeKey } from './followup'
 import { MAX_PHOTOS, assertPhotoCount, type PhotoResult } from './photo'
 import { appendStudentPostureSegment, newStudentPostureRecord } from '../posture'
@@ -282,7 +283,7 @@ export function buildConsultPackage(
   history: readonly HistoryCandidate[],
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
   trend?: ConsultPackage['trend'],
-  options: { manager?: string; managerProof?: ConsultPackage['managerProof']; heaven?: ConsultPackage['heaven']; observation?: ConsultPackage['observation'] } = {},
+  options: { manager?: string; managerProof?: ConsultPackage['managerProof']; heaven?: ConsultPackage['heaven']; observation?: ConsultPackage['observation']; homeHerbs?: ConsultPackage['homeHerbs'] } = {},
 ): ConsultPackage {
   const checkResult = canConfirm(state)
   if (!checkResult.ok) throw new Error(checkResult.reason)
@@ -309,6 +310,7 @@ export function buildConsultPackage(
   }
   const unknown = <T,>(): Field<T> => ({ value: null, source: 'unknown' })
   const heaven = options.heaven
+  const homeHerbs = cleanSharedHomeHerbs(options.homeHerbs)
   if (heaven !== undefined && !isHeavenStamp(heaven)) throw new Error('天时格式无效')
   // V2-32：体态只带关键点、视角、时间与感觉；这里再清洗一次，绝不把图片字节或指标带出手机。
   let postures: PostureRecord[] | undefined
@@ -344,6 +346,7 @@ export function buildConsultPackage(
     ...(heaven ? { heaven: { ...heaven } } : {}),
     ...(trend ? { trend } : {}),
     ...(postures && postures.length > 0 ? { postures } : {}),
+    ...(homeHerbs ? { homeHerbs } : {}),
   }
   // M1-22：家人代管问诊时带上代管人公钥与代管证明，只走传输元数据，不改病历 schema。
   if (options.manager !== undefined) {
@@ -382,7 +385,7 @@ export async function confirmAndSend(
   attachments: readonly { ref: AttachmentRef; data: Uint8Array }[],
   send: SendConsultPackage,
   trend?: ConsultPackage['trend'],
-  options: { manager?: string; managerProof?: ConsultPackage['managerProof']; heaven?: ConsultPackage['heaven']; observation?: ConsultPackage['observation'] } = {},
+  options: { manager?: string; managerProof?: ConsultPackage['managerProof']; heaven?: ConsultPackage['heaven']; observation?: ConsultPackage['observation']; homeHerbs?: ConsultPackage['homeHerbs'] } = {},
 ): Promise<ConsultPackage> {
   const pkg = buildConsultPackage(state, profile, history, attachments, trend, options)
   // 只有学生明确点“确认发送”才走到这里；之前任何一步都不调用 send。
