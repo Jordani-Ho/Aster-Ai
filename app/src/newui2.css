@@ -124,7 +124,7 @@
 .cf-field dt { flex: 0 0 66px; color: #6b746c; font-size: 16px; }
 .cf-field dd { flex: 1; margin: 0; font-size: 17px; line-height: 1.7; }
 .cf-field { flex-wrap: wrap; }
-.cf-citations { flex: 0 0 100%; margin-left: 80px; color: #65756a; font-size: 12px; line-height: 1.5; }
+.cf-citations { flex: 0 0 100%; box-sizing: border-box; padding-left: 80px; color: #65756a; font-size: 12px; line-height: 1.5; }
 .cf-recording-control { margin: 16px 0; text-align: center; }
 .cf-record-button { min-width: 172px; min-height: 56px !important; border-radius: 28px !important; background: #2f5d4a !important; color: #fffdf8 !important; touch-action: none; user-select: none; }
 .cf-record-button.is-recording { background: #a33d32 !important; }
