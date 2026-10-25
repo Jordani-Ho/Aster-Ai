@@ -2,6 +2,7 @@ import { finalizeEvent, getEventHash, getPublicKey, verifyEvent } from 'nostr-to
 import type { Encounter, Field } from './types'
 import { AI_ACCEPTED_NOTE, TEACHER_DIRECTED_NOTE } from './notes'
 import { parseTongueAbstract } from '../../../../domain/tcm/tongue'
+import { normalizePostureForSign } from '../../../../domain/tcm/posture'
 
 // 签字病历是一条 kind 2730 的 Nostr 签名事件，content 是完整的 Encounter JSON。
 // 这个模块（及其依赖）不得导入 core/llm：签字路径里不允许出现任何模型调用。
@@ -77,6 +78,12 @@ function validateEncounter(encounter: Encounter): void {
   if(encounter.intake.tongues!==undefined) {
     if(!Array.isArray(encounter.intake.tongues)||encounter.intake.tongues.length>4)throw Error('舌象记录无效')
     encounter.intake.tongues.forEach(parseTongueAbstract)
+  }
+  // V2-30：体态只随面诊签字；每条记录必须是本学生的，旧病历没有这个字段照常。
+  if(encounter.postures!==undefined) {
+    if(encounter.kind!=='in_person')throw Error('体态记录只能随面诊病历保存')
+    if(!Array.isArray(encounter.postures)||encounter.postures.length>10)throw Error('体态记录无效')
+    encounter.postures.forEach(record=>normalizePostureForSign(record,encounter.student))
   }
   if (!HEX32.test(encounter.id)) throw new Error('病历 id 必须是 32 位十六进制')
   if (!Number.isSafeInteger(encounter.version) || encounter.version < 1) throw new Error('病历版本号无效')

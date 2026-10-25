@@ -3,6 +3,7 @@ import type { Encounter, Homework, Prescription } from './core/record/types'
 import type { ObservationChoice } from './core/kangbi'
 import { OBSERVATION_CHOICES } from './core/kangbi'
 import { acceptDraftForSigning } from './core/record/sign'
+import { PostureSummary } from './PostureTool'
 import { isLongRecord } from './core/record/fold'
 import { EXAM_LABELS, EXAM_KEYS, type ExamKey } from './four-exams'
 import {
@@ -242,6 +243,8 @@ export function SignReview({
         <label className="nl-quiet">说说怎么改<textarea rows={2} value={instruction} disabled={revising} placeholder="例如：去掉某味药、作业改成每晚泡脚" onChange={event => setInstruction(event.target.value)} /></label>
         <button type="button" disabled={revising || !instruction.trim()} onClick={() => void revise()}>按意见改稿</button>
       </details>}
+
+      <PostureSummary postures={encounter.postures} title="这次面诊的体态记录" />
     </div>
     <footer className="nl-review-foot">
       <p className={'nl-hint' + (pending > 0 ? '' : ' clear')}>{pending > 0 ? `还有 ${pending} 处草稿等您确认` : '都确认了，可以签字发出。'}</p>

@@ -20,3 +20,5 @@ deploy/home/data/
 deploy/home/.env
 deploy/home/.env.runtime
 !deploy/home/.env.example
+# V2-30：MediaPipe 的 wasm 运行时由 vite 插件在构建/启动时从 node_modules 复制，不重复入库。
+app/public/posture/wasm/

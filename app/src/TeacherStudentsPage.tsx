@@ -13,6 +13,7 @@ import { formatMoney } from './core/ledger/money'
 import { buildStudentRows, filterStudentRows, lastVisitLabel, type StudentRow } from './teacher-students'
 import { localDay } from './core/homework/schedule'
 import { TeacherCarePlan } from './TeacherCarePlan'
+import { PostureTool } from './PostureTool'
 import { loadOwnStorefront, verifyStorefrontEvent, type Storefront } from './core/storefront'
 import './newui.css'
 
@@ -145,6 +146,7 @@ function StudentDetail({ identity, store, llm, send, ledger, row, records, onBac
   const [plan, setPlan] = useState<CarePlan | null>(null)
   const [showPlan, setShowPlan] = useState(false)
   const [showAllRecords, setShowAllRecords] = useState(false)
+  const [postureOpen, setPostureOpen] = useState(false)
   const [balance, setBalance] = useState<{ text: string; currency: string } | null>(null)
   const report = row.report
   const shownRecords = showAllRecords ? records : records.slice(0, 2)
@@ -171,6 +173,7 @@ function StudentDetail({ identity, store, llm, send, ledger, row, records, onBac
   }, [ledger, identity.publicKey, row.student])
 
   return <div className="nl-detail">
+    {postureOpen ? <PostureTool identity={identity} store={store} student={row.student} onClose={() => setPostureOpen(false)} /> : <>
     <header className="nl-flow-head">
       <button type="button" className="nl-back" aria-label="返回" onClick={onBack}>‹</button>
       <div><h1>{row.alias}</h1><small>{genderAge(latest)}</small></div>
@@ -195,6 +198,14 @@ function StudentDetail({ identity, store, llm, send, ledger, row, records, onBac
               <TeacherCarePlan identity={identity} store={store} student={row.student} llm={llm} send={send} />
             </details>
           </>}
+      </section>
+
+      <section aria-label="体态记录">
+        <div className="nl-top"><h2>体态</h2></div>
+        <div className="nl-card">
+          <p className="nl-quiet">当面看学生走路、坐下、弯腰：采集骨架、按您的公式算指标、标注失衡、看长期趋势。照片/视频识别完当场清掉。</p>
+          <button type="button" className="nl-primary" onClick={() => setPostureOpen(true)}>打开体态工具</button>
+        </div>
       </section>
 
       <section aria-label="坚持情况">
@@ -238,5 +249,6 @@ function StudentDetail({ identity, store, llm, send, ledger, row, records, onBac
     <footer className="ts-detail-foot">
       <button type="button" className="nl-primary" onClick={onVisit}>＋ 开始面诊</button>
     </footer>
+    </>}
   </div>
 }
