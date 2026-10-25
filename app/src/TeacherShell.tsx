@@ -45,7 +45,7 @@ export function TeacherShell({ identity, store, stack, llm, gateway, status, set
 
   return <div className="nl-shell">
     {tab === 'today' && <div className="nl-page"><GroundworkNotice store={store} onOpen={() => setGroundwork(true)} /></div>}
-    {tab === 'today' && <TeacherToday identity={identity} store={store} status={status}
+    {tab === 'today' && <TeacherToday identity={identity} store={store} status={status} send={stack?.send as SendEnvelope | undefined}
       onStartVisit={() => setFlow({ kind: 'visit' })} onOpenRemote={consult => setFlow({ kind: 'remote', consult })} />}
     {tab === 'students' && <TeacherStudentsPage identity={identity} store={store} llm={llm} send={stack?.send as SendEnvelope | undefined} ledger={stack?.ledger ?? null} onVisit={student => setFlow({ kind: 'visit', student })} />}
     {tab === 'manage' && <TeacherManagement identity={identity} store={store} llm={llm} gateway={gateway} send={stack?.send as SendEnvelope | undefined} ledger={stack?.ledger ?? null} settings={settings} />}

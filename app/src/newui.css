@@ -161,4 +161,9 @@
 .nl-tabs button { flex: 1; min-height: 44px; }
 .nl-tabs button[aria-pressed=true] { background: var(--nl-soft); border-color: var(--nl-accent); color: var(--nl-accent-deep); font-weight: 600; }
 .nl-manage h1 { font-size: 32px; }
+.nl-appointment { border-top: 1px solid var(--nl-line); padding: 10px 0; }
+.nl-appointment:first-of-type { border-top: 0; }
+.nl-appointment p { margin: 4px 0; }
+.nl-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.nl-actions > button { flex: 1; min-width: 0; }
 @media (max-width: 359px) { .nl-shell h1 { font-size: 34px; } .nl-exam { min-height: 100px; } }

@@ -6,6 +6,7 @@ import { createLedgerSync } from '../ledger/sync'
 import { createInbox, flushIntakeOutbox, loadTeachers, sendConsultPackage } from '../inbox'
 import { autoRestore } from '../records/backup'
 import type { ConsultPackage } from '../record/types'
+import { createAppointmentInbox } from '../appointments'
 
 // M1-15a：一个 createTransport 实例 + 一个收件分发 + 一个账本同步控制器。
 // 所有业务消息（问诊包、照片、签字病历、账本事件）都走同一个发送函数；
@@ -31,7 +32,8 @@ export function createWiring(options: WiringOptions) {
     return id
   }
   const ledger = createLedgerSync({ identity, store, send, onChange: options.onChange, onError: options.onError })
-  const inbox = createInbox({ identity, store, ledger, send })
+  const appointments = createAppointmentInbox({ identity, store, send })
+  const inbox = createInbox({ identity, store, ledger, send, appointments })
   transport = createTransport({
     privateKey: identity.privateKey,
     relays: options.relays,
@@ -55,6 +57,7 @@ export function createWiring(options: WiringOptions) {
     identity,
     store,
     ledger,
+    appointments,
     inbox,
     send,
     sendConsult: (pkg: ConsultPackage) => sendConsultPackage(send, pkg, { store }),

@@ -49,6 +49,8 @@ V2-24 新增：`herbs`（本机药材与整数最小单位库存）、`herb-ledg
 | `in-person-draft` | 老师端进行中的面诊草稿 | 同上 |
 | `teacher-records` | 老师端完整签名病历 `{eventId, encounterId, version, student, createdAt, eventJson}` | V2-05；不在则整块不存在，保留期限删除 |
 | `teacher-students` | 老师认得的学生的公钥名单 `{student}` | V2-05；换手机后逐个要回病历用，不含病历内容 |
+| `appointments` | 本机预约邀约、接受、确认和到场状态 | V2-25；不进中心数据库，消息经现有端到端加密中继 |
+| `appointment-campaigns` | 老师本机每日邀约的候选队列与游标 | V2-25；过期或拒绝后继续请下一位 |
 | `teacher-retention` | 学生端记下的每位老师的保留期限 `{teacher, days, updatedAt}`（键为老师公钥） | V2-05；多位老师取最短 |
 | `teacher-fingerprint` | 老师改稿习惯摘要 `{records, paths: {字段:{drafts,changed}}, tongueDiffs: {"齿痕：模型不确定→老师有": 次数}, updatedAt}`（键为老师公钥） | V2-05/V2-08；只留计数，不受保留期限影响 |
 | `identity-links` | 换手机认回关系 `{kind:'student'|'teacher', oldKey, newKey, at}`（键为旧公钥） | V2-07；只存公钥对应关系，用于名单替换与旧签名病历验签 |
