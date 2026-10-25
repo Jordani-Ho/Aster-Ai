@@ -177,6 +177,16 @@ describe('V2-23 保存、门槛与问诊', () => {
 })
 
 describe('V2-23 八字按出生地算', () => {
+  it('出生地没填：有出生日期也不推算八字，不拿居住城市顶替；年龄照算', async () => {
+    const store = await open()
+    const { birthPlace: _place, ...noPlace } = FULL
+    await saveBasics(store, noPlace, { now: NOW })
+    const profile = await loadProfile(store)
+    expect(profile.bazi.value).toBe(null)
+    expect(profile.age.value).toBe(36)
+    expect(profile.city.value).toBe('北京市')
+  })
+
   it('出生地与居住城市不同时，八字按出生地的时区推算', async () => {
     const a = await open(), b = await open()
     await saveBasics(a, { ...FULL, birthShichen: '子', birthPlace: '洛杉矶', city: '北京市' }, { now: NOW })

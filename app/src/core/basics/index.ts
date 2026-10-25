@@ -185,8 +185,8 @@ export async function refreshProfile(store: LocalStore, now: Date = new Date()):
   profile.city = basics.city ? field(basics.city) : current.city
   if (basics.birthDate) {
     profile.age = field(ageAt(basics.birthDate, localDay(now)))
-    // 八字按出生地的真太阳时算；没填出生地才退回居住城市。
-    profile.bazi = field(await shichenBazi(basics.birthDate, basics.birthShichen ?? null, basics.birthPlace ?? basics.city ?? null))
+    // 八字只按出生地算；出生地不知道就不推算（不拿居住城市顶替，Codex 审核 #67）。
+    profile.bazi = field(basics.birthPlace ? await shichenBazi(basics.birthDate, basics.birthShichen ?? null, basics.birthPlace) : null)
   } else {
     // 没有出生日期就不推算：旧 profile 里存过的年龄、八字也不再带给老师（Codex 审核 #67）。
     profile.age = { value: null, source: 'unknown' }
