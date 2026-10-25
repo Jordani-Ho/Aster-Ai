@@ -64,9 +64,11 @@ try {
     const card = page.getByRole('region', { name: '问诊卡片' })
     await expect(card).toBeVisible()
     const cardText = await card.innerText()
-    // 主诉来自之前那句话；其余没问到/没答的项都显示“未提供”。
+    // 主诉来自之前那句话；没问到/没答的现病史显示“未提供”；
+    // 既往史、在用药与过敏由进馆基础信息自动带入（V2-23），不编造。
     expect(cardText).toContain('最近睡不好')
-    expect((cardText.match(/未提供/g) ?? []).length).toBeGreaterThanOrEqual(3)
+    expect((cardText.match(/未提供/g) ?? []).length).toBeGreaterThanOrEqual(1)
+    expect(cardText).toContain('在用药：无；过敏：无')
     expect(cardText).not.toContain('夜里出汗吗')
     expect(await page.getByRole('button', { name: '跳过，直接整理', exact: true }).count()).toBe(0)
     expect(errors).toEqual([])
