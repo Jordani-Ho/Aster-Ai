@@ -46,5 +46,6 @@
 | [V2-29](V2-29-skip-and-version.md) | “跳过，直接整理”真的直接整理；界面显示版本号 | DeepSeek | — |
 | [V2-30](V2-30-posture-tool.md) | 体态工具：骨架识别与老师自己的指标 | DeepSeek | V2-22 |
 | [V2-31](V2-31-setup-link.md) | 老师登记不用手抄口令：扫码即登记；口令与网关永远一致 | DeepSeek | V2-28 |
+| [V2-32](V2-32-posture-at-home.md) | 体态：学生在家也能拍 | DeepSeek | V2-30 |
 
 第二批（地基合并后再展开）：自我调整（表层配置化）、门面、物流（本地资源）、观察。
