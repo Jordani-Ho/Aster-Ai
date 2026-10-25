@@ -166,4 +166,7 @@
 .nl-appointment p { margin: 4px 0; }
 .nl-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .nl-actions > button { flex: 1; min-width: 0; }
+.nl-request-slots { border-top: 1px solid var(--nl-line); padding-top: 10px; }
+.nl-request-slots label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; color: var(--nl-ink); font-size: 14px; }
+.nl-request-slots input { flex: 1 1 190px; min-width: 0; min-height: 44px; border: 1px solid var(--nl-line); border-radius: 12px; background: var(--nl-card); color: var(--nl-ink); padding: 8px 10px; font: inherit; }
 @media (max-width: 359px) { .nl-shell h1 { font-size: 34px; } .nl-exam { min-height: 100px; } }

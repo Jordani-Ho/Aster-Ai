@@ -47,6 +47,8 @@ describe('预约可约时段', () => {
   it('用老师时区计算并可按学生时区清楚显示，同时标出老师城市', () => {
     expect(formatAppointmentTime('2026-11-02T09:00:00+08:00', 'America/Los_Angeles', '上海'))
       .toBe('11月1日 周日 17:00（老师时间：上海）')
+    expect(formatAppointmentTime('2026-11-02T09:00:00+08:00', 'America/Los_Angeles', '上海', 'Asia/Shanghai'))
+      .toBe('11月1日 周日 17:00（老师时间：上海 · 时区 Asia/Shanghai）')
   })
 
   it.each([-1, 0, 119, 1.5, Infinity])('拒绝无效的提前量 %s', leadMinutes => {
