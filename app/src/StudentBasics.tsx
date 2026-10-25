@@ -13,7 +13,8 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
   store: LocalStore
   title?: string
   note?: string
-  onBack: () => void
+  /** 不给就没有返回键（进馆时必须先填好）。 */
+  onBack?: () => void
   onSaved?: (missing: string[]) => void
 }) {
   const [loaded, setLoaded] = useState(false)
@@ -77,7 +78,7 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
 
   return <div className="nl-shell">
     <header className="nl-flow-head">
-      <button type="button" className="nl-back" aria-label="返回" onClick={onBack}>‹</button>
+      {onBack ? <button type="button" className="nl-back" aria-label="返回" onClick={onBack}>‹</button> : <span className="nl-back-placeholder" />}
       <div><h1>{title}</h1><small>只留在这部手机上</small></div>
     </header>
     <div className="nl-flow-body basics-page">

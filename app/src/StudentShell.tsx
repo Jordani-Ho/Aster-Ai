@@ -52,6 +52,9 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   // V2-23：基础信息还差哪几项；新学生填全前不能第一次问诊，老用户只提示。
   const [basicsMissing, setBasicsMissing] = useState<string[]>([])
   const [basicsNote, setBasicsNote] = useState('')
+  // 发起人 2026-10-24：出生日期等是被老师邀请进馆时的必填项（填错也由学生自己负责）。
+  // 新学生必填项不全时，进馆后第一屏就是基础信息，填好才进首页；老用户不拦，只在首页提示。
+  const [mustFill, setMustFill] = useState(false)
   const pagesStore = scopedStore ?? store
   const pagesIdentity = scopedIdentity ?? identity
   const activeMember = family.find(member => member.account === active) ?? null
@@ -81,7 +84,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   }
   useEffect(() => {
     let live = true
-    void consultGate(pagesStore).then(gate => { if (live) setBasicsMissing(gate.missing) }).catch(() => {})
+    void consultGate(pagesStore).then(gate => { if (live) { setBasicsMissing(gate.missing); setMustFill(!gate.allowed) } }).catch(() => {})
     return () => { live = false }
   }, [pagesStore, active, sub])
 
@@ -95,6 +98,11 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
 
   useEffect(() => { if (stackStatus === 'ready') reportAdherence() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pagesStore, stackStatus, active, venue.active])
 
+  if (mustFill) {
+    return <StudentBasicsPage key={'join-' + active} store={pagesStore} title={activeMember ? `${activeMember.alias}的基础信息` : '进馆：先填基础信息'}
+      note="老师邀请您进馆。先填好下面这几项，就能开始用了。"
+      onSaved={missing => { setBasicsMissing(missing); if (missing.length === 0) setMustFill(false) }} />
+  }
   if (sub === 'basics') {
     return <StudentBasicsPage key={active} store={pagesStore} title={activeMember ? `${activeMember.alias}的基础信息` : '基础信息'} note={basicsNote}
       onBack={() => { setBasicsNote(''); setSub(null) }}

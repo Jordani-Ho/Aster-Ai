@@ -134,6 +134,7 @@ try {
   await expect(student.getByRole('button', { name: '开始使用', exact: true })).toBeVisible({ timeout: 20000 })
   await student.getByRole('button', { name: '开始使用', exact: true }).click()
   await connectModel(student)
+  await fillBasicsIfAsked(student)
   await expect(student.locator('[data-page=student-today]')).toBeVisible({ timeout: 20000 })
   await connected(student)
   await shot(student, '03-student-mirror')
@@ -283,6 +284,7 @@ try {
   await recovered.getByRole('button', { name: '先继续用', exact: true }).click()
   // 新设备还没接入模型：先按内测手册接入自己的模型，再继续。
   await connectModel(recovered)
+  await fillBasicsIfAsked(recovered)
   await expect(recovered.locator('[data-page=student-today]')).toBeVisible({ timeout: 20000 })
   await recovered.getByRole('navigation', { name: '学生底部标签' }).getByRole('button', { name: '记录', exact: true }).click()
   await recovered.getByRole('button', { name: /全部 \d+ 次/ }).click()
@@ -363,7 +365,8 @@ try {
 async function fillBasicsIfAsked(page) {
   const heading = page.getByRole('heading', { name: /基础信息$/ })
   const speak = page.getByLabel('按键盘上的🎤说话就行')
-  await heading.or(speak).first().waitFor()
+  const home = page.locator('[data-page=student-today]')
+  await heading.or(speak).or(home).first().waitFor()
   if (!(await heading.isVisible())) return
   const alias = page.getByLabel('称呼', { exact: true })
   if (!(await alias.inputValue())) await alias.fill('合成学生')
@@ -373,5 +376,5 @@ async function fillBasicsIfAsked(page) {
   const city = page.getByLabel('居住城市', { exact: true })
   if (!(await city.inputValue())) await city.selectOption('北京市')
   await page.getByRole('button', { name: '保存', exact: true }).click()
-  await speak.waitFor()
+  await speak.or(home).first().waitFor()
 }

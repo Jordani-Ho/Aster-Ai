@@ -352,7 +352,10 @@ async function main() {
     return <TeacherShell identity={teacher.identity} store={teacher.store} stack={stack} llm={stubLlm} gateway={gateway} status={status} settings={settingsNode} />
   }
 
-  createRoot(document.getElementById('root')!).render(<Scene />)
+  // Vite 冷启动可能让这个模块执行两次；同一个容器只建一个 React 根，否则整页切换时两个根互删节点。
+  const holder = window as unknown as { __phoneRoot?: ReturnType<typeof createRoot> }
+  holder.__phoneRoot ??= createRoot(document.getElementById('root')!)
+  holder.__phoneRoot.render(<Scene />)
   Object.assign(window, { __phone: { student: student.publicKey, teacher: teacher.identity.publicKey, roster, intake: intakeControl } })
 }
 

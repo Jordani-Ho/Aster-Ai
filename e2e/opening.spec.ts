@@ -1,4 +1,5 @@
 import { test, expect, runtime, connectModel, mockModel, openCommunity } from './fixtures'
+import { fillJoinBasics } from './basics-helper'
 import type { Browser, APIRequestContext } from '@playwright/test'
 
 // V2-15 建馆：全新部署走五步、第一位学生 1 小时邀请、过期重生成、老部署直接进首页。
@@ -74,7 +75,7 @@ test('V2-15 全新部署：只看到引导，五步走完后第一位学生用 1
       await expect(student.getByRole('heading', { name: '合成养生馆', exact: true })).toBeVisible()
       await student.getByRole('button', { name: '开始使用', exact: true }).click()
       await connectModel(student)
-      await expect(student.locator('[data-page=student-today]')).toBeVisible()
+      await fillJoinBasics(student)
       // 学生连上社区后，老师端引导自动结束。
       await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
 
