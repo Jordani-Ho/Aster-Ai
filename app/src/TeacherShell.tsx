@@ -35,7 +35,7 @@ export function TeacherShell({ identity, store, stack, llm, gateway, status, set
   const [tab, setTab] = useState<Tab>('today')
   const [flow, setFlow] = useState<Flow>(null)
   const [groundwork, setGroundwork] = useState(false)
-  if (groundwork) return <div className="nl-shell"><div className="nl-page"><button type="button" className="nl-back" onClick={() => setGroundwork(false)}>返回今天</button><HallGroundwork store={store} onDone={() => setGroundwork(false)} /></div></div>
+  if (groundwork) return <div className="nl-shell"><div className="nl-page"><button type="button" className="nl-back" onClick={() => setGroundwork(false)}>返回今天</button><HallGroundwork store={store} identity={identity} send={stack?.send as SendEnvelope | undefined} onDone={() => setGroundwork(false)} /></div></div>
 
   if (flow?.kind === 'visit') return <VisitPage identity={identity} store={store} llm={llm} send={stack?.send as SendEnvelope | undefined} initialStudent={flow.student} onExit={() => setFlow(null)} />
   if (flow?.kind === 'remote') {

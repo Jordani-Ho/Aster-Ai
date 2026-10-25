@@ -91,7 +91,7 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
     return () => { active = false; window.removeEventListener('aster:data-changed', refresh) }
   }, [store, identity, ledger])
 
-  if (view === 'groundwork') return <SubPage title="开馆基础工作" onBack={() => setView('hall')}><HallGroundwork store={store} onDone={() => setView('hall')} /></SubPage>
+  if (view === 'groundwork') return <SubPage title="开馆基础工作" onBack={() => setView('hall')}><HallGroundwork store={store} identity={identity} send={send} onDone={() => setView('hall')} /></SubPage>
   if (view === 'invite') return <SubPage title="邀请学生" onBack={() => setView('hall')}>
     <p className="nl-quiet">第 2 位及以后的学生；邀请 7 天内有效，可邀请多位。</p>
     <InviteSettings identity={identity} gateway={gateway} store={store} />

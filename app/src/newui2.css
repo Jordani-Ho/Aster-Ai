@@ -123,6 +123,18 @@
 .cf-field { display: flex; gap: 14px; padding: 8px 0; }
 .cf-field dt { flex: 0 0 66px; color: #6b746c; font-size: 16px; }
 .cf-field dd { flex: 1; margin: 0; font-size: 17px; line-height: 1.7; }
+.cf-field { flex-wrap: wrap; }
+.cf-citations { flex: 0 0 100%; margin-left: 80px; color: #65756a; font-size: 12px; line-height: 1.5; }
+.cf-recording-control { margin: 16px 0; text-align: center; }
+.cf-record-button { min-width: 172px; min-height: 56px !important; border-radius: 28px !important; background: #2f5d4a !important; color: #fffdf8 !important; touch-action: none; user-select: none; }
+.cf-record-button.is-recording { background: #a33d32 !important; }
+.cf-originals { padding-left: 32px; line-height: 1.8; }
+.cf-originals li { padding-left: 5px; margin: 6px 0; overflow-wrap: anywhere; }
+.cf-originals li span { color: #68776c; font-size: 12px; }
+.cf-qa-list { border-top: 1px solid #e8e2d8; padding-top: 8px; }
+.cf-qa-list p { line-height: 1.7; overflow-wrap: anywhere; }
+.cf-audio-row { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid #e8e2d8; }
+.cf-audio-row audio { width: 100%; max-width: 100%; }
 .cf-edit-toggle { text-align: left; }
 .cf-edit label { margin-top: 10px; }
 .cf-tongue { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

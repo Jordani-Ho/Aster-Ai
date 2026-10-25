@@ -3,6 +3,7 @@ import type { Encounter, Field } from './types'
 import { AI_ACCEPTED_NOTE, TEACHER_DIRECTED_NOTE } from './notes'
 import { parseTongueAbstract } from '../../../../domain/tcm/tongue'
 import { normalizePostureForSign } from '../../../../domain/tcm/posture'
+import { emptyOrganizedIntake, validOrganizationPair } from '../intake/organization'
 
 // 签字病历是一条 kind 2730 的 Nostr 签名事件，content 是完整的 Encounter JSON。
 // 这个模块（及其依赖）不得导入 core/llm：签字路径里不允许出现任何模型调用。
@@ -97,6 +98,9 @@ function validateEncounter(encounter: Encounter): void {
   }
   // V2-30：体态随面诊签字；V2-32：远程问诊也可以带，但只能是学生自己拍的骨架（不带老师标注）。
   validatePostureRecords(encounter)
+  if (encounter.teacherOrganized !== undefined && !validOrganizationPair({ student: emptyOrganizedIntake(), teacher: encounter.teacherOrganized })) {
+    throw new Error('老师整理格式无效')
+  }
   if (!HEX32.test(encounter.id)) throw new Error('病历 id 必须是 32 位十六进制')
   if (!Number.isSafeInteger(encounter.version) || encounter.version < 1) throw new Error('病历版本号无效')
   if (!HEX64.test(encounter.student) || !HEX64.test(encounter.teacher)) throw new Error('病历中的公钥格式无效')
@@ -164,6 +168,7 @@ export function verifySignedEncounter(event: SignedEncounterEvent, options: Veri
   const wrongIntake = intakeSourceViolations(encounter)
   if (wrongIntake.length > 0) throw new Error('intake 来源不符合规则，拒绝接收：' + wrongIntake.join('、'))
   validatePostureRecords(encounter)
+  if (encounter.teacherOrganized !== undefined && !validOrganizationPair({ student: emptyOrganizedIntake(), teacher: encounter.teacherOrganized })) throw new Error('签名病历里的老师整理无效')
   return encounter
 }
 

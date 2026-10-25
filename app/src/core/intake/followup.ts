@@ -2,9 +2,10 @@ import prompt from '../../../../prompts/student/intake.md?raw'
 import defaultBank from '../../../../domain/tcm/templates/default-questions.json'
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
 import type { LlmClient } from '../llm'
-import type { Field } from '../record/types'
+import type { Field, IntakeOriginal, OrganizationPair, OrganizedIntake } from '../record/types'
+import { fieldsFromOrganization, rawOrganization, validateOrganizedIntake } from './organization'
 
-// 学生采集的追问与整理。模型只负责“摘取学生原话 + 指出还缺哪些十问项目”；
+// 学生采集的追问与整理。整理可改写，但每栏必须引用有效的原话序号；
 // 断网或模型失败时退回固定问句，流程不中断。
 
 export const INTAKE_KEYS = ['chiefComplaint', 'presentIllness', 'history', 'medsAllergies'] as const
@@ -28,10 +29,6 @@ export function emptyFields(): IntakeFields {
   return { chiefComplaint: unknownField(), presentIllness: unknownField(), history: unknownField(), medsAllergies: unknownField() }
 }
 
-function studentField(value: string | null): Field<string> {
-  return value === null ? unknownField() : { value, source: 'student' }
-}
-
 // 只问模板里、且还没回答或跳过的项目。
 export function missingFocuses(focusOrder: readonly string[], answers: Record<string, { status: string }>): string[] {
   return focusOrder.filter(focus => answers[focus] === undefined)
@@ -42,35 +39,6 @@ export function fixedQuestions(focuses: readonly string[], bank: QuestionBank = 
     const text = bank.questions[focus]
     return typeof text === 'string' && text.trim() !== '' ? [{ focus, text: text.trim() }] : []
   }).slice(0, MAX_QUESTIONS_PER_ROUND)
-}
-
-function allStudentTexts(input: OrganizeInput): string[] {
-  return [...input.texts, ...Object.values(input.focusAnswers)]
-}
-
-function validFragments(raw: unknown, allowed: readonly string[]): string[] {
-  if (!Array.isArray(raw)) return []
-  const result: string[] = []
-  for (const item of raw) {
-    if (typeof item !== 'string') continue
-    const fragment = item.trim()
-    if (!fragment || fragment.length > 500) continue
-    if (!allowed.some(text => text.includes(fragment))) continue
-    if (result.includes(fragment)) continue
-    result.push(fragment)
-    if (result.join('').length > 2000) break
-  }
-  return result
-}
-
-function fieldsFromReply(raw: unknown, allowed: readonly string[]): IntakeFields {
-  const fields = emptyFields()
-  if (!isObject(raw)) return fields
-  for (const key of INTAKE_KEYS) {
-    const value = validFragments(raw[key], allowed).join('\n')
-    fields[key] = studentField(value === '' ? null : value)
-  }
-  return fields
 }
 
 function validateQuestions(raw: unknown, input: OrganizeInput): FollowupQuestion[] {
@@ -93,6 +61,8 @@ function validateQuestions(raw: unknown, input: OrganizeInput): FollowupQuestion
 export interface OrganizeInput {
   texts: string[]
   focusAnswers: Record<string, string>
+  originals?: IntakeOriginal[]
+  organizationPairs?: OrganizationPair[]
   focusOrder: string[]
   missingFocus: string[]
   template: TeacherTemplate
@@ -102,35 +72,21 @@ export interface OrganizeInput {
 
 export interface OrganizeOutcome {
   fields: IntakeFields
+  organized: OrganizedIntake
   questions: FollowupQuestion[]
   usedFallback: boolean
 }
 
-function answersFor(input: OrganizeInput, focus: string): string | null {
-  const text = input.focusAnswers[focus]
-  return typeof text === 'string' && text.trim() !== '' ? text.trim() : null
+function originalsFor(input: OrganizeInput): IntakeOriginal[] {
+  if (input.originals) return input.originals.map(item => ({ ...item }))
+  const spoken = input.texts.map(text => ({ text, source: 'spoken' as const }))
+  const followup = Object.values(input.focusAnswers).map(text => ({ text, source: 'followup' as const }))
+  return [...spoken, ...followup].map((item, index) => ({ id: index + 1, ...item }))
 }
 
-// 断网回退：第一句作为主诉，追问回答按十问分组（旧病 → history，服药 → medsAllergies，其余 → presentIllness）。
 function fallbackOutcome(input: OrganizeInput): OrganizeOutcome {
-  const fields = emptyFields()
-  const rest = input.texts.slice(1).filter(text => text.trim() !== '')
-  const primary = input.texts[0]?.trim() ?? null
-  fields.chiefComplaint = studentField(primary === '' ? null : primary)
-  const present: string[] = [...rest]
-  let history: string | null = null
-  let meds: string | null = null
-  for (const focus of input.focusOrder) {
-    const answer = answersFor(input, focus)
-    if (answer === null) continue
-    if (focus === '九问旧病') history = history === null ? answer : history + '\n' + answer
-    else if (focus === '服药') meds = meds === null ? answer : meds + '\n' + answer
-    else present.push(answer)
-  }
-  fields.presentIllness = studentField(present.length === 0 ? null : present.join('\n'))
-  fields.history = studentField(history)
-  fields.medsAllergies = studentField(meds)
-  return { fields, questions: fixedQuestions(input.missingFocus), usedFallback: true }
+  const organized = rawOrganization(originalsFor(input))
+  return { fields: fieldsFromOrganization(organized) as IntakeFields, organized, questions: fixedQuestions(input.missingFocus), usedFallback: true }
 }
 
 // 有网时走模型整理；任何失败都回退到 fixedQuestions + 学生原话，不阻断流程。
@@ -145,9 +101,11 @@ export async function organizeIntake(
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return fallback
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
+    const originals = originalsFor(input)
     const payload = {
-      texts: input.texts,
-      focusAnswers: input.focusAnswers,
+      originals,
+      qa: input.focusAnswers,
+      organizationPairs: (input.organizationPairs ?? []).slice(0, 5),
       template: { focus: input.template.focus },
       missingFocus: input.missingFocus,
       ...(input.member ? { member: input.member } : {}),
@@ -158,12 +116,13 @@ export async function organizeIntake(
     ])
     const parsed: unknown = JSON.parse(reply)
     if (!isObject(parsed)) throw new Error('shape')
-    const allowed = allStudentTexts(input)
-    const fields = fieldsFromReply(parsed.fields, allowed)
+    const organized = validateOrganizedIntake(parsed.organized, originals)
+    if (!organized) throw new Error('invalid-citations')
+    const fields = fieldsFromOrganization(organized) as IntakeFields
     let questions = validateQuestions(parsed.questions, input)
     // 模型没有给出有效追问时，用固定问句补上，保证还能继续采集。
     if (questions.length === 0) questions = fixedQuestions(input.missingFocus)
-    return { fields, questions, usedFallback: false }
+    return { fields, organized, questions, usedFallback: false }
   } catch {
     return fallback
   } finally {

@@ -16,6 +16,7 @@ export interface Groundwork {
   schedule: Schedule
   invitation: { mode: 'auto' | 'review'; afterDays: number }
   herbs: 'none' | 'pending' | 'ready'
+  receiveRecordings: boolean
   checked: string[]
 }
 export const GROUNDWORK_KEY = 'hall-groundwork'
@@ -95,11 +96,12 @@ function normalize(value: unknown): Groundwork {
   if (!v || !v.invitation || !['auto', 'review'].includes(v.invitation.mode) || !Number.isSafeInteger(v.invitation.afterDays) || v.invitation.afterDays < 1 || v.invitation.afterDays > 3650) throw Error('邀约：方式无效，间隔须为 1–3650 的整数天')
   if (!['none', 'pending', 'ready'].includes(v.herbs)) throw Error('药材库：请选择不备药或建库')
   if (!Array.isArray(v.checked) || v.checked.some(key => typeof key !== 'string' || !Object.hasOwn(GROUNDWORK_ITEMS, key)) || new Set(v.checked).size !== v.checked.length) throw Error('基础工作确认项无效')
-  return { schedule: validateSchedule(v.schedule), invitation: { ...v.invitation }, herbs: v.herbs, checked: [...v.checked] }
+  if (v.receiveRecordings !== undefined && typeof v.receiveRecordings !== 'boolean') throw Error('接收录音设置无效')
+  return { schedule: validateSchedule(v.schedule), invitation: { ...v.invitation }, herbs: v.herbs, receiveRecordings: v.receiveRecordings ?? true, checked: [...v.checked] }
 }
 export async function loadGroundwork(store: Pick<LocalStore, 'get'>): Promise<Groundwork> {
   const saved = await store.get('settings', GROUNDWORK_KEY)
-  return saved === undefined ? { schedule: defaultSchedule(), invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: [] } : normalize(saved)
+  return saved === undefined ? { schedule: defaultSchedule(), invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', receiveRecordings: true, checked: [] } : normalize(saved)
 }
 export async function saveGroundwork(store: Pick<LocalStore, 'put'>, value: Groundwork): Promise<void> {
   const clean = normalize(value)

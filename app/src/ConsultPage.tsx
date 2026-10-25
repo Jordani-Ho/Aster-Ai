@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import template from '../../domain/tcm/templates/default.json'
 import type { TeacherTemplate } from '../../domain/tcm/templates/types'
 import type { Identity } from './core/identity'
@@ -7,8 +7,8 @@ import type { LlmClient } from './core/llm'
 import type { ConsultPackage, Encounter } from './core/record/types'
 import {
   addPostureSegment, addTongue, addUtterance, answerFocus, canConfirm, confirmAndSend, INTAKE_COLLECTIONS,
-  defaultHistorySelection, loadDraft, loadHistory, loadProfile, markReviewed,
-  organizeSession, removePostureSegment, saveDraft, skipRemainingFocuses, startSession, updateField,
+  addRecording, defaultHistorySelection, loadDraft, loadHistory, loadOrganizationPairs, loadProfile, markReviewed,
+  organizeSession, removePostureSegment, removeRecording, saveDraft, skipRemainingFocuses, startSession, updateField,
   updatePostureNote,
   type IntakeKey, type IntakeSession,
 } from './core/intake'
@@ -28,6 +28,8 @@ import { PostureAtHome } from './PostureAtHome'
 import { CareReminder } from './CareReminder'
 import { buildPeriodObservation } from './core/kangbi'
 import { listHerbs, loadHerbUnits, snapshotHomeHerbs, type SharedHomeHerbSnapshot } from './core/herbs'
+import { AUDIO_MIME_TYPES, createAudioAttachment, MAX_AUDIO_SEGMENT_MS, MAX_AUDIO_TOTAL_MS } from './core/intake/audio'
+import { loadCachedReceiveRecordings } from './core/storefront'
 import './newui.css'
 import './student.css'
 
@@ -82,7 +84,17 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
   // V2-23：基础信息里的既往史、用药过敏，问诊卡里自动带上（学生可改）。
   const [defaults, setDefaults] = useState<{ history: string | null; medsAllergies: string | null }>({ history: null, medsAllergies: null })
   const [homeHerbs, setHomeHerbs] = useState<SharedHomeHerbSnapshot[]>([])
+  const [receiveRecordings, setReceiveRecordings] = useState(true)
+  const [recordingSupported, setRecordingSupported] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const [recordingUrls, setRecordingUrls] = useState<Record<string, string>>({})
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const recordingStreamRef = useRef<MediaStream | null>(null)
+  const stopRecordingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pressingAudio = useRef(false)
+  const sessionRef = useRef<IntakeSession | null>(null)
   const herbStore = modelStore ?? store
+  const updateSession = (next: IntakeSession | null) => { sessionRef.current = next; setSession(next) }
 
   useEffect(() => {
     void loadTeachers(store).then(setTeachers).catch(() => {})
@@ -91,12 +103,39 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
     void heavenNow(store).then(setHeaven).catch(() => {})
     void Promise.all([listHerbs(herbStore), loadHerbUnits(herbStore)])
       .then(([herbs, units]) => setHomeHerbs(snapshotHomeHerbs(herbs, units))).catch(() => setHomeHerbs([]))
-    void loadDraft(store).then(draft => { if (draft) { setSession(draft); setStatus(draft.phase === 'confirm' ? '已读回上次未发出的卡片。' : '已读回上次未发送的草稿。') } }).catch(() => {})
+    void loadDraft(store).then(draft => { if (draft && sessionRef.current === null) { updateSession(draft); setStatus(draft.phase === 'confirm' ? '已读回上次未发出的卡片。' : '已读回上次未发送的草稿。') } }).catch(() => {})
   }, [store, herbStore])
 
   const memberOption = member && profile ? { member: { age: profile.age.value } } : undefined
   const teacher = venueTeacher ?? teachers[0] ?? ''
   const call = (teacherName || '').trim() || '老师'
+
+  useEffect(() => {
+    setRecordingSupported(typeof MediaRecorder !== 'undefined' && typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia)
+  }, [])
+  useEffect(() => {
+    let active = true
+    void loadCachedReceiveRecordings(store, teacher).then(value => { if (active) setReceiveRecordings(value) }).catch(() => { if (active) setReceiveRecordings(true) })
+    return () => { active = false }
+  }, [store, teacher])
+  useEffect(() => {
+    const refs = session?.recordings ?? []
+    let active = true
+    const urls: string[] = []
+    void Promise.all(refs.map(async ref => {
+      const data = await store.get(INTAKE_COLLECTIONS.attachmentData, ref.id)
+      if (!(data instanceof Uint8Array) || !active) return null
+      const url = URL.createObjectURL(new Blob([data.slice().buffer as ArrayBuffer], { type: ref.mimeType }))
+      urls.push(url)
+      return [ref.id, url] as const
+    })).then(rows => { if (active) setRecordingUrls(Object.fromEntries(rows.filter((item): item is readonly [string, string] => item !== null))) })
+    return () => { active = false; urls.forEach(url => URL.revokeObjectURL(url)) }
+  }, [store, session?.recordings])
+  useEffect(() => () => {
+    if (stopRecordingTimer.current) clearTimeout(stopRecordingTimer.current)
+    recorderRef.current?.stop()
+    recordingStreamRef.current?.getTracks().forEach(track => track.stop())
+  }, [])
 
   const apply = (incoming: IntakeSession, notice = '') => {
     let next = incoming
@@ -104,7 +143,7 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
       if (defaults.history && !next.fields.history.value) next = updateField(next, 'history', defaults.history)
       if (defaults.medsAllergies && !next.fields.medsAllergies.value) next = updateField(next, 'medsAllergies', defaults.medsAllergies)
     }
-    setSession(next)
+    updateSession(next)
     setError('')
     if (notice) setStatus(notice)
     if (next.phase !== 'sent') void saveDraft(store, next).catch(() => setError('草稿没有保存成功。'))
@@ -120,22 +159,78 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
     }
     if (!/^[0-9a-f]{64}$/.test(currentTeacher)) { setError('请先打开老师的邀请链接。'); return null }
     const next = startSession({ student: identity.publicKey, teacher: currentTeacher, template: template as TeacherTemplate })
-    setSession(next)
+    updateSession(next)
     return next
+  }
+
+  const stopRecording = () => {
+    if (stopRecordingTimer.current) clearTimeout(stopRecordingTimer.current)
+    stopRecordingTimer.current = null
+    const active = recorderRef.current
+    if (active && active.state !== 'inactive') active.stop()
+  }
+
+  const startRecording = async () => {
+    if (!recordingSupported || !receiveRecordings || recorderRef.current) return
+    const current = await ensureSession()
+    if (!current) return
+    const existing = current.recordings ?? []
+    const durationMs = existing.reduce((sum, ref) => sum + (ref.durationMs ?? 0), 0)
+    const bytes = existing.reduce((sum, ref) => sum + ref.bytes, 0)
+    if (durationMs >= MAX_AUDIO_TOTAL_MS) { setStatus('本次录音已到 10 分钟上限，可以继续用文字。'); return }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (!pressingAudio.current) { stream.getTracks().forEach(track => track.stop()); return }
+      const mimeType = AUDIO_MIME_TYPES.find(type => MediaRecorder.isTypeSupported?.(type))
+      const recorder = new MediaRecorder(stream, {
+        audioBitsPerSecond: 24_000,
+        ...(mimeType ? { mimeType } : {}),
+      })
+      const chunks: BlobPart[] = []
+      const startedAt = performance.now()
+      recorder.ondataavailable = event => { if (event.data.size > 0) chunks.push(event.data) }
+      recorder.onstop = () => {
+        const elapsed = Math.max(1, Math.round(performance.now() - startedAt))
+        stream.getTracks().forEach(track => track.stop())
+        recordingStreamRef.current = null
+        recorderRef.current = null
+        setRecording(false)
+        const blob = new Blob(chunks, { type: recorder.mimeType })
+        void (async () => {
+          try {
+            const actualMime = AUDIO_MIME_TYPES.find(type => (blob.type || recorder.mimeType).toLowerCase().startsWith(type)) ?? ''
+            const clip = await createAudioAttachment(new Uint8Array(await blob.arrayBuffer()), actualMime, elapsed, { durationMs, bytes })
+            await store.put(INTAKE_COLLECTIONS.attachmentData, clip.ref.id, clip.data)
+            const next = addRecording(sessionRef.current ?? current, clip.ref)
+            await saveDraft(store, next)
+            updateSession(next)
+            setStatus('录音已加好。送达后，录音会从这台手机清除。')
+          } catch (cause) { setError(message(cause)) }
+        })()
+      }
+      recorder.start()
+      recorderRef.current = recorder
+      recordingStreamRef.current = stream
+      setRecording(true); setError(''); setStatus('按住录音，松开就停。')
+      stopRecordingTimer.current = setTimeout(() => { pressingAudio.current = false; setStatus('单段已到 3 分钟上限。'); stopRecording() }, MAX_AUDIO_SEGMENT_MS)
+    } catch {
+      setStatus('录音没开，可以继续用键盘输入。')
+    }
   }
 
   // 10a：说一说 → 整理（有追问就进 10b，没有就进 10c）
   const speak = async () => {
     if (busy) return
-    const text = draftText.trim()
-    if (text === '') return
+    const text = draftText
+    if (text.trim() === '') return
     setBusy(true); setError('')
     try {
       let next = await ensureSession()
       if (!next) return
       next = addUtterance(next, text)
       setDraftText('')
-      next = await organizeSession(next, llm, memberOption)
+      const organizationPairs = await loadOrganizationPairs(store, next.teacher)
+      next = await organizeSession(next, llm, { ...(memberOption ?? {}), organizationPairs })
       if (next.phase === 'confirm') next = markReviewed(next)
       apply(next, next.usedFallback && llm ? '模型暂不可用，已改用固定问句。' : '')
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -148,9 +243,10 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
     setBusy(true); setError('')
     try {
       const focus = session.questions[0].focus
-      let next = answerFocus(session, focus, answerText.trim())
+      let next = answerFocus(session, focus, answerText)
       setAnswerText('')
-      next = await organizeSession(next, llm, memberOption)
+      const organizationPairs = await loadOrganizationPairs(store, next.teacher)
+      next = await organizeSession(next, llm, { ...(memberOption ?? {}), organizationPairs })
       if (next.phase === 'confirm') next = markReviewed(next)
       apply(next)
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
@@ -174,21 +270,29 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
       const candidates = await loadHistory(store, session.teacher)
       const history = defaultHistorySelection(candidates, session.teacher)
       const sendFn = sendConsult ?? (async () => {})
+      const shouldSendRecordings = await loadCachedReceiveRecordings(store, session.teacher)
+      setReceiveRecordings(shouldSendRecordings)
       const [checkins, ratings, stress] = await Promise.all([listCheckins(store), listSelfRatings(store), listStressRatings(store)])
       const trend = last14DayTrend(checkins, ratings, stress)
       // V2-23：年龄和八字每次现算；没有基础信息时沿用原 profile。
       const currentProfile = await refreshProfile(store).catch(() => loadProfile(store))
       const stamp = heavenStampOf(await heavenNow(store))
-      const attachments: { ref: { id: string; type: 'photo'; sha256: string; bytes: number }; data: Uint8Array }[] = []
+      const attachments: { ref: NonNullable<IntakeSession['attachments']>[number]; data: Uint8Array }[] = []
       for (const record of session.tongues ?? []) {
         if (!record.crop) continue
         const data = await store.get(INTAKE_COLLECTIONS.attachmentData, record.crop.id)
         if (!(data instanceof Uint8Array) || data.length !== record.crop.bytes) throw Error('舌象裁剪图缺失，请重拍后再发送')
         attachments.push({ ref: { ...record.crop }, data })
       }
+      if (shouldSendRecordings) for (const ref of session.recordings ?? []) {
+        const data = await store.get(INTAKE_COLLECTIONS.attachmentData, ref.id)
+        if (!(data instanceof Uint8Array) || data.length !== ref.bytes) throw Error('录音缺失，请重录后再发送')
+        attachments.push({ ref: { ...ref }, data })
+      }
       const options = {
         ...(managerIdentity ? { manager: managerIdentity.publicKey, managerProof: createFamilyProof(managerIdentity, identity.publicKey) } : {}),
         heaven: stamp,
+        receiveRecordings: shouldSendRecordings,
       }
       let observation: ConsultPackage['observation']
       try { observation = await buildPeriodObservation(store, { teacher: session.teacher }) } catch { observation = undefined }
@@ -199,7 +303,7 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
       } catch { /* 库存读取失败不能挡住学生发送问诊。 */ }
       await confirmAndSend(store, session, currentProfile, history, attachments, sendFn, trend, { ...options, ...(observation ? { observation } : {}), homeHerbs: shared })
       setSent(true)
-      setSession({ ...session, phase: 'sent' })
+      updateSession({ ...(sessionRef.current ?? session), phase: 'sent' })
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
 
@@ -240,6 +344,19 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
           <textarea aria-label="按键盘上的🎤说话就行" rows={6} maxLength={2000} value={draftText} disabled={busy} placeholder="按键盘上的🎤说话就行" onChange={event => setDraftText(event.target.value)} />
         </label>
         <p className="nl-quiet cf-mic">🎙 也可以用键盘上的话筒说。</p>
+        {recordingSupported && receiveRecordings && <div className="cf-recording-control">
+          <button type="button" aria-label={recording ? '正在录音，松开停止' : '按住录音'} aria-pressed={recording}
+            className={recording ? 'cf-record-button is-recording' : 'cf-record-button'} disabled={busy || (session?.recordings ?? []).reduce((sum, ref) => sum + (ref.durationMs ?? 0), 0) >= MAX_AUDIO_TOTAL_MS}
+            onPointerDown={event => { event.preventDefault(); pressingAudio.current = true; void startRecording() }}
+            onPointerUp={() => { pressingAudio.current = false; stopRecording() }}
+            onPointerCancel={() => { pressingAudio.current = false; stopRecording() }}
+            onPointerLeave={() => { if (recording) { pressingAudio.current = false; stopRecording() } }}
+            onKeyDown={event => { if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) { event.preventDefault(); pressingAudio.current = true; void startRecording() } }}
+            onKeyUp={event => { if (event.key === ' ' || event.key === 'Enter') { pressingAudio.current = false; stopRecording() } }}
+            onContextMenu={event => event.preventDefault()}>{recording ? '正在录音 · 松开结束' : '按住录音'}</button>
+          <p className="nl-quiet">每段最多 3 分钟，一次问诊最多 10 分钟。</p>
+        </div>}
+        {recordingSupported && !receiveRecordings && <p className="nl-quiet">这位老师暂不接收录音，可以继续用文字问诊。</p>}
         <div className="cf-note-card">我会帮你整理成一张卡片。<br />你看过，再发给老师。</div>
         {onOpenHerbs && <button type="button" className="cf-link" onClick={onOpenHerbs}>整理家里的药材 ›</button>}
       </>}
@@ -266,15 +383,34 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
             {(Object.keys(CARD_LABELS) as IntakeKey[]).map(key => <div key={key} className="cf-field">
               <dt>{CARD_LABELS[key]}</dt>
               <dd>{session.fields[key].value ?? '未提供'}</dd>
+              {session.organized?.[key]?.text && <small className="cf-citations">智能体整理 · 依据原话 {session.organized[key].citations.map(id => `#${id}`).join('、')}</small>}
             </div>)}
           </dl>
           <button type="button" className="op-link-button cf-edit-toggle" onClick={() => setEditing(value => !value)}>{editing ? '收起' : '改一改你的话 ›'}</button>
           {editing && <div className="cf-edit">
             {(Object.keys(FIELD_LABELS) as IntakeKey[]).map(key => <label key={key}>{FIELD_LABELS[key]}
-              <textarea rows={2} disabled={busy} value={session.fields[key].value ?? ''} onChange={event => setSession(updateField(session, key, event.target.value))} onBlur={() => void saveDraft(store, session).catch(() => {})} />
+              <textarea rows={2} disabled={busy} value={session.fields[key].value ?? ''} onChange={event => updateSession(updateField(session, key, event.target.value))} onBlur={() => void saveDraft(store, session).catch(() => {})} />
             </label>)}
           </div>}
         </section>
+
+        <details className="cf-card" aria-label="本次原话和追问回答">
+          <summary>本次原话与问答 · {session.originals?.length ?? session.texts.length} 句</summary>
+          <ol className="cf-originals">{(session.originals ?? session.texts.map((text, index) => ({ id: index + 1, text, source: 'spoken' as const }))).map(line => <li key={line.id}><span>#{line.id}</span> {line.text}</li>)}</ol>
+          {(session.qa ?? []).length > 0 && <div className="cf-qa-list"><h3>追问记录</h3>{session.qa!.map((item, index) => <p key={`${item.originalId}-${index}`}><strong>{item.question}</strong><br />{item.answer}</p>)}</div>}
+        </details>
+
+        {(session.recordings ?? []).length > 0 && <section className="cf-card" aria-label="本次录音">
+          <h3>本次录音 · {receiveRecordings ? '会随问诊包发给老师' : '老师暂不接收，不会上传'}</h3>
+          {session.recordings!.map((ref, index) => <div key={ref.id} className="cf-audio-row">
+            <p>第 {index + 1} 段 · {Math.ceil((ref.durationMs ?? 0) / 1000)} 秒</p>
+            {recordingUrls[ref.id] && <audio controls preload="none" src={recordingUrls[ref.id]}>浏览器不支持播放。</audio>}
+            <button type="button" className="op-link-button" disabled={busy} onClick={() => {
+              void (async () => { await store.delete(INTAKE_COLLECTIONS.attachmentData, ref.id); const next = removeRecording(sessionRef.current ?? session, ref.id); await saveDraft(store, next); updateSession(next) })().catch(cause => setError(message(cause)))
+            }}>删掉这段</button>
+          </div>)}
+          <p className="nl-quiet">问诊包确认送达后，录音会从本机清除。</p>
+        </section>}
 
         <details className="cf-card" aria-label="随问诊附上的家中药材">
           <summary>随问诊附上家里的药材 · {homeHerbs.length} 味</summary>
@@ -296,7 +432,7 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
             await store.put(INTAKE_COLLECTIONS.attachmentData, record.crop!.id, crop)
             const next = addTongue(session, record)
             await saveDraft(store, next)
-            setSession(next)
+            updateSession(next)
             setStatus('已附舌象裁剪图与候选特征，原图已从应用内清除')
           }} />
         </section>}
