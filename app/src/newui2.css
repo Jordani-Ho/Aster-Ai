@@ -245,3 +245,4 @@
 .basics-banner { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: calc(100% - 40px); margin: 12px 20px 0; text-align: left; background: #fffaf0 !important; border: 1.5px dashed #d4b26a !important; }
 .basics-banner span { font-size: 14px; color: var(--nl-muted); }
 .nl-back-placeholder { display: inline-block; min-width: 44px; }
+.basics-why { font-size: 14px; line-height: 1.7; color: var(--nl-muted); background: #f4f7f3; border-radius: 12px; padding: 10px 12px; margin: 4px 0 8px; }

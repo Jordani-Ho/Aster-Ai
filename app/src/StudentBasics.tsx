@@ -86,7 +86,7 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
       {loaded && !note && missing.length > 0 && <p className="basics-todo" role="status">还差：{missing.join('、')}</p>}
 
       <section className="nl-card" aria-label="必填">
-        <h2>先填这四项</h2>
+        <h2>先填这几项</h2>
         <label className={'basics-field' + required('alias')}>称呼<input aria-label="称呼" value={alias} maxLength={30} disabled={busy} onChange={event => setAlias(event.target.value)} placeholder="老师怎么称呼您" /></label>
         <fieldset className={'basics-field' + required('gender')} disabled={busy}>
           <legend>性别</legend>
@@ -97,6 +97,11 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
           </div>
         </fieldset>
         <label className={'basics-field' + required('birthDate')}>出生日期<input aria-label="出生日期" type="date" value={birthDate} disabled={busy} onChange={event => setBirthDate(event.target.value)} /></label>
+        <label className="basics-field">出生时辰（知道就选，不知道也可以）<select aria-label="出生时辰" value={shichen} disabled={busy} onChange={event => setShichen(event.target.value as Shichen | '')}>
+          <option value="">不知道</option>
+          {SHICHEN_NAMES.map(name => <option key={name} value={name}>{name}时</option>)}
+        </select></label>
+        <p className="basics-why">出生日期和时辰只留在这部手机上，老师<strong>看不到具体的日子和时辰</strong>。我们会把它换算成你的“健康八字”，老师看到的只是年龄和八字。八字是老师辨证施治的关键参考，填得准，对调理你的身体、帮你康复更有帮助。</p>
         <label className={'basics-field' + required('city')}>居住城市<select aria-label="居住城市" value={city} disabled={busy} onChange={event => setCity(event.target.value)}>
           <option value="">请选择</option>
           {cities.map(item => <option key={item.nameZh} value={item.nameZh}>{item.nameZh}</option>)}
@@ -105,10 +110,6 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
 
       <details className="nl-section" open={loaded && missing.length === 0}>
         <summary>其余可以以后补</summary>
-        <label className="basics-field">出生时辰<select aria-label="出生时辰" value={shichen} disabled={busy} onChange={event => setShichen(event.target.value as Shichen | '')}>
-          <option value="">不知道</option>
-          {SHICHEN_NAMES.map(name => <option key={name} value={name}>{name}时</option>)}
-        </select></label>
         <label className="basics-field">出生地<select aria-label="出生地" value={birthPlace} disabled={busy} onChange={event => setBirthPlace(event.target.value)}>
           <option value="">不填</option>
           {cities.map(item => <option key={item.nameZh} value={item.nameZh}>{item.nameZh}</option>)}
