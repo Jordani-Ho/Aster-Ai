@@ -254,6 +254,8 @@ test('V2-33 两台设备经真实中继传库存快照，老师核对页可见�
   await expect(inboxRow).toBeVisible()
   await inboxRow.click()
   await expect(teacher.getByRole('heading', { name: /· 核对$/ })).toBeVisible()
+  // 库存在“本次资料”折叠区里；处方每味药旁另有库存对照。
+  await teacher.locator('summary').filter({ hasText: '本次资料' }).click()
   const stock = teacher.getByRole('region', { name: '学生家里的药材' })
   await expect(stock).toContainText('黄芪 · 300克')
 
