@@ -116,14 +116,14 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
 
       <section className="nl-card" aria-label="健康与作息">
         <h2>身体和作息</h2>
-        <label className={'basics-field' + required('history')}>既往病史<textarea aria-label="既往病史" rows={2} value={history} disabled={busy} onChange={event => setHistory(event.target.value)} placeholder="以前得过什么病；没有就写“无”" /></label>
-        <label className={'basics-field' + required('meds')}>在用药<textarea aria-label="在用药" rows={2} value={meds} disabled={busy} onChange={event => setMeds(event.target.value)} placeholder="正在吃的药；没有就写“无”" /></label>
-        <label className={'basics-field' + required('allergies')}>过敏<textarea aria-label="过敏" rows={2} value={allergies} disabled={busy} onChange={event => setAllergies(event.target.value)} placeholder="对什么过敏；没有就写“无”" /></label>
         <div className={'basics-routine' + required('routine')}>
           <label className="basics-field">平时几点起<input aria-label="平时几点起" type="time" value={wake} disabled={busy} onChange={event => setWake(event.target.value)} /></label>
           <label className="basics-field">平时几点睡<input aria-label="平时几点睡" type="time" value={sleep} disabled={busy} onChange={event => setSleep(event.target.value)} /></label>
         </div>
-        <p className="nl-quiet">既往病史、在用药、过敏会在问诊时自动带进卡片，您可以改。</p>
+        <p className="nl-quiet">下面几项有就填，没有可以空着。填了的既往病史、在用药、过敏会在问诊时带进卡片，您可以改。</p>
+        <label className="basics-field">既往病史（有就填）<textarea aria-label="既往病史" rows={2} value={history} disabled={busy} onChange={event => setHistory(event.target.value)} placeholder="以前得过什么病" /></label>
+        <label className="basics-field">在用药（有就填）<textarea aria-label="在用药" rows={2} value={meds} disabled={busy} onChange={event => setMeds(event.target.value)} placeholder="正在吃的药" /></label>
+        <label className="basics-field">过敏（有就填）<textarea aria-label="过敏" rows={2} value={allergies} disabled={busy} onChange={event => setAllergies(event.target.value)} placeholder="对什么过敏" /></label>
         <label className="basics-field">西医诊断（有就填）<textarea aria-label="西医诊断" rows={2} value={diagnoses} disabled={busy} onChange={event => setDiagnoses(event.target.value)} placeholder="医院给过的诊断，一行一条；只留在本机" /></label>
       </section>
 

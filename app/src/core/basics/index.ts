@@ -33,10 +33,11 @@ export interface StudentBasics {
 export type BasicsDraft = Partial<Omit<StudentBasics, 'routine'>> & { routine?: Partial<StudentBasics['routine']> }
 
 // 发起人 2026-10-24：这是健康工具，进馆时基础信息都要认真填（不想填可以不接受邀请）。
-// 只有西医诊断（不是人人都有）和家里的药材可以不填；时辰可以选“不知道”，但要主动选；病史、用药、过敏可以写“无”。
+// 时辰可以选“不知道”，但要主动选。既往病史、在用药、过敏在中医里没有硬性要求（发起人），
+// 和西医诊断、家里的药材一样有就填。
 export const REQUIRED_LABELS = {
   alias: '称呼', gender: '性别', birthDate: '出生日期', birthShichen: '出生时辰', birthPlace: '出生地', city: '居住城市',
-  history: '既往病史', meds: '在用药', allergies: '过敏', routine: '作息',
+  routine: '作息',
 } as const
 export type RequiredKey = keyof typeof REQUIRED_LABELS
 

@@ -23,7 +23,7 @@ const FULL = {
   alias: '合成小王', gender: 'male' as const, birthDate: '1990-05-06', birthShichen: null, birthPlace: '北京市', city: '北京市',
   history: '无', meds: '无', allergies: '无', routine: { wake: '07:00', sleep: '23:00' },
 }
-const ALL = ['称呼', '性别', '出生日期', '出生时辰', '出生地', '居住城市', '既往病史', '在用药', '过敏', '作息']
+const ALL = ['称呼', '性别', '出生日期', '出生时辰', '出生地', '居住城市', '作息']
 
 describe('V2-23 输入校验', () => {
   it('出生日期：不能晚于今天、年龄 0–120、必须是真日期', () => {
@@ -68,7 +68,7 @@ describe('V2-23 保存、门槛与问诊', () => {
     expect(gate.missing).toEqual(ALL)
     const half = await saveBasics(store, { alias: '合成小王', gender: 'male', birthShichen: null, routine: { wake: '07:00' } }, { now: NOW })
     // 时辰选了“不知道”也算填了；作息要起床、睡觉都有。
-    expect(half.missing).toEqual(['出生日期', '出生地', '居住城市', '既往病史', '在用药', '过敏', '作息'])
+    expect(half.missing).toEqual(['出生日期', '出生地', '居住城市', '作息'])
     gate = await consultGate(store)
     expect(gate.allowed).toBe(false)
     await saveBasics(store, FULL, { now: NOW })
@@ -172,7 +172,7 @@ describe('V2-23 保存、门槛与问诊', () => {
     const dadBasics = await loadBasics(memberStore(store, dad.account))
     expect(dadBasics).toMatchObject({ alias: '爸爸', gender: 'male', birthDate: '1960-01-01', city: '北京市' })
     // 添加时已知的几项带过去；其余由代管人在这位家人的基础信息里补齐。
-    expect(missingLabels(dadBasics)).toEqual(['出生地', '既往病史', '在用药', '过敏', '作息'])
+    expect(missingLabels(dadBasics)).toEqual(['出生地', '作息'])
   })
 })
 
