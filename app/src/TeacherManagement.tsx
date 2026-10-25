@@ -18,6 +18,8 @@ import { DailyMirrorCard } from './DailyMirrorCard'
 import { TeacherCarePlan } from './TeacherCarePlan'
 import { VersionLine } from './VersionLine'
 import { VenueEmblem } from './StorefrontWelcome'
+import { HerbLibrary } from './HerbLibrary'
+import { lowStockHerbs } from './core/herbs'
 import { loadOwnStorefront, verifyStorefrontEvent, themeOf, type Storefront } from './core/storefront'
 import './newui.css'
 import './inbox.css'
@@ -35,7 +37,7 @@ export interface TeacherManagementProps {
   settings: ReactNode
 }
 
-type View = 'hall' | 'invite' | 'storefront' | 'ledger' | 'settings' | 'retention' | 'reidentify' | 'stats' | 'mirror' | 'groundwork'
+type View = 'hall' | 'invite' | 'storefront' | 'ledger' | 'herbs' | 'settings' | 'retention' | 'reidentify' | 'stats' | 'mirror' | 'groundwork'
 
 interface Totals { currency: string; balance: number; income: number; charge: number; ready: boolean }
 
@@ -69,6 +71,7 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
   const [own, setOwn] = useState<Storefront | null>(null)
   const [totals, setTotals] = useState<Totals | null>(null)
   const [inviteReady, setInviteReady] = useState(false)
+  const [lowStock, setLowStock] = useState<string[]>([])
 
   useEffect(() => {
     let active = true
@@ -81,6 +84,7 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
       if (ledger?.mergedViews) {
         void ledger.mergedViews().then(views => { if (active) setTotals(totalsOf(views, new Date())) }).catch(() => { if (active) setTotals(null) })
       }
+      void lowStockHerbs(store).then(rows => { if (active) setLowStock(rows.map(row => row.name)) }).catch(() => {})
     }
     refresh()
     window.addEventListener('aster:data-changed', refresh)
@@ -98,6 +102,7 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
   if (view === 'ledger') return <SubPage title="钱账明细" onBack={() => setView('hall')}>
     <LedgerSettings managed flat identity={identity} store={store} ledger={ledger as never} llm={llm} />
   </SubPage>
+  if (view === 'herbs') return <SubPage title="药材库" onBack={() => setView('hall')}><HerbLibrary store={store} role="老师" /></SubPage>
   if (view === 'retention') return <SubPage title="记录保留多久" onBack={() => setView('settings')}>
     <RetentionSettings identity={identity} store={store} send={send} compact />
   </SubPage>
@@ -144,6 +149,10 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
     <GroundworkNotice store={store} onOpen={() => setView('groundwork')} />
     <button type="button" className="nl-row hall-row" onClick={() => setView('storefront')}>
       <span className="nl-row-main"><strong>门面</strong><span>馆名、颜色、介绍和话术</span></span>
+      <span className="ts-chevron">›</span>
+    </button>
+    <button type="button" className="nl-row hall-row" onClick={() => setView('herbs')}>
+      <span className="nl-row-main"><strong>药材库</strong><span>{lowStock.length ? `快用完：${lowStock.slice(0, 3).join('、')}` : '查看本机药材和流水'}</span></span>
       <span className="ts-chevron">›</span>
     </button>
 

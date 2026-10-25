@@ -17,6 +17,7 @@ import { priorMaterials } from './core/drafting/materials'
 import { reviseEncounter } from './core/drafting/revise'
 import { TonguePair } from './TonguePair'
 import { TeacherCarePlan } from './TeacherCarePlan'
+import { normalizeHerbName } from './core/herbs'
 import { StudentPostureReview } from './PostureAtHome'
 import { applyPostureMetrics, loadPostureMetrics, type PostureMetric } from './core/posture'
 import { parseTongueAbstract, type TongueAbstract } from '../../domain/tcm/tongue'
@@ -208,9 +209,15 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
 
   const alias = managedLabel(consult.encounter.profile)
   const previousPrescription: Prescription | null = previous?.encounter.plan.prescription.value ?? null
+  const homeHerbNames = new Set((consult.homeHerbs ?? []).map(item => normalizeHerbName(item.name)))
   const extras = <>
     {status && <p role="status" className="nl-quiet">{status}</p>}
     {error && <p role="alert" className="nl-danger-strong">{error}</p>}
+    {consult.homeHerbs?.length ? <section className="nl-card" aria-label="学生家里的药材">
+      <h3>学生家里的药</h3>
+      <ul>{consult.homeHerbs.map(item => <li key={item.name}>{item.name} · {item.status}</li>)}</ul>
+      {draft.plan.prescription.value?.items.length ? <><p>这次方子</p><ul>{draft.plan.prescription.value.items.map((item, index) => <li key={`${item.herb}-${index}`}>{item.herb} · {homeHerbNames.has(normalizeHerbName(item.herb)) ? '学生家里有' : '要另抓'}</li>)}</ul></> : null}
+    </section> : null}
     <label className="nl-quiet">本次扣费（可选，{currency || '请先在管理页设置钱账币种'}）
       <input type="text" inputMode="decimal" value={charge} onChange={event => setCharge(event.target.value)} placeholder="不填就不扣" />
     </label>
@@ -238,6 +245,7 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
     alias={alias}
     subtitle="四诊已记好 · 下面是智能体的草稿"
     materialNote={materialNote}
+    homeHerbs={consult.homeHerbs}
     previousPrescription={previousPrescription}
     previousEventId={previous?.eventId ?? null}
     comparison={comparison}

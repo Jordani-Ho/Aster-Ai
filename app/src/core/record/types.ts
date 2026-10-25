@@ -107,4 +107,6 @@ export interface ConsultPackage {
    * 只随传输信封走，不进 Encounter schema，老包没有这个字段照常收。
    */
   postures?: PostureRecord[]
+  /** V2-24：学生主动选择附上的家中药名与余量状态；绝不带数量。 */
+  homeHerbs?: { name: string; status: '够' | '快没了' }[]
 }

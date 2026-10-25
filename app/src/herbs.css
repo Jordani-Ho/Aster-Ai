@@ -1,0 +1,23 @@
+.herb-library { padding: 4px 0 24px; }
+.herb-library > p { line-height: 1.6; }
+.herb-library form { display: grid; gap: 10px; padding: 14px; margin: 12px 0; background: var(--nl-card, #fffdf8); border: 1px solid var(--nl-line, #e7e1d4); border-radius: 18px; }
+.herb-library label { display: grid; gap: 5px; font-size: 14px; }
+.herb-library input, .herb-library select { min-height: 44px; border: 1px solid var(--nl-line, #dcd5c8); border-radius: 12px; padding: 8px 10px; background: #fff; color: var(--nl-ink, #1f2a24); }
+.herb-library form .nl-primary { min-height: 48px; }
+.herb-list { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 8px; }
+.herb-list li { display: grid; gap: 12px; }
+.herb-list li > div:first-child { display: grid; gap: 4px; }
+.herb-list li small { color: var(--nl-muted, #69746d); }
+.herb-actions { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.herb-actions label { min-width: 110px; flex: 1; }
+.herb-actions button, .herb-library details > button { min-height: 44px; padding: 8px 14px; border: 1px solid var(--nl-line, #dcd5c8); border-radius: 12px; background: #f4f1e9; color: var(--nl-ink, #1f2a24); }
+.herb-library details label { margin: 10px 0; }
+.cf-card > summary { cursor: pointer; min-height: 32px; font-weight: 600; }
+.cf-card > label.cf-field { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.cf-card > label.cf-field input { width: 20px; height: 20px; accent-color: var(--nl-accent); }
+.record-brew { margin-top: 12px; }
+.record-brew button { min-height: 44px; border: 1px solid #668270; border-radius: 12px; padding: 8px 14px; background: #f1f4ee; color: #2f5d4a; }
+.record-brew p { color: var(--nl-muted); }
+.herb-ledger { list-style: none; padding: 0; margin: 10px 0; }
+.herb-ledger li { display: grid; gap: 3px; padding: 9px 0; border-bottom: 1px solid var(--nl-line, #e7e1d4); }
+.herb-ledger li small { color: var(--nl-muted, #69746d); overflow-wrap: anywhere; }

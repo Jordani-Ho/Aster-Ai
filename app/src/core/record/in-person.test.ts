@@ -159,6 +159,24 @@ describe('M1-12 面诊记录验收', () => {
     expect(await offline.list('teacher-records')).toHaveLength(1)
   })
 
+  it('V2-24 面诊库存扣减发生在签字发送前；发送失败执行原流水冲回', async () => {
+    const store = new MemoryStore()
+    const encounter = recordIntakeField(fresh(), 'chiefComplaint', 'SYNTHETIC_HERB_SIGN')
+    let sent = false, rolledBack = false
+    await expect(signAndHandoverInPerson({
+      encounter, privateKey: teacherKey, store,
+      beforeSend: async event => {
+        await store.put('test-herb-deduction', event.id, { committed: true })
+        return async () => { rolledBack = true; await store.delete('test-herb-deduction', event.id) }
+      },
+      send: async () => { sent = true; throw Error('offline') },
+    })).rejects.toThrow('offline')
+    expect(sent).toBe(true)
+    expect(rolledBack).toBe(true)
+    expect(await store.list('test-herb-deduction')).toEqual([])
+    expect(await store.list('teacher-records')).toHaveLength(0)
+  })
+
   it('5 界面 375px 可用，截图产物在 docs/screenshots', () => {
     // V2-16：面诊页重画后统一走 newui.css（480 上限、窄屏不横向滚动）。
     const css = readFileSync(new URL('../../newui.css', import.meta.url), 'utf8')
