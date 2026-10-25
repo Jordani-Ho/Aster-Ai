@@ -66,4 +66,15 @@
 
 ## 隐私
 
-照片/视频只在识别时存在于内存，识别完当场清零；记录里只有关键点坐标、老师标注（`source: 'teacher'`）和指标值；骨架是线条图，认不出是谁。体态记录只随面诊签字保存（`Encounter.postures`），远程问诊包不带。
+照片/视频只在识别时存在于内存，识别完当场清零；记录里只有关键点坐标、老师标注（`source: 'teacher'`）和指标值；骨架是线条图，认不出是谁。老师面诊的体态记录随面诊签字保存（`Encounter.postures`）。
+
+## 学生在家拍（V2-32）
+
+- 复用同一套识别管线：`capture.ts` 的 `analyzePostureFile` 抽自 V2-30（`PostureTool` 与学生端 `PostureAtHome` 共用），照片仍走 V2-20 `processPhoto`、视频仍取中间帧、识别完字节清零。
+- 学生端问诊卡片页（`ConsultPage`）与舌象并列加一块“这次的体态（可空）”：正面、侧面各一张，或一段 ≤15 秒走路视频；每段可写一句自己的感觉。
+- 学生端**只留关键点**：草稿存在 `intake-draft` 的 `posture` 字段里（无图片字节），发送时 `buildConsultPackage` 再清洗一次；体态不进附件通道。
+- `ConsultPackage.postures` 随问诊包发给老师，不进 `Encounter` schema；老包没有这个字段照常收。
+- 接收端 `sanitizeStudentPostures`（`domain/tcm/posture.ts`）只接受 `capturedBy: 'student'`、`phone` 来源、最多两段（视频单独一段）、`metrics/values` 为空的记录；夹带图片字段、老师标注或别的学生/老师一律丢弃，问诊本身照收。
+- 指标只在老师端算：远程核对页用老师 `settings/posture-metrics` 的公式对骨架算 `values`，签字时把老师算的指标快照写进 `Encounter.postures`；学生“记录”页只显示骨架与“学生在家拍”，不显示数值。
+- 家人账户用家人自己的身份拍、走代管证明；老师端按发件人（这位家人）显示，签字后病历回到这位家人的记录页。
+- e2e：`e2e/v232.browser.mjs`（学生拍 → 包内无图片字节 → 老师核对页显示老师指标 → 签字 → 学生记录页只显示骨架 → 家人归位 → 不拍也能发）。

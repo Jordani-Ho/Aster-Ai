@@ -43,6 +43,8 @@ import {
 } from './index'
 import { createWiring } from '../wiring'
 import { startInPersonEncounter, recordIntakeField } from '../record/in-person'
+import { newStudentPostureRecord, newStudentPostureSegment } from '../posture'
+import type { PostureFrame } from '../../../../domain/tcm/posture'
 
 // 只用合成身份、合成病历与内存中继；不连真实 relay/gateway，不发真实推送。
 const teacherId = createIdentity()
@@ -493,4 +495,66 @@ it('invited student opens only their book; teacher first signing opens empty cou
  expect(result.chargeError).toBe(null)
  const paired=await waitFor(async()=>{const a=await teacher.ledger.view(teacherPub,studentPub),b=await student.ledger.view(teacherPub,studentPub);return a.balance===-3&&b.balance===-3&&a.code===b.code?true:null})
  expect(paired).toBe(true);expect(await studentStore.list('student-records')).toHaveLength(1)
+})
+
+// V2-32：问诊包里的学生体态只存骨架；图片字节/老师拍的记录都不进老师端。
+function atHomeFrame(view: 'front' | 'side' | 'video' = 'front'): PostureFrame {
+  return {
+    source: 'phone', view, at: '2026-10-24T08:00:00.000Z', width: 300, height: 400,
+    points: {
+      nose: { x: 0.5, y: 0.12, visibility: 0.95 },
+      left_shoulder: { x: 0.4, y: 0.3, visibility: 0.95 }, right_shoulder: { x: 0.6, y: 0.32, visibility: 0.95 },
+      left_hip: { x: 0.44, y: 0.55, visibility: 0.95 }, right_hip: { x: 0.56, y: 0.56, visibility: 0.95 },
+      left_knee: { x: 0.44, y: 0.75, visibility: 0.95 }, right_knee: { x: 0.56, y: 0.75, visibility: 0.95 },
+      left_ankle: { x: 0.44, y: 0.95, visibility: 0.95 }, right_ankle: { x: 0.56, y: 0.95, visibility: 0.95 },
+    },
+  }
+}
+
+it('V2-32 学生拍的骨架随问诊包到老师端：只留关键点与感觉，夹带的图片字节被清洗掉', async () => {
+  const { student, teacherStore } = await nodes()
+  const pkg = await syntheticPackage(0)
+  const record = newStudentPostureRecord(studentPub, teacherPub, [newStudentPostureSegment(atHomeFrame('front'), '站久了左肩酸')])
+  ;(record.segments[0] as unknown as Record<string, unknown>).image = 'data:image/png;base64,AAAA'
+  ;((record.segments[0].frame.points.left_shoulder) as unknown as Record<string, unknown>).raw = 'data:image/jpeg;base64,BBBB'
+  pkg.postures = [record]
+  await student.sendConsult(pkg)
+  const consults = await waitFor(async () => {
+    const rows = await listConsults(teacherStore)
+    return rows.length === 1 ? rows : null
+  })
+  expect(consults[0].postures).toHaveLength(1)
+  expect(consults[0].postures![0].capturedBy).toBe('student')
+  expect(consults[0].postures![0].segments[0].note).toBe('站久了左肩酸')
+  expect(consults[0].postures![0].metrics).toEqual([])
+  const json = JSON.stringify(consults[0])
+  expect(json).not.toContain('data:image')
+  expect(json).not.toContain('base64')
+})
+
+it('V2-32 老师拍的骨架不能借远程问诊包夹带；老问诊包没有 postures 照常收', async () => {
+  // 旧格式：没有 postures。
+  {
+    const { student, teacherStore } = await nodes()
+    const pkg = await syntheticPackage(0)
+    await student.sendConsult(pkg)
+    const consults = await waitFor(async () => {
+      const rows = await listConsults(teacherStore)
+      return rows.length === 1 ? rows : null
+    })
+    expect(consults[0].postures).toBeUndefined()
+  }
+  // 夹带老师拍的记录：整条 postures 丢弃，问诊本身照收。
+  {
+    const { student, teacherStore } = await nodes()
+    const pkg = await syntheticPackage(0)
+    const { capturedBy: _teacher, ...teacherRecord } = newStudentPostureRecord(studentPub, teacherPub, [newStudentPostureSegment(atHomeFrame('front'))])
+    pkg.postures = [teacherRecord as never]
+    await student.sendConsult(pkg)
+    const consults = await waitFor(async () => {
+      const rows = await listConsults(teacherStore)
+      return rows.length === 1 ? rows : null
+    })
+    expect(consults[0].postures).toBeUndefined()
+  }
 })

@@ -2,14 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
 import type { Encounter, Homework } from './core/record/types'
-import { processPhoto } from './core/intake/photo'
 import {
   POSTURE_ACTIONS, computeMetrics, metricDeltas, postureTrends, unbalancedCounts,
   type PostureFrame, type PostureGuideKind, type PostureMark, type PostureMetric,
   type PostureMetricValue, type PosturePointName, type PostureRecord, type PostureSegment,
 } from '../../domain/tcm/posture'
 import {
-  VIDEO_MAX_BYTES, VIDEO_MAX_SECONDS, deletePostureDraft, loadPostureMetrics,
+  analyzePostureFile, deletePostureDraft, loadPostureMetrics,
   newPostureRecord, newPostureSegment, postureHomework, resolveDetector, savePostureDraft,
   studentPostureRecords, type PoseDetector, type SignedPostureRecord,
 } from './core/posture'
@@ -63,37 +62,7 @@ export function PostureTool({ identity, store, student, encounter, onClose, onCh
     setBusy(true); setError(''); setStatus('')
     try {
       const engine = detector.current ?? (detector.current = await resolveDetector())
-      if (file.type.startsWith('video/')) {
-        if (file.size > VIDEO_MAX_BYTES) throw new Error('视频超过 30 MB，请拍短一点或只拍一张照片。')
-        if (!/^video\/(mp4|webm|quicktime)$/.test(file.type)) throw new Error('视频格式不支持：请用手机相机拍的 MP4/WebM，或改拍照片。')
-        const url = URL.createObjectURL(file)
-        const video = document.createElement('video')
-        video.muted = true; video.playsInline = true; video.src = url
-        try {
-          await new Promise<void>((resolve, reject) => { video.onloadedmetadata = () => resolve(); video.onerror = () => reject(new Error('视频没能打开：请换一段手机相机拍的短视频。')) })
-          if (video.duration > VIDEO_MAX_SECONDS) throw new Error(`视频 ${Math.round(video.duration)} 秒，超过 15 秒；请拍短一点，只留需要看的那一段。`)
-          video.currentTime = Math.max(0, video.duration / 2)
-          await new Promise<void>((resolve, reject) => { video.onseeked = () => resolve(); video.onerror = () => reject(new Error('视频没能读到画面：请换一段短视频。')) })
-          const result = await engine.detect(video)
-          if (result.people === 0) throw new Error('画面里没找到人：请让整个人进画面再拍。')
-          if (result.people > 1) throw new Error('画面里不止一个人：请只让一位学生进画面。')
-          addFrame({ source: 'phone', view: 'video', at: new Date().toISOString(), width: video.videoWidth, height: video.videoHeight, points: result.points! })
-        } finally { URL.revokeObjectURL(url); video.removeAttribute('src'); video.load() }
-        return
-      }
-      if (!file.type.startsWith('image/')) throw new Error('只支持照片（JPEG/PNG/WebP）或 15 秒内的短视频。')
-      let bytes: Uint8Array | null = null
-      try {
-        const photo = await processPhoto({ bytes: new Uint8Array(await file.arrayBuffer()), type: file.type })
-        bytes = photo.data
-        const bitmap = await createImageBitmap(new Blob([photo.data as unknown as BlobPart], { type: 'image/jpeg' }))
-        try {
-          const result = await engine.detect(bitmap)
-          if (result.people === 0) throw new Error('画面里没找到人：请让整个人进画面再拍。')
-          if (result.people > 1) throw new Error('画面里不止一个人：请只让一位学生进画面。')
-          addFrame({ source: 'phone', view, at: new Date().toISOString(), width: bitmap.width, height: bitmap.height, points: result.points! })
-        } finally { bitmap.close() }
-      } finally { if (bytes) bytes.fill(0) }
+      addFrame(await analyzePostureFile(file, engine, { view }))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '识别没有完成，请重拍或改用导入。')
     } finally { setBusy(false) }
@@ -228,16 +197,18 @@ function ImportButton({ disabled, onPick }: { disabled: boolean; onPick: (file: 
   </>
 }
 
-// 签字/学生端只读：骨架 + 指标 + 标注（老师写的判断随病历保存，来源 teacher）。
-export function PostureSummary({ postures, title = '体态记录' }: { postures: PostureRecord[] | undefined; title?: string }) {
+// 签字/学生端只读：骨架 +（可选）指标 + 标注（老师写的判断随病历保存，来源 teacher）。
+// V2-32：学生端只看自己拍的骨架，不显示数值、不下结论（showValues=false）。
+export function PostureSummary({ postures, title = '体态记录', showValues = true }: { postures: PostureRecord[] | undefined; title?: string; showValues?: boolean }) {
   if (!postures || postures.length === 0) return null
-  return <section aria-label={title} className="nl-card"><div className="nl-top"><h2>{title}</h2><span className="nl-meta">{postures.length} 条 · 老师标注</span></div>
+  const hasStudent = postures.some(record => record.capturedBy === 'student')
+  return <section aria-label={title} className="nl-card"><div className="nl-top"><h2>{title}</h2><span className="nl-meta">{postures.length} 条 · {hasStudent ? '含学生在家拍的' : '老师标注'}</span></div>
     {postures.map(record => <div key={record.id}>
-      <p className="nl-quiet">{clock(record.at)} · {record.segments.length} 段</p>
+      <p className="nl-quiet">{clock(record.at)} · {record.segments.length} 段 · {record.capturedBy === 'student' ? '学生在家拍' : '老师当面看'}</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>{record.segments.map(segment => <div key={segment.id}>
         <PostureSkeleton frame={segment.frame} marks={segment.marks} guides={segment.guides} overrides={segment.overrides} height={120} />
-        <p className="nl-quiet">{segment.action}·{segment.phase === 'before' ? '前' : '后'}{segment.note ? '：' + segment.note : ''}</p>
-        <ul className="nl-list">{(record.values[segment.id] ?? []).map((value: PostureMetricValue) => <li key={value.id}>{value.name}：{value.status === 'ok' ? fmt(value.value, value.unit) : '这次算不出'}</li>)}</ul>
+        <p className="nl-quiet">{(record.capturedBy === 'student' ? (segment.frame.view === 'video' ? '走路视频' : segment.frame.view === 'front' ? '正面' : '侧面') : segment.action)}·{segment.phase === 'before' ? '前' : '后'}{segment.note ? '：' + segment.note : ''}</p>
+        {showValues && <ul className="nl-list">{(record.values[segment.id] ?? []).map((value: PostureMetricValue) => <li key={value.id}>{value.name}：{value.status === 'ok' ? fmt(value.value, value.unit) : '这次算不出'}</li>)}</ul>}
         {(segment.marks ?? []).map((mark: PostureMark) => <p key={mark.point} className="nl-quiet">失衡：{mark.point}（{mark.reason}）</p>)}
       </div>)}</div>
     </div>)}

@@ -17,7 +17,8 @@ try {
  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/@fs/${root}e2e/abstractor.html`)
  // Vite 首次启动可能在页面加载后重载一次（依赖预构建），等它稳定再操作，否则上传会被重载打断。
  await page.waitForLoadState('networkidle');await page.waitForTimeout(2500)
- const upload=async()=>{await page.locator('input[type=file]').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:png});await expect(page.locator('input[type=file]')).toHaveValue('')}
+ const tongueInput=page.locator('input[aria-label="选择舌象照片"]')
+ const upload=async()=>{await tongueInput.setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:png});await expect(tongueInput).toHaveValue('')}
  await expect(page.locator('[data-page=student-today]')).toBeVisible()
  const mirrorSvg=page.locator('.nl-mirror-frame svg')
  await upload();await expect(mirrorSvg).toHaveCount(1)

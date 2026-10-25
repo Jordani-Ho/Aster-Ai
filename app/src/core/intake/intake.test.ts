@@ -13,6 +13,7 @@ import { fixedQuestions, organizeIntake } from './followup'
 import {
   INTAKE_COLLECTIONS,
   addPhoto,
+  addPostureSegment,
   addUtterance,
   answerFocus,
   buildConsultPackage,
@@ -23,15 +24,19 @@ import {
   loadDraft,
   markReviewed,
   organizeSession,
+  removePostureSegment,
   saveDraft,
   skipFocus,
   skipRemainingFocuses,
   startSession,
   updateField,
+  updatePostureNote,
   type HistoryCandidate,
   type IntakeSession,
   type IntakeStore,
 } from './session'
+import { newStudentPostureSegment } from '../posture'
+import type { PostureFrame } from '../../../../domain/tcm/posture'
 
 // 只用合成身份、合成病历和模拟模型；不连接任何真实服务。
 const teacher = 'c'.repeat(64)
@@ -394,5 +399,90 @@ describe('V2-29 跳过直接整理', () => {
     expect(next.texts).toEqual(answered.texts)
     expect(next.fields).toEqual(answered.fields)
     expect(next.phase).toBe('confirm')
+  })
+})
+
+// V2-32：学生在家拍的体态跟问诊包一起发给老师——只有关键点，没有图片字节。
+describe('V2-32 学生在家拍体态进问诊包', () => {
+  function syntheticFrame(view: 'front' | 'side' | 'video' = 'front'): PostureFrame {
+    return {
+      source: 'phone', view, at: now.toISOString(), width: 300, height: 400,
+      points: {
+        nose: { x: 0.5, y: 0.12, visibility: 0.95 },
+        left_shoulder: { x: 0.4, y: 0.3, visibility: 0.95 }, right_shoulder: { x: 0.6, y: 0.32, visibility: 0.95 },
+        left_hip: { x: 0.44, y: 0.55, visibility: 0.95 }, right_hip: { x: 0.56, y: 0.56, visibility: 0.95 },
+        left_knee: { x: 0.44, y: 0.75, visibility: 0.95 }, right_knee: { x: 0.56, y: 0.75, visibility: 0.95 },
+        left_ankle: { x: 0.44, y: 0.95, visibility: 0.95 }, right_ankle: { x: 0.56, y: 0.95, visibility: 0.95 },
+      },
+    }
+  }
+
+  it('正面、侧面各一张：进问诊包；包 JSON 里没有任何图片字节，学生不显示也不带指标', async () => {
+    let state = await confirmedOffline()
+    state = addPostureSegment(state, newStudentPostureSegment(syntheticFrame('front')))
+    state = addPostureSegment(state, newStudentPostureSegment(syntheticFrame('side'), '站久了左肩酸'))
+    const pkg = buildConsultPackage(state, emptyProfile(), [], [])
+    expect(pkg.postures).toHaveLength(1)
+    expect(pkg.postures![0].capturedBy).toBe('student')
+    expect(pkg.postures![0].segments).toHaveLength(2)
+    expect(pkg.postures![0].segments[1].note).toBe('站久了左肩酸')
+    expect(pkg.postures![0].metrics).toEqual([])
+    expect(pkg.postures![0].values).toEqual({})
+    const json = JSON.stringify(pkg)
+    expect(json).not.toContain('data:image')
+    expect(json).not.toContain('base64')
+    expect(json).not.toContain('JPEG')
+    expect(pkg.attachments).toEqual([])
+  })
+
+  it('不拍体态也能发送；拍了一段视频也照常进包', async () => {
+    let state = await confirmedOffline()
+    expect(buildConsultPackage(state, emptyProfile(), [], []).postures).toBeUndefined()
+    state = addPostureSegment(state, newStudentPostureSegment(syntheticFrame('video')))
+    const pkg = buildConsultPackage(state, emptyProfile(), [], [])
+    expect(pkg.postures![0].segments[0].frame.view).toBe('video')
+    expect(pkg.postures![0].segments[0].action).toBe('走路')
+  })
+
+  it('草稿保存后读回骨架还在；被改坏的草稿读回时丢弃（不把图片或别人的骨架带进发送）', async () => {
+    const store = new MemoryStore()
+    let state = await confirmedOffline()
+    state = addPostureSegment(state, newStudentPostureSegment(syntheticFrame('front')))
+    await saveDraft(store, state)
+    const loaded = await loadDraft(store)
+    expect(loaded?.posture?.segments).toHaveLength(1)
+    expect(loaded?.posture?.capturedBy).toBe('student')
+    await store.put(INTAKE_COLLECTIONS.draft, state.encounterId, {
+      ...state, posture: { ...state.posture!, capturedBy: 'teacher' },
+    })
+    expect(await loadDraft(store)).toBeNull()
+    await store.put(INTAKE_COLLECTIONS.draft, state.encounterId, {
+      ...state, posture: { ...state.posture!, student: otherTeacher },
+    })
+    expect(await loadDraft(store)).toBeNull()
+  })
+
+  it('删掉一段、改感觉：只动这一段，不影响其他内容', async () => {
+    let state = await confirmedOffline()
+    state = addPostureSegment(state, newStudentPostureSegment(syntheticFrame('front')))
+    state = addPostureSegment(state, newStudentPostureSegment(syntheticFrame('side')))
+    const [first, second] = state.posture!.segments
+    state = updatePostureNote(state, second.id, '弯腰时腰酸')
+    expect(state.posture!.segments.find(item => item.id === second.id)?.note).toBe('弯腰时腰酸')
+    state = removePostureSegment(state, first.id)
+    expect(state.posture!.segments.map(item => item.id)).toEqual([second.id])
+  })
+
+  it('发送：send 收到带 postures 的包；本机留存的发送副本里也没有图片，只有包本身', async () => {
+    const store = new MemoryStore()
+    let state = await confirmedOffline()
+    state = addPostureSegment(state, newStudentPostureSegment(syntheticFrame('front'), '肩膀紧'))
+    const send = vi.fn().mockResolvedValue(undefined)
+    const pkg = await confirmAndSend(store, state, emptyProfile(), [], [], send)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(pkg.postures).toHaveLength(1)
+    const stored = await store.get(INTAKE_COLLECTIONS.sent, state.encounterId) as Record<string, unknown>
+    expect(JSON.stringify(stored)).not.toContain('data:image')
+    expect(await store.get(INTAKE_COLLECTIONS.draft, state.encounterId)).toBeUndefined()
   })
 })

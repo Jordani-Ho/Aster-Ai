@@ -1,11 +1,13 @@
 import type { TeacherTemplate } from '../../../../domain/tcm/templates/types'
 import { parseTongueAbstract, type TongueAbstract } from '../../../../domain/tcm/tongue'
 import { parsePeriodObservation } from '../../../../domain/tcm/observation'
+import { removeStudentPostureSegment, sanitizeStudentPostures, type PostureRecord, type PostureSegment } from '../../../../domain/tcm/posture'
 import type { LlmClient } from '../llm'
 import { isHeavenStamp } from '../heaven/stamp'
 import type { AttachmentRef, ConsultPackage, Encounter, Field } from '../record/types'
 import { emptyFields, missingFocuses, organizeIntake, MAX_ROUNDS, INTAKE_KEYS, type FollowupQuestion, type IntakeFields, type IntakeKey } from './followup'
 import { MAX_PHOTOS, assertPhotoCount, type PhotoResult } from './photo'
+import { appendStudentPostureSegment, newStudentPostureRecord } from '../posture'
 
 // 学生采集流程：说话 → 整理与追问 → 确认页核对 → 明确点“确认发送”才调用 send。
 // 点之前没有任何数据离开手机；模型只用学生原话做摘取，确认发送的代码路径不调用模型。
@@ -32,6 +34,8 @@ export interface IntakeSession {
   usedFallback: boolean
   attachments: AttachmentRef[]
   tongues?: TongueAbstract[]
+  /** V2-32：学生在家拍的体态（正面/侧面各一张或一段走路视频）；只有关键点，不带照片，学生端不算指标。 */
+  posture?: PostureRecord
 }
 
 export interface IntakeStore {
@@ -218,6 +222,31 @@ export function addTongue(state:IntakeSession,record:TongueAbstract):IntakeSessi
  return {...state,tongues:[...(state.tongues??[]),parseTongueAbstract(record)]}
 }
 
+// V2-32：确认页“这次的体态（可空）”——学生拍正面、侧面各一张，或一段走路视频；只留关键点。
+export function addPostureSegment(state: IntakeSession, segment: PostureSegment): IntakeSession {
+  if (state.phase === 'sent') throw new Error('这次采集已经发送')
+  if (state.phase !== 'confirm') throw new Error('到确认页才能拍体态')
+  const record = state.posture ?? newStudentPostureRecord(state.student, state.teacher, [])
+  return { ...state, posture: appendStudentPostureSegment(record, segment) }
+}
+export function removePostureSegment(state: IntakeSession, segmentId: string): IntakeSession {
+  if (!state.posture) throw new Error('还没有拍体态')
+  const next = removeStudentPostureSegment(state.posture, segmentId)
+  if (next) return { ...state, posture: next }
+  const { posture: _omitted, ...rest } = state
+  return rest
+}
+export function updatePostureNote(state: IntakeSession, segmentId: string, note: string): IntakeSession {
+  if (!state.posture) throw new Error('还没有拍体态')
+  const text = note.trim().slice(0, 200)
+  const segments = state.posture.segments.map(segment => {
+    if (segment.id !== segmentId) return segment
+    const { note: _old, ...rest } = segment
+    return text === '' ? rest : { ...rest, note: text }
+  })
+  return { ...state, posture: { ...state.posture, segments } }
+}
+
 export interface ConfirmCheck { ok: boolean; reason?: string }
 
 export function canConfirm(state: IntakeSession): ConfirmCheck {
@@ -281,6 +310,12 @@ export function buildConsultPackage(
   const unknown = <T,>(): Field<T> => ({ value: null, source: 'unknown' })
   const heaven = options.heaven
   if (heaven !== undefined && !isHeavenStamp(heaven)) throw new Error('天时格式无效')
+  // V2-32：体态只带关键点、视角、时间与感觉；这里再清洗一次，绝不把图片字节或指标带出手机。
+  let postures: PostureRecord[] | undefined
+  if (state.posture) {
+    try { postures = sanitizeStudentPostures([state.posture], { student: state.student, teacher: state.teacher }) }
+    catch (cause) { throw new Error('体态记录格式不对：' + (cause instanceof Error ? cause.message : '请重拍。')) }
+  }
   const encounter: Encounter = {
     id: state.encounterId,
     version: 1,
@@ -308,6 +343,7 @@ export function buildConsultPackage(
     attachments: attachments.map(item => ({ ref: { ...item.ref }, data: item.data })),
     ...(heaven ? { heaven: { ...heaven } } : {}),
     ...(trend ? { trend } : {}),
+    ...(postures && postures.length > 0 ? { postures } : {}),
   }
   // M1-22：家人代管问诊时带上代管人公钥与代管证明，只走传输元数据，不改病历 schema。
   if (options.manager !== undefined) {
@@ -359,6 +395,7 @@ export async function confirmAndSend(
 export async function saveDraft(store: IntakeStore, state: IntakeSession): Promise<void> {
   if (state.phase === 'sent') throw new Error('已发送的采集不再保存草稿')
   if(state.tongues)state.tongues.forEach(parseTongueAbstract)
+  if (state.posture) sanitizeStudentPostures([state.posture], { student: state.student, teacher: state.teacher })
   await store.put(INTAKE_COLLECTIONS.draft, state.encounterId, state)
 }
 
@@ -368,6 +405,9 @@ function isSession(value: unknown): value is IntakeSession {
   if(session.tongues!==undefined) {
     if(!Array.isArray(session.tongues)||session.tongues.length>4)return false
     try {session.tongues.forEach(parseTongueAbstract)} catch {return false}
+  }
+  if (session.posture !== undefined) {
+    try { sanitizeStudentPostures([session.posture], { student: session.student, teacher: session.teacher }) } catch { return false }
   }
   return HEX32.test(session.encounterId) && typeof session.student === 'string' && typeof session.teacher === 'string'
     && Array.isArray(session.focusOrder) && Array.isArray(session.texts) && Array.isArray(session.attachments)

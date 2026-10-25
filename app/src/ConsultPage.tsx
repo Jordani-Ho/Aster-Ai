@@ -6,11 +6,13 @@ import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
 import type { ConsultPackage, Encounter } from './core/record/types'
 import {
-  addTongue, addUtterance, answerFocus, canConfirm, confirmAndSend, INTAKE_COLLECTIONS,
+  addPostureSegment, addTongue, addUtterance, answerFocus, canConfirm, confirmAndSend, INTAKE_COLLECTIONS,
   defaultHistorySelection, loadDraft, loadHistory, loadProfile, markReviewed,
-  organizeSession, saveDraft, skipRemainingFocuses, startSession, updateField,
+  organizeSession, removePostureSegment, saveDraft, skipRemainingFocuses, startSession, updateField,
+  updatePostureNote,
   type IntakeKey, type IntakeSession,
 } from './core/intake'
+import { newStudentPostureSegment } from './core/posture'
 import { loadTeachers } from './core/inbox'
 import { heavenNow, heavenStampOf, type HeavenTime } from './core/heaven'
 import { createFamilyProof } from './core/family/proof'
@@ -21,6 +23,7 @@ import { listSelfRatings, listStressRatings, last14DayTrend } from './core/mirro
 import { uiError } from './core/onboarding/ui'
 import { TongueCapture } from './TongueCapture'
 import { TonguePair } from './TonguePair'
+import { PostureAtHome } from './PostureAtHome'
 import { CareReminder } from './CareReminder'
 import { buildPeriodObservation } from './core/kangbi'
 import './newui.css'
@@ -266,6 +269,10 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
             setStatus('已附舌象裁剪图与候选特征，原图已从应用内清除')
           }} />
         </section>}
+        <PostureAtHome posture={session.posture} disabled={busy} onBusyChange={setBusy}
+          onFrame={frame => { try { apply(addPostureSegment(session, newStudentPostureSegment(frame))) } catch (cause) { setError(message(cause)) } }}
+          onRemove={segmentId => { try { apply(removePostureSegment(session, segmentId)) } catch (cause) { setError(message(cause)) } }}
+          onNote={(segmentId, note) => { try { apply(updatePostureNote(session, segmentId, note)) } catch (cause) { setError(message(cause)) } }} />
         <p className="nl-quiet">还没发出。点下面的按钮，{call}才会收到。</p>
       </>}
     </div>

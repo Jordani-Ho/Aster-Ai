@@ -17,6 +17,8 @@ import { priorMaterials } from './core/drafting/materials'
 import { reviseEncounter } from './core/drafting/revise'
 import { TonguePair } from './TonguePair'
 import { TeacherCarePlan } from './TeacherCarePlan'
+import { StudentPostureReview } from './PostureAtHome'
+import { applyPostureMetrics, loadPostureMetrics, type PostureMetric } from './core/posture'
 import { parseTongueAbstract, type TongueAbstract } from '../../domain/tcm/tongue'
 import { managedLabel } from './core/family'
 import { weekStart } from './core/adherence'
@@ -64,6 +66,14 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
   const [busy, setBusy] = useState(true)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
+  const [postureMetrics, setPostureMetrics] = useState<PostureMetric[]>([])
+
+  useEffect(() => {
+    if (!consult.postures?.length) return
+    let active = true
+    void loadPostureMetrics(store).then(metrics => { if (active) setPostureMetrics(metrics) }).catch(() => {})
+    return () => { active = false }
+  }, [store, consult.postures])
 
   useEffect(() => {
     let active = true
@@ -130,9 +140,13 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
     if (!draft) return
     setError(''); setStatus('')
     try {
-      const signedFinal: Encounter = tongues && final.intake.tongues
-        ? { ...final, intake: { ...final.intake, tongues: tongues.map(record => parseTongueAbstract(record)) } }
+      // V2-32：学生自己拍的骨架随签字病历保存下来；指标快照用老师自己的公式算。
+      const withPostures: Encounter = consult.postures?.length
+        ? { ...final, postures: consult.postures.map(record => applyPostureMetrics({ ...record, capturedBy: 'student' as const }, postureMetrics)) }
         : final
+      const signedFinal: Encounter = tongues && withPostures.intake.tongues
+        ? { ...withPostures, intake: { ...withPostures.intake, tongues: tongues.map(record => parseTongueAbstract(record)) } }
+        : withPostures
       const amount = charge.trim() === '' ? undefined : toMinor(charge.trim(), currency)
       signedAt.current ??= Date.now()
       const metric = calculateMetric(draft, signedFinal, startedAt.current, signedAt.current, currentReport()?.weeklyRate ?? null)
@@ -232,5 +246,6 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
     onBack={onExit}
     onRevise={llm ? (current, instruction) => reviseEncounter(current, instruction, llm) : undefined}
     extras={extras}
+    postureReview={<StudentPostureReview postures={consult.postures} metrics={postureMetrics} alias={consult.manager ? alias : undefined} />}
   />
 }
