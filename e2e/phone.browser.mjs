@@ -179,6 +179,44 @@ try {
     expect(errors).toEqual([])
     await context.close()
   }
+  // V2-23 新学生：必填基础信息不全时，点“告诉老师”先进基础信息页；填全保存后直接进问诊
+  {
+    const { context, page, errors } = await open('newstudent')
+    // 发起人：出生日期等是进馆时的必填项 → 新学生进馆第一屏就是基础信息，没有返回键。
+    await expect(page.getByRole('heading', { name: '进馆：先填基础信息', exact: true })).toBeVisible()
+    await expect(page.getByText('老师邀请您进馆。这是一件健康工具，请认真填好下面的基础信息，填完就能开始用了。', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '返回', exact: true })).toHaveCount(0)
+    await expect(page.getByText('还差：性别、出生日期', { exact: true })).toHaveCount(0)
+    await layout(page)
+    await shot(page, 'phone-student-basics')
+    // iPhone 15 Pro 与华为 Mate 40 Pro 宽度各一张
+    for (const [width, height, name] of [[393, 852, 'phone-student-basics-iphone15pro'], [448, 924, 'phone-student-basics-huawei-448']]) {
+      await page.setViewportSize({ width, height })
+      await layout(page)
+      await shot(page, name)
+    }
+    await page.setViewportSize({ width: 375, height: 812 })
+    // 称呼和居住城市沿用以前填过的（“我的时间”里的城市），不用重填。
+    await expect(page.getByLabel('称呼', { exact: true })).toHaveValue('合成小王')
+    await expect(page.getByLabel('居住城市', { exact: true })).toHaveValue('北京市')
+    await page.getByLabel('男', { exact: true }).check()
+    await page.getByLabel('出生时辰', { exact: true }).selectOption('午')
+    await page.getByLabel('出生地', { exact: true }).selectOption('上海市')
+      await page.getByLabel('平时几点起', { exact: true }).fill('07:00')
+    await page.getByLabel('平时几点睡', { exact: true }).fill('23:00')
+    await page.getByLabel('出生日期', { exact: true }).fill('2099-01-01')
+    await page.getByRole('button', { name: '保存', exact: true }).click()
+    await expect(page.getByRole('alert')).toContainText('出生日期不能晚于今天')
+    await page.getByLabel('出生日期', { exact: true }).fill('1992-03-04')
+    await page.getByRole('button', { name: '保存', exact: true }).click()
+    // 填好后进首页，不再出现“还差”提示；问诊直接可用。
+    await expect(page.locator('[data-page=student-today]')).toBeVisible()
+    await expect(page.locator('.basics-banner')).toHaveCount(0)
+    await page.getByRole('button', { name: /不舒服？告诉/ }).click()
+    await expect(page.getByRole('heading', { name: /^告诉/ })).toBeVisible()
+    expect(errors).toEqual([])
+    await context.close()
+  }
   // 10a–10c 问诊三步：说一说 → 再问一句（可跳过）→ 看一眼卡片再发出
   {
     const { context, page, errors } = await open('consult')

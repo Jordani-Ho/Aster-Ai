@@ -134,6 +134,7 @@ try {
   await expect(student.getByRole('button', { name: '开始使用', exact: true })).toBeVisible({ timeout: 20000 })
   await student.getByRole('button', { name: '开始使用', exact: true }).click()
   await connectModel(student)
+  await fillBasicsIfAsked(student)
   await expect(student.locator('[data-page=student-today]')).toBeVisible({ timeout: 20000 })
   await connected(student)
   await shot(student, '03-student-mirror')
@@ -155,6 +156,7 @@ try {
 
   // 2. 发问诊
   await student.getByRole('button', { name: /不舒服？告诉/ }).click()
+  await fillBasicsIfAsked(student)
   await student.getByLabel('按键盘上的🎤说话就行').fill('最近睡不好，想请老师看看')
   await student.getByRole('button', { name: '说好了，继续', exact: true }).click()
   for (let i = 0; i < 4; i += 1) {
@@ -282,6 +284,7 @@ try {
   await recovered.getByRole('button', { name: '先继续用', exact: true }).click()
   // 新设备还没接入模型：先按内测手册接入自己的模型，再继续。
   await connectModel(recovered)
+  await fillBasicsIfAsked(recovered)
   await expect(recovered.locator('[data-page=student-today]')).toBeVisible({ timeout: 20000 })
   await recovered.getByRole('navigation', { name: '学生底部标签' }).getByRole('button', { name: '记录', exact: true }).click()
   await recovered.getByRole('button', { name: /全部 \d+ 次/ }).click()
@@ -313,6 +316,7 @@ try {
   await recovered.getByRole('button', { name: '爸爸', exact: true }).click()
   await shot(recovered, '18-family-switch')
   await recovered.getByRole('button', { name: /不舒服？告诉/ }).click()
+  await fillBasicsIfAsked(recovered)
   await recovered.getByLabel('按键盘上的🎤说话就行').fill('替爸爸问一下最近胃口不好')
   await recovered.getByRole('button', { name: '说好了，继续', exact: true }).click()
   for (let i = 0; i < 4; i += 1) {
@@ -355,4 +359,26 @@ try {
   process.exitCode = 1
 } finally {
   await browser.close()
+}
+
+// V2-23：新学生第一次问诊前要先填基础信息；页面出现时填上合成资料再继续。
+async function fillBasicsIfAsked(page) {
+  const heading = page.getByRole('heading', { name: /基础信息$/ })
+  const speak = page.getByLabel('按键盘上的🎤说话就行')
+  const home = page.locator('[data-page=student-today]')
+  await heading.or(speak).or(home).first().waitFor()
+  if (!(await heading.isVisible())) return
+  const alias = page.getByLabel('称呼', { exact: true })
+  if (!(await alias.inputValue())) await alias.fill('合成学生')
+  await page.getByLabel('男', { exact: true }).check()
+  const birth = page.getByLabel('出生日期', { exact: true })
+  if (!(await birth.inputValue())) await birth.fill('1990-05-06')
+  const city = page.getByLabel('居住城市', { exact: true })
+  if (!(await city.inputValue())) await city.selectOption('北京市')
+  await page.getByLabel('出生时辰', { exact: true }).selectOption('unknown')
+  await page.getByLabel('出生地', { exact: true }).selectOption('北京市')
+  await page.getByLabel('平时几点起', { exact: true }).fill('07:00')
+  await page.getByLabel('平时几点睡', { exact: true }).fill('23:00')
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await speak.or(home).first().waitFor()
 }

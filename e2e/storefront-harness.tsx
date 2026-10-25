@@ -6,6 +6,7 @@ import { StudentShell } from '../app/src/StudentShell'
 import { openStore, resumeStore } from '../app/src/core/store'
 import { createIdentity } from '../app/src/core/identity'
 import { addTeacher } from '../app/src/core/inbox'
+import { saveBasics } from '../app/src/core/basics'
 import { saveTeacherLabel } from '../app/src/core/identity/teacher-labels'
 import { loadCachedStorefront, loadOwnStorefront, makeStorefrontEvent, publishStorefront, saveReceivedStorefront, type Storefront } from '../app/src/core/storefront'
 import { saveActiveTeacher } from '../app/src/core/storefront/active'
@@ -33,6 +34,8 @@ if (!(await loadOwnStorefront(aci.store, aci.identity)).current) {
 // 学生跟两位老师：门面缓存、称呼与默认馆都按真实链路写入本机。
 await addTeacher(student.store, aci.identity.publicKey)
 await addTeacher(student.store, huang.identity.publicKey)
+// V2-23：已在用的学生，基础信息已填好。
+await saveBasics(student.store, { alias: '合成小王', gender: 'male', birthDate: '1990-05-06', birthShichen: null, birthPlace: '北京市', city: '北京市', history: '无', meds: '无', allergies: '无', routine: { wake: '07:00', sleep: '23:00' } })
 await student.store.put('settings', 'role', { role: 'student' })
 if (!(await loadCachedStorefront(student.store, aci.identity.publicKey))) {
   await saveReceivedStorefront(student.store, makeStorefrontEvent(aci.identity, ACI, 1000), aci.identity.publicKey)

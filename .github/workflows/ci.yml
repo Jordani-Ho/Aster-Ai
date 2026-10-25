@@ -101,7 +101,14 @@ jobs:
       - name: V2-32 posture at home browser integration (student capture, package without images, teacher metrics, family)
         run: node e2e/v232.browser.mjs
       - name: V2-13 teacher-phone browser integration
-        run: node e2e/phone.browser.mjs
+        # 失败时把最后几十行作为一条 annotation 打出来：日志存储常被代理拦，annotation 走 API 能看到。
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! node e2e/phone.browser.mjs 2>&1 | tee /tmp/phone.log; then
+            tail -60 /tmp/phone.log | grep -v createRoot | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"}{print}' | sed 's/^/::error title=phone.browser::/'; echo
+            exit 1
+          fi
       - run: npm run test:e2e-env
       - run: npm run test:deployment
       - name: Build patched relay
@@ -117,4 +124,11 @@ jobs:
             .cache/e2e/tools/protoc-31.1
           key: ${{ runner.os }}-relay-rust190-${{ hashFiles('relay/Dockerfile', 'relay/*.patch', 'e2e/build-relay.mjs') }}
       - name: Run consultation and pilot acceptance using the verified cached relay
-        run: npm run e2e
+        # 失败时把失败用例的摘要写进 annotation（日志存储常被代理拦）。
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! npm run e2e 2>&1 | tee /tmp/relay-e2e.log; then
+            grep -nE "✘|Error:|Expected|Received|Locator:|at .*spec\.ts" /tmp/relay-e2e.log | head -80 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"}{print}' | sed 's/^/::error title=relay-e2e::/'; echo
+            exit 1
+          fi

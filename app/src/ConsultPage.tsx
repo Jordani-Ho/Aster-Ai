@@ -23,6 +23,7 @@ import { listSelfRatings, listStressRatings, last14DayTrend } from './core/mirro
 import { uiError } from './core/onboarding/ui'
 import { TongueCapture } from './TongueCapture'
 import { TonguePair } from './TonguePair'
+import { intakeDefaults, refreshProfile } from './core/basics'
 import { PostureAtHome } from './PostureAtHome'
 import { CareReminder } from './CareReminder'
 import { buildPeriodObservation } from './core/kangbi'
@@ -76,10 +77,13 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
+  // V2-23：基础信息里的既往史、用药过敏，问诊卡里自动带上（学生可改）。
+  const [defaults, setDefaults] = useState<{ history: string | null; medsAllergies: string | null }>({ history: null, medsAllergies: null })
 
   useEffect(() => {
     void loadTeachers(store).then(setTeachers).catch(() => {})
-    void loadProfile(store).then(setProfile).catch(() => {})
+    void refreshProfile(store).then(setProfile).catch(() => { void loadProfile(store).then(setProfile).catch(() => {}) })
+    void intakeDefaults(store).then(setDefaults).catch(() => {})
     void heavenNow(store).then(setHeaven).catch(() => {})
     void loadDraft(store).then(draft => { if (draft) { setSession(draft); setStatus(draft.phase === 'confirm' ? '已读回上次未发出的卡片。' : '已读回上次未发送的草稿。') } }).catch(() => {})
   }, [store])
@@ -88,7 +92,12 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
   const teacher = venueTeacher ?? teachers[0] ?? ''
   const call = (teacherName || '').trim() || '老师'
 
-  const apply = (next: IntakeSession, notice = '') => {
+  const apply = (incoming: IntakeSession, notice = '') => {
+    let next = incoming
+    if (next.phase === 'confirm') {
+      if (defaults.history && !next.fields.history.value) next = updateField(next, 'history', defaults.history)
+      if (defaults.medsAllergies && !next.fields.medsAllergies.value) next = updateField(next, 'medsAllergies', defaults.medsAllergies)
+    }
     setSession(next)
     setError('')
     if (notice) setStatus(notice)
@@ -161,7 +170,8 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
       const sendFn = sendConsult ?? (async () => {})
       const [checkins, ratings, stress] = await Promise.all([listCheckins(store), listSelfRatings(store), listStressRatings(store)])
       const trend = last14DayTrend(checkins, ratings, stress)
-      const currentProfile = await loadProfile(store)
+      // V2-23：年龄和八字每次现算；没有基础信息时沿用原 profile。
+      const currentProfile = await refreshProfile(store).catch(() => loadProfile(store))
       const stamp = heavenStampOf(await heavenNow(store))
       const attachments: { ref: { id: string; type: 'photo'; sha256: string; bytes: number }; data: Uint8Array }[] = []
       for (const record of session.tongues ?? []) {

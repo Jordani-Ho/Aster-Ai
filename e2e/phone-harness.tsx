@@ -21,6 +21,7 @@ import { addTeacher } from '../app/src/core/inbox'
 import { addFamilyMember, loadFamilyMembers } from '../app/src/core/family'
 import { saveTongue } from '../app/src/core/tongue'
 import { loadProfile, saveProfile } from '../app/src/core/intake/session'
+import { saveBasics } from '../app/src/core/basics'
 import { effectiveDay } from '../app/src/core/homework/schedule'
 import type { LlmClient } from '../app/src/core/llm'
 import type { Wiring } from '../app/src/core/wiring'
@@ -33,7 +34,7 @@ import type { Encounter } from '../app/src/core/record/types'
 const scene = new URLSearchParams(location.search).get('scene') ?? 'open1'
 const gateway = 'https://phone.synthetic.invalid'
 const openScene = /^open[1-5]$/.test(scene)
-const studentScene = ['consult', 'records', 'me', 'student'].includes(scene)
+const studentScene = ['consult', 'records', 'me', 'student', 'newstudent'].includes(scene)
 
 async function node(name: string) {
   const prior = await resumeStore({ name })
@@ -84,6 +85,7 @@ const student = partner.identity
 await teacher.store.put('settings', 'role', { role: 'teacher' })
 
 const now = new Date()
+// 与页面同一口径（0 点到 1 点仍算前一天）；否则 CI 在 UTC 0 点多跑时作业还没“开始”，今日作业为空。
 const today = effectiveDay(now)
 const weekday = (now.getDay() + 6) % 7
 const weekStart = (() => { const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - weekday); return [monday.getFullYear(), String(monday.getMonth() + 1).padStart(2, '0'), String(monday.getDate()).padStart(2, '0')].join('-') })()
@@ -184,12 +186,14 @@ async function seedRoster(): Promise<string[]> {
 
 // 学生侧工作区（用学生自己的 store/identity，老师是另一位合成身份）：
 // 门面/称呼/作业/打卡/三日舌象；records 另存 2 份签字病历；me 另加家人与余额。
-async function studentWorkspace(kind: 'consult' | 'records' | 'me', sstore = teacher.store, sidentity = teacher.identity) {
+async function studentWorkspace(kind: 'consult' | 'records' | 'me', sstore = teacher.store, sidentity = teacher.identity, basics = true) {
   await addTeacher(sstore, teacher.identity.publicKey)
   await saveReceivedStorefront(sstore, makeStorefrontEvent(teacher.identity, STOREFRONT), teacher.identity.publicKey)
   await saveActiveTeacher(sstore, teacher.identity.publicKey, [teacher.identity.publicKey])
   const profile = await loadProfile(sstore)
   await saveProfile(sstore, { ...profile, alias: { value: '合成小王', source: 'student' }, city: { value: '北京市', source: 'student' } })
+  // V2-23：已有学生默认填好基础信息；newstudent 场景故意不填，验证第一次问诊前的门槛。
+  if (basics) await saveBasics(sstore, { alias: '合成小王', gender: 'male', birthDate: '1990-05-06', birthShichen: null, birthPlace: '北京市', city: '北京市', history: '无', meds: '无', allergies: '无', routine: { wake: '07:00', sleep: '23:00' } })
   await sstore.put('care-plans', teacher.identity.publicKey, {
     constitution: '平和质', points: ['霜降养脾胃。早饭吃温热的，别空腹喝冷饮。'], avoid: ['生冷'], updatedAt: new Date().toISOString(), version: 1,
   })
@@ -274,6 +278,7 @@ async function seedStudentHome() {
   await saveActiveTeacher(teacher.store, teacher.identity.publicKey, [teacher.identity.publicKey])
   const profile = await loadProfile(teacher.store)
   await saveProfile(teacher.store, { ...profile, alias: { value: '合成小王', source: 'student' }, city: { value: '北京市', source: 'student' } })
+  await saveBasics(teacher.store, { alias: '合成小王', gender: 'male', birthDate: '1990-05-06', birthShichen: null, birthPlace: '北京市', city: '北京市', history: '无', meds: '无', allergies: '无', routine: { wake: '07:00', sleep: '23:00' } })
   await teacher.store.put('care-plans', teacher.identity.publicKey, {
     constitution: '平和质', points: ['霜降养脾胃。早饭吃温热的，别空腹喝冷饮。'], avoid: ['生冷'], updatedAt: new Date().toISOString(), version: 1,
   })
@@ -316,7 +321,7 @@ async function main() {
       await saveStorefrontDraft(teacher.store, { ...STOREFRONT, name: scene === 'open2' ? '' : STOREFRONT.name, intro: scene === 'open2' ? '' : STOREFRONT.intro })
     }
     if (scene === 'students' || scene === 'hall') roster = await seedRoster()
-    if (ownStudentScene) await studentWorkspace(scene === 'records' ? 'records' : scene === 'me' ? 'me' : 'consult', partner.store, partner.identity)
+    if (ownStudentScene) await studentWorkspace(scene === 'records' ? 'records' : scene === 'me' ? 'me' : 'consult', partner.store, partner.identity, scene !== 'newstudent')
     if (scene === 'student') await seedStudentHome()
     if (scene === 'today' || scene === 'visit') await seedRemote()
     await teacher.store.put('settings', 'v217-seeded', 1)
@@ -347,7 +352,10 @@ async function main() {
     return <TeacherShell identity={teacher.identity} store={teacher.store} stack={stack} llm={stubLlm} gateway={gateway} status={status} settings={settingsNode} />
   }
 
-  createRoot(document.getElementById('root')!).render(<Scene />)
+  // Vite 冷启动可能让这个模块执行两次；同一个容器只建一个 React 根，否则整页切换时两个根互删节点。
+  const holder = window as unknown as { __phoneRoot?: ReturnType<typeof createRoot> }
+  holder.__phoneRoot ??= createRoot(document.getElementById('root')!)
+  holder.__phoneRoot.render(<Scene />)
   Object.assign(window, { __phone: { student: student.publicKey, teacher: teacher.identity.publicKey, roster, intake: intakeControl } })
 }
 
