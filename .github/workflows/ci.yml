@@ -99,7 +99,14 @@ jobs:
       - name: V2-30 posture tool browser integration (capture/import, metrics, drag+sign, trends, local assets)
         run: node e2e/posture.browser.mjs
       - name: V2-13 teacher-phone browser integration
-        run: node e2e/phone.browser.mjs
+        # 失败时把最后几十行作为一条 annotation 打出来：日志存储常被代理拦，annotation 走 API 能看到。
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! node e2e/phone.browser.mjs 2>&1 | tee /tmp/phone.log; then
+            tail -60 /tmp/phone.log | grep -v createRoot | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"}{print}' | sed 's/^/::error title=phone.browser::/'; echo
+            exit 1
+          fi
       - run: npm run test:e2e-env
       - run: npm run test:deployment
       - name: Build patched relay
