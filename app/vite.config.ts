@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
@@ -27,8 +28,26 @@ export function buildVersion(env: Record<string, string | undefined> = process.e
   return `${hash === '' ? 'unknown' : hash} · ${date}`
 }
 
+// V2-30：体态识别把 MediaPipe 的 wasm 运行时自托管到本站。二进制不重复入库：
+// 构建/启动开发服务器时从固定版本的 node_modules 复制到 public/posture/wasm。
+function copyPostureWasm(): void {
+  const source = fileURLToPath(new URL('./node_modules/@mediapipe/tasks-vision/wasm', import.meta.url))
+  const target = fileURLToPath(new URL('./public/posture/wasm', import.meta.url))
+  if (!existsSync(source)) return
+  mkdirSync(target, { recursive: true })
+  for (const name of readdirSync(source)) {
+    if (!/\.(js|wasm)$/.test(name)) continue
+    copyFileSync(`${source}/${name}`, `${target}/${name}`)
+  }
+}
+
+const postureAssets = {
+  name: 'posture-assets',
+  buildStart() { copyPostureWasm() },
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), postureAssets],
   resolve: { dedupe: ['lunar-typescript', 'timezonecomplete', 'tzdata'] },
   server: { fs: { allow: ['..'] } },
   define: { __APP_VERSION__: JSON.stringify(buildVersion()) },

@@ -5,6 +5,7 @@ import type { FamilyProof } from '../family/proof'
 import type { HeavenStamp } from '../heaven'
 import type { TongueAbstract } from '../../../../domain/tcm/tongue'
 import type { PeriodObservation } from '../../../../domain/tcm/observation'
+import type { PostureRecord } from '../../../../domain/tcm/posture'
 
 /** 每个字段的来源。界面用颜色区分；AI 推测永远不能显示成事实。 */
 export type Source = 'student' | 'teacher' | 'ai_draft' | 'external' | 'unknown'
@@ -53,6 +54,9 @@ export interface Encounter {
     advice: Field<string>          // 医嘱
   }
   outcome?: { change: Field<string>; adverse: Field<string>; next: Field<string> }
+  /** V2-30（B 类，已批）：面诊时的体态记录（多段、每段一张骨架 + 指标值 + 老师标注与拖点）。
+   *  只随面诊（in_person）签字保存；远程问诊包不带；老病历没有这个字段照常读。 */
+  postures?: PostureRecord[]
 }
 
 export interface Prescription {

@@ -69,6 +69,8 @@ V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`
 | `teacher-template` | 老师本机问诊模板 | 仅模板 |
 | `settings/personal-model` | 本人模型接入 `{provider,baseUrl,model,apiKey,testedAt}` | 凭证随本机明文存储 |
 | `settings/community-model` | 用社区网关模型的标记 `{mode:'gateway',testedAt}` | V2-28：不存密钥；以后接入自己的模型会清掉，以个人模型为准 |
+| `posture-drafts` | 老师本机体态草稿 `PostureRecord`（键为记录 id） | V2-30：只有关键点坐标与标注，照片/视频从不入库；签字后随面诊病历保存并删草稿 |
+| `settings/posture-metrics` | 老师自己的体态指标 `{id,name,formula,unit}[]` | V2-30：公式白名单校验；默认四条示例，不内置正常范围 |
 
 M1-22 家人分片：`store.scoped('f{account}-')` 在同一个库里给集合名加前缀，实体集合名为 `f1-`、`f2-`……；根实例 `list/clearScope` 可覆盖全部分片，但 V2 不再提供整库加密导出/导入。
 

@@ -96,6 +96,8 @@ jobs:
         run: node e2e/v229.browser.mjs
       - name: V2-31 setup-link browser integration (scan link autofills token, URL never carries it)
         run: node e2e/v231.browser.mjs
+      - name: V2-30 posture tool browser integration (capture/import, metrics, drag+sign, trends, local assets)
+        run: node e2e/posture.browser.mjs
       - name: V2-13 teacher-phone browser integration
         run: node e2e/phone.browser.mjs
       - run: npm run test:e2e-env

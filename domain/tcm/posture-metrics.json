@@ -1,0 +1,6 @@
+[
+  { "id": "shoulders", "name": "两肩高低差", "formula": "heightDiff(left_shoulder, right_shoulder)", "unit": "%" },
+  { "id": "pelvis", "name": "骨盆倾斜（左右髋高低差）", "formula": "heightDiff(left_hip, right_hip)", "unit": "%" },
+  { "id": "head", "name": "头前伸（头-肩-髋夹角）", "formula": "angle(nose, left_shoulder, left_hip)", "unit": "°" },
+  { "id": "spine", "name": "脊柱偏离中线", "formula": "midlineOffset(nose)", "unit": "%" }
+]

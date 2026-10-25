@@ -13,6 +13,7 @@ V2-04：`kangbi-rules.json` 所有运营数值为 null；`kangbi.ts` 只提供�
 | 三方观察规则 | `observation-rules.json`（类型与算法在 `observation-rules.ts`、`observation.ts`） | V2-10：学生智能体那一句，只观察不写账 |
 | 老师智能体材料上限 | `agent-budget.json`（类型与校验在 `agent-budget.ts`） | V2-19：每次模型调用前估算材料长度的上限，默认 16000 tokens（常见 32k 上下文的一半）；换模型只改这个数据 |
 | 擅长方向标签表 | `specialties.json` | M2 |
+| 体态指标示例与公式 | `posture-metrics.json`（类型与公式引擎在 `posture.ts`） | V2-30：默认四条示例（两肩高低差、骨盆倾斜、头前伸、脊柱偏离中线），老师可改/删/加；不内置正常范围或诊断 |
 
 V2-03：tongue-features.json 定义舌象外观取值与配色，tongue.ts 负责严格校验和固定路径的标准 SVG；不输出诊断，也不使用照片像素。
 
