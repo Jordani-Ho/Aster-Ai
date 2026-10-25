@@ -13,6 +13,7 @@ import { localDay } from '../homework/schedule'
 import { isHeavenStamp } from '../heaven/stamp'
 import type { HeavenStamp } from '../heaven/stamp'
 import { parsePeriodObservation, type PeriodObservation } from '../../../../domain/tcm/observation'
+import { sanitizeStudentPostures, type PostureRecord } from '../../../../domain/tcm/posture'
 import { saveTeacherRecord, rememberTeacherStudent } from '../records/teacher'
 import { updateFingerprint } from '../records/fingerprint'
 import { receiveRetentionSetting, RETENTION_TYPE } from '../records/retention'
@@ -72,6 +73,8 @@ export interface ConsultEnvelopePayload {
   heaven?: unknown
   /** V2-10：这段时间的计数与智能体那一句；不含本人感受、病历内容或照片。 */
   observation?: unknown
+  /** V2-32：学生在家拍的体态骨架（只有关键点）；老包没有这个字段照常收。 */
+  postures?: unknown
 }
 
 export interface AttachmentEnvelopePayload {
@@ -98,6 +101,8 @@ export interface StoredConsult {
   heaven?: HeavenStamp | null
   /** V2-10：这段时间的计数与智能体那句（只在签字时写进观察记录，签字前界面不显示）。 */
   observation?: PeriodObservation | null
+  /** V2-32：学生自己拍的体态骨架；收包时已清洗成只有关键点与感觉。 */
+  postures?: PostureRecord[]
 }
 
 export interface ConsultReadiness {
@@ -294,6 +299,7 @@ export function consultEnvelope(pkg: ConsultPackage): Envelope {
       ...(pkg.managerProof ? { managerProof: structuredClone(pkg.managerProof) } : {}),
       ...((pkg.heaven ?? pkg.encounter.heaven) ? { heaven: structuredClone(pkg.heaven ?? pkg.encounter.heaven) } : {}),
       ...(pkg.observation ? { observation: structuredClone(pkg.observation) } : {}),
+      ...(pkg.postures && pkg.postures.length > 0 ? { postures: structuredClone(pkg.postures) } : {}),
     } satisfies ConsultEnvelopePayload,
   }
 }
@@ -518,6 +524,14 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
   const heaven: HeavenStamp | undefined = heavenRaw
   // V2-10：观察周期元数据格式不对就忽略（不影响问诊本身）；签字前界面不显示智能体那句。
   const observation = parsePeriodObservation(value.observation)
+  // V2-32：体态骨架只收学生自己拍的干净数据；格式不对或夹带图片/指标就只丢掉体态，问诊本身照收。
+  let postures: PostureRecord[] | undefined
+  if (value.postures !== undefined) {
+    try {
+      const clean = sanitizeStudentPostures(value.postures, { student: value.encounter.student, teacher: identity.publicKey })
+      if (clean.length > 0) postures = clean
+    } catch { postures = undefined }
+  }
   const stored: StoredConsult = {
     encounter: heaven && !value.encounter.heaven ? { ...value.encounter, heaven: { ...heaven } } : value.encounter,
     history: checked.history,
@@ -530,6 +544,7 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
     ...(manager ? { manager } : {}),
     ...(managerInvalid ? { managerInvalid: true } : {}),
     ...(observation ? { observation } : {}),
+    ...(postures ? { postures } : {}),
   }
   await store.put(INBOX_COLLECTIONS.consult, value.encounter.id, stored as unknown as StoreValue)
   // V2-05：老师认得的学生的名单（只存公钥；换手机后靠它逐个向学生要回病历）。

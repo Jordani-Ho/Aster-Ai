@@ -138,9 +138,10 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   })
   await student.getByRole('button',{name:/去拍/}).click()
   await expect(student.getByRole('button',{name:'拍舌象 / 重拍',exact:true})).toBeEnabled()
-  await student.locator('input[type=file]').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:png})
+  const tongueInput=student.locator('input[aria-label="选择舌象照片"]')
+  await tongueInput.setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:png})
   await expect(student.locator('figure svg')).toHaveCount(1)
-  await expect(student.locator('input[type=file]')).toHaveValue('')
+  await expect(tongueInput).toHaveValue('')
   await student.getByRole('button',{name:/^发给/}).click()
   await expect(student.getByRole('heading',{name:'已发给老师',exact:true})).toBeVisible()
   // V2-16：等您签字的远程问诊出现在老师“今天”里。

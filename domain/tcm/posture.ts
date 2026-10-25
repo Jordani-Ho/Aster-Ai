@@ -73,6 +73,8 @@ export interface PostureRecord {
   metrics: PostureMetric[]   // 保存时的指标快照（老师后来改指标不影响旧记录）
   values: Record<string, PostureMetricValue[]> // segmentId → 每条指标
   note?: string
+  /** V2-32：谁拍的。学生在家拍的记录随远程问诊包走，学生端不算指标；旧记录没有这个字段按老师端处理。 */
+  capturedBy?: 'student' | 'teacher'
 }
 
 // ---------- 公式白名单：两点高低差 / 两点距离 / 三点夹角 / 左右对称差 / 偏离中线 ----------
@@ -264,35 +266,156 @@ export function metricDeltas(before: readonly PostureMetricValue[] | undefined, 
 
 // ---------- 结构校验（签字前调用；不依赖 app 层，避免循环引用） ----------
 const HEX32 = /^[0-9a-f]{32}$/
+
+function isPoint(value: unknown): value is PosturePoint {
+  if (!value || typeof value !== 'object') return false
+  const point = value as { x?: unknown; y?: unknown; z?: unknown; visibility?: unknown }
+  if (typeof point.x !== 'number' || typeof point.y !== 'number' || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return false
+  if (point.z !== undefined && (typeof point.z !== 'number' || !Number.isFinite(point.z))) return false
+  if (point.visibility !== undefined && (typeof point.visibility !== 'number' || !Number.isFinite(point.visibility) || point.visibility < 0 || point.visibility > 1)) return false
+  return true
+}
+
+export function isPostureFrame(value: unknown): value is PostureFrame {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const frame = value as PostureFrame
+  if (frame.source !== 'phone' && frame.source !== 'studio') return false
+  if (frame.view !== 'front' && frame.view !== 'side' && frame.view !== 'video') return false
+  if (typeof frame.at !== 'string' || !Number.isFinite(Date.parse(frame.at))) return false
+  if (typeof frame.width !== 'number' || !Number.isFinite(frame.width) || frame.width < 0) return false
+  if (typeof frame.height !== 'number' || !Number.isFinite(frame.height) || frame.height < 0) return false
+  if (!frame.points || typeof frame.points !== 'object' || Array.isArray(frame.points)) return false
+  for (const [name, point] of Object.entries(frame.points)) {
+    if (!(POSTURE_POINTS as readonly string[]).includes(name)) return false
+    if (!isPoint(point)) return false
+  }
+  return true
+}
+
+export function isPostureSegment(value: unknown): value is PostureSegment {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const segment = value as PostureSegment
+  if (typeof segment.id !== 'string' || segment.id === '' || segment.id.length > 64) return false
+  if (typeof segment.action !== 'string' || segment.action.length > 30) return false
+  if (segment.phase !== 'before' && segment.phase !== 'after') return false
+  if (segment.note !== undefined && (typeof segment.note !== 'string' || segment.note.length > 200)) return false
+  if (!isPostureFrame(segment.frame)) return false
+  for (const override of Object.values(segment.overrides ?? {})) {
+    if (!override || typeof override.x !== 'number' || typeof override.y !== 'number' || !Number.isFinite(override.x) || !Number.isFinite(override.y)) return false
+  }
+  for (const mark of segment.marks ?? []) {
+    if (!mark || !(POSTURE_POINTS as readonly string[]).includes(mark.point) || typeof mark.reason !== 'string' || mark.reason.length > 200 || mark.source !== 'teacher') return false
+  }
+  for (const guide of segment.guides ?? []) {
+    if (!guide || (guide.kind !== 'shoulder_line' && guide.kind !== 'hip_line' && guide.kind !== 'spine_midline') || guide.source !== 'teacher') return false
+  }
+  return true
+}
+
 export function isPostureRecord(value: unknown): value is PostureRecord {
   const record = value as PostureRecord
   if (!record || typeof record !== 'object') return false
   if (!HEX32.test(record.id) || typeof record.student !== 'string' || typeof record.teacher !== 'string') return false
+  if (record.capturedBy !== undefined && record.capturedBy !== 'student' && record.capturedBy !== 'teacher') return false
   if (!Number.isFinite(Date.parse(record.at)) || !Array.isArray(record.segments) || !Array.isArray(record.metrics)) return false
   if (record.segments.length === 0 || record.segments.length > 20) return false
-  for (const segment of record.segments) {
-    if (!segment || typeof segment.id !== 'string' || typeof segment.action !== 'string' || segment.action.length > 30) return false
-    if (segment.phase !== 'before' && segment.phase !== 'after') return false
-    if (!segment.frame || !segment.frame.points || typeof segment.frame.points !== 'object') return false
-    for (const [name, point] of Object.entries(segment.frame.points)) {
-      if (!(POSTURE_POINTS as readonly string[]).includes(name)) return false
-      if (!point || typeof point !== 'object') return false
-      const value = point as { x?: unknown; y?: unknown; visibility?: unknown }
-      if (typeof value.x !== 'number' || typeof value.y !== 'number' || !Number.isFinite(value.x) || !Number.isFinite(value.y)) return false
-      if (value.visibility !== undefined && (typeof value.visibility !== 'number' || value.visibility < 0 || value.visibility > 1)) return false
-    }
-    for (const override of Object.values(segment.overrides ?? {})) {
-      if (!override || typeof override.x !== 'number' || typeof override.y !== 'number' || !Number.isFinite(override.x) || !Number.isFinite(override.y)) return false
-    }
-    for (const mark of segment.marks ?? []) {
-      if (!mark || !(POSTURE_POINTS as readonly string[]).includes(mark.point) || typeof mark.reason !== 'string' || mark.reason.length > 200) return false
-    }
-  }
-  return true
+  return record.segments.every(isPostureSegment)
 }
-// 签字前：把整段体态记录做成快照（指标值按当前坐标重算），来源都是老师。
+
+// 签字前：把整段体态记录做成快照（指标值按当前坐标重算）。
 export function normalizePostureForSign(record: PostureRecord, student: string): PostureRecord {
   if (!isPostureRecord(record)) throw new Error('体态记录格式无效')
   if (record.student !== student) throw new Error('体态记录不是这位学生的')
   return { ...record, values: computeRecordValues(record), metrics: record.metrics.map(item => ({ ...item })) }
+}
+
+// V2-32：老师端按自己的指标表给学生拍的骨架算数（学生端从来不算、不带数值）。
+export function applyPostureMetrics(record: PostureRecord, metrics: readonly PostureMetric[]): PostureRecord {
+  const snapshot = metrics.map(item => ({ ...item }))
+  const next: PostureRecord = { ...record, metrics: snapshot, values: {} }
+  return { ...next, values: computeRecordValues(next) }
+}
+
+// ---------- V2-32 学生在家拍：清洗成“只有关键点、视角、时间与感觉” ----------
+export interface StudentPostureExpectation { student: string; teacher: string }
+const VIEW_LABELS: Record<PostureView, string> = { front: '正面', side: '侧面', video: '走路视频' }
+
+function clampedPoint(point: PosturePoint): PosturePoint {
+  const clamp = (value: number) => Math.min(1, Math.max(0, value))
+  return {
+    x: clamp(point.x), y: clamp(point.y),
+    ...(point.z === undefined ? {} : { z: point.z }),
+    ...(point.visibility === undefined ? {} : { visibility: clamp(point.visibility) }),
+  }
+}
+function cleanPoints(points: PostureFrame['points']): PostureFrame['points'] {
+  const out: PostureFrame['points'] = {}
+  for (const name of POSTURE_POINTS) {
+    const point = points[name]
+    if (point) out[name] = clampedPoint(point)
+  }
+  return out
+}
+
+function cleanStudentSegment(segment: PostureSegment, count: number, views: Set<PostureView>): PostureSegment {
+  if ((segment.marks?.length ?? 0) > 0 || (segment.guides?.length ?? 0) > 0 || Object.keys(segment.overrides ?? {}).length > 0) {
+    throw new Error('学生自己拍的体态不带老师标注。')
+  }
+  if (segment.frame.source !== 'phone') throw new Error('学生这边只能交手机拍的骨架。')
+  const view = segment.frame.view
+  if (view === 'video' && count > 1) throw new Error('走路视频单独一段，不能和照片混在一起。')
+  if (views.has(view)) throw new Error(view === 'video' ? '走路视频只要一段。' : `${VIEW_LABELS[view]}已经拍过了。`)
+  views.add(view)
+  if (!(segment.frame.width > 0) || !(segment.frame.height > 0)) throw new Error('这张照片没有实际尺寸，请重拍。')
+  const note = segment.note?.trim()
+  return {
+    id: segment.id,
+    action: view === 'video' ? '走路' : '站立',
+    phase: 'before',
+    ...(note ? { note: note.slice(0, 200) } : {}),
+    frame: {
+      source: 'phone', view, at: new Date(segment.frame.at).toISOString(),
+      width: segment.frame.width, height: segment.frame.height, points: cleanPoints(segment.frame.points),
+    },
+  }
+}
+
+// 老师端收包/学生端发包/草稿读回共用：格式不对、夹带图片或指标、老师拍的、超过两段都拒绝。
+export function sanitizeStudentPostures(value: unknown, expected: StudentPostureExpectation): PostureRecord[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new Error('体态记录格式不对。')
+  if (value.length > 2) throw new Error('体态记录最多两条。')
+  const records: PostureRecord[] = []
+  for (const [index, raw] of value.entries()) {
+    if (!isPostureRecord(raw)) throw new Error(`第 ${index + 1} 条体态记录格式不对。`)
+    if (raw.student !== expected.student) throw new Error('这条体态记录不是这位学生的。')
+    if (raw.teacher !== expected.teacher) throw new Error('这条体态记录不是这位老师的。')
+    if (raw.capturedBy !== 'student') throw new Error('远程问诊的体态只能是学生自己拍的。')
+    if (raw.metrics.length > 0 || Object.keys(raw.values).length > 0) throw new Error('学生端不带指标数值。')
+    if (raw.segments.length > 2) throw new Error('体态最多两段：正面、侧面各一张，或一段走路视频。')
+    const views = new Set<PostureView>()
+    const segments = raw.segments.map(segment => cleanStudentSegment(segment, raw.segments.length, views))
+    const recordNote = raw.note?.trim()
+    records.push({
+      id: raw.id, student: expected.student, teacher: expected.teacher,
+      at: new Date(raw.at).toISOString(), capturedBy: 'student',
+      segments, metrics: [], values: {},
+      ...(recordNote ? { note: recordNote.slice(0, 200) } : {}),
+    })
+  }
+  return records
+}
+
+export function appendStudentPostureSegment(record: PostureRecord, segment: PostureSegment): PostureRecord {
+  if (!record || record.capturedBy !== 'student') throw new Error('这不是学生自己拍的体态记录。')
+  if (!isPostureSegment(segment)) throw new Error('这段体态数据格式不对。')
+  const [clean] = sanitizeStudentPostures([{ ...record, segments: [...record.segments, segment] }], { student: record.student, teacher: record.teacher })
+  return clean
+}
+
+export function removeStudentPostureSegment(record: PostureRecord, segmentId: string): PostureRecord | null {
+  const segments = record.segments.filter(item => item.id !== segmentId)
+  if (segments.length === record.segments.length) throw new Error('没有这一段。')
+  if (segments.length === 0) return null
+  return { ...record, segments }
 }
