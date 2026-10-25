@@ -98,6 +98,8 @@ jobs:
         run: node e2e/v231.browser.mjs
       - name: V2-30 posture tool browser integration (capture/import, metrics, drag+sign, trends, local assets)
         run: node e2e/posture.browser.mjs
+      - name: V2-32 posture at home browser integration (student capture, package without images, teacher metrics, family)
+        run: node e2e/v232.browser.mjs
       - name: V2-13 teacher-phone browser integration
         # 失败时把最后几十行作为一条 annotation 打出来：日志存储常被代理拦，annotation 走 API 能看到。
         shell: bash

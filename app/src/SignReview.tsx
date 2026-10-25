@@ -50,11 +50,13 @@ export interface SignReviewProps {
   onRevise?: (encounter: Encounter, instruction: string) => Promise<Encounter>
   /** 远程问诊的本次资料：扣费、舌象、14 天走势、调养方案。 */
   extras?: ReactNode
+  /** V2-32：学生在家拍的体态骨架 + 老师自己公式算的指标，放在核对页正文里（默认展开）。 */
+  postureReview?: ReactNode
 }
 
 export function SignReview({
   encounter, alias, subtitle, materialNote, previousPrescription = null, previousEventId = null,
-  comparison = null, onComparisonChange, onSign, onBack, onRevise, extras,
+  comparison = null, onComparisonChange, onSign, onBack, onRevise, extras, postureReview,
 }: SignReviewProps) {
   const [current, setCurrent] = useState<Encounter>(encounter)
   const [busy, setBusy] = useState(false)
@@ -244,6 +246,7 @@ export function SignReview({
         <button type="button" disabled={revising || !instruction.trim()} onClick={() => void revise()}>按意见改稿</button>
       </details>}
 
+      {postureReview}
       <PostureSummary postures={encounter.postures} title="这次面诊的体态记录" />
     </div>
     <footer className="nl-review-foot">

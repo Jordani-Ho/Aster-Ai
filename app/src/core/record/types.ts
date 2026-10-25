@@ -101,4 +101,10 @@ export interface ConsultPackage {
    * 不含本人感受（本人感受只存在学生本机）、不含病历内容或照片。
    */
   observation?: PeriodObservation
+  /**
+   * V2-32：学生在家拍的体态（最多两条；正面/侧面各一张，或一段走路视频）。
+   * 只有关键点、视角、时间与感觉，不带图片字节；学生端不带指标数值，老师端按自己的公式算。
+   * 只随传输信封走，不进 Encounter schema，老包没有这个字段照常收。
+   */
+  postures?: PostureRecord[]
 }

@@ -170,7 +170,7 @@ describe('V2-30 记录、趋势与作业', () => {
     expect(values.at(-1)).toMatchObject({ id: 'knee', status: 'ok' })
     expect(values.at(-1)!.value).toBeCloseTo(10, 1)
   })
-  it('签字：面诊病历可以带体态记录；远程问诊带就被拒，旧病历没有这个字段照常', async () => {
+  it('签字：面诊病历可以带体态记录；远程问诊只能带学生自己拍的，旧病历没有这个字段照常', async () => {
     const { startInPersonEncounter } = await import('../record/in-person')
     const { signEncounter } = await import('../record/sign')
     const metrics = loadDefaultPostureMetrics()
@@ -178,8 +178,9 @@ describe('V2-30 记录、趋势与作业', () => {
     const inPerson = startInPersonEncounter({ teacher: identity.publicKey, student })
     inPerson.postures = [recordWithPosture]
     expect(() => signEncounter(inPerson, identity.privateKey)).not.toThrow()
+    // V2-32：老师当场的记录（没有 capturedBy: 'student'）不能混进远程问诊病历。
     const remote = { ...inPerson, kind: 'remote_async' as const }
-    expect(() => signEncounter(remote, identity.privateKey)).toThrow(/体态记录只能随面诊病历保存/)
+    expect(() => signEncounter(remote, identity.privateKey)).toThrow(/学生自己拍/)
     const old = { ...inPerson } as Record<string, unknown>
     delete old.postures
     expect(() => signEncounter(old as unknown as typeof inPerson, identity.privateKey)).not.toThrow()

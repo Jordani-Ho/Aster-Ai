@@ -37,7 +37,7 @@ function RecordBody({ record, store }: { record: ReceivedRecord; store: LocalSto
       {encounter.intake.medsAllergies.value !== null && <p className="record-detail">在吃的药、过敏：{textField(encounter.intake.medsAllergies)}</p>}
       {encounter.intake.tongues?.map((record,index)=><TonguePair key={index} record={record} title={`舌象 ${index+1} · ${record.shichen}时`} loadCrop={async()=>{const id=record.crop?.id;if(!id)return null;const data=await store.get(INTAKE_COLLECTIONS.attachmentData,id);return data instanceof Uint8Array?data:null}} missingCropState="expired"/>)}
       {encounter.intake.attachments.length > 0 && <RecordPhotos record={record} store={store}/>}
-      <PostureSummary postures={encounter.postures} title="老师当面看的体态" />
+      <PostureSummary postures={encounter.postures} title="体态记录" showValues={false} />
     </section>
     <section className="record-section">
       <h3>判断</h3>

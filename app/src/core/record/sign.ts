@@ -74,17 +74,29 @@ export function intakeSourceViolations(encounter: Encounter): string[] {
   return wrong
 }
 
+function validatePostureRecords(encounter: Encounter): void {
+  if(encounter.postures===undefined)return
+  if(!Array.isArray(encounter.postures)||encounter.postures.length>10)throw Error('体态记录无效')
+  encounter.postures = encounter.postures.map(record=>{
+    const normalized=normalizePostureForSign(record,encounter.student)
+    if(normalized.teacher!==encounter.teacher)throw Error('体态记录不是这位老师存的')
+    if(encounter.kind!=='in_person'){
+      if(normalized.capturedBy!=='student')throw Error('远程问诊的体态记录必须是学生自己拍的')
+      for(const segment of normalized.segments){
+        if((segment.marks?.length??0)>0||(segment.guides?.length??0)>0||Object.keys(segment.overrides??{}).length>0)throw Error('学生自己拍的体态不该带老师标注')
+      }
+    }
+    return normalized
+  })
+}
+
 function validateEncounter(encounter: Encounter): void {
   if(encounter.intake.tongues!==undefined) {
     if(!Array.isArray(encounter.intake.tongues)||encounter.intake.tongues.length>4)throw Error('舌象记录无效')
     encounter.intake.tongues.forEach(parseTongueAbstract)
   }
-  // V2-30：体态只随面诊签字；每条记录必须是本学生的，旧病历没有这个字段照常。
-  if(encounter.postures!==undefined) {
-    if(encounter.kind!=='in_person')throw Error('体态记录只能随面诊病历保存')
-    if(!Array.isArray(encounter.postures)||encounter.postures.length>10)throw Error('体态记录无效')
-    encounter.postures.forEach(record=>normalizePostureForSign(record,encounter.student))
-  }
+  // V2-30：体态随面诊签字；V2-32：远程问诊也可以带，但只能是学生自己拍的骨架（不带老师标注）。
+  validatePostureRecords(encounter)
   if (!HEX32.test(encounter.id)) throw new Error('病历 id 必须是 32 位十六进制')
   if (!Number.isSafeInteger(encounter.version) || encounter.version < 1) throw new Error('病历版本号无效')
   if (!HEX64.test(encounter.student) || !HEX64.test(encounter.teacher)) throw new Error('病历中的公钥格式无效')
@@ -151,6 +163,7 @@ export function verifySignedEncounter(event: SignedEncounterEvent, options: Veri
   if (pending.length > 0) throw new Error('签名病历里还有未确认的 AI 草稿：' + pending.join('、'))
   const wrongIntake = intakeSourceViolations(encounter)
   if (wrongIntake.length > 0) throw new Error('intake 来源不符合规则，拒绝接收：' + wrongIntake.join('、'))
+  validatePostureRecords(encounter)
   return encounter
 }
 

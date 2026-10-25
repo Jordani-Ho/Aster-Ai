@@ -13,11 +13,10 @@ import { TEACHER_RECORDS, type TeacherRecord } from '../records/teacher'
 export * from '../../../../domain/tcm/posture'
 export * from './freemocap'
 export * from './detector'
+export * from './capture'
 
 export const POSTURE_DRAFTS = 'posture-drafts'
 export const POSTURE_METRICS_ROW = 'posture-metrics'
-export const VIDEO_MAX_BYTES = 30 * 1024 * 1024
-export const VIDEO_MAX_SECONDS = 15
 
 export function loadDefaultPostureMetrics(): PostureMetric[] {
   return (metricsDefaults as PostureMetric[]).map(item => ({ ...item }))
@@ -74,6 +73,25 @@ export function newPostureRecord(identity: Identity, student: string, segments: 
   const record: PostureRecord = { id: randomId(), student, teacher: identity.publicKey, at: new Date().toISOString(), segments, metrics: metrics.map(item => ({ ...item })), values: {}, ...(note.trim() === '' ? {} : { note: note.trim() }) }
   record.values = computeRecordValues(record)
   return record
+}
+
+// V2-32：学生在家拍的一段（视角决定动作：视频记“走路”，照片记“站立”）；学生端不算指标。
+export function newStudentPostureSegment(frame: PostureFrame, note = ''): PostureSegment {
+  const text = note.trim()
+  return {
+    id: randomId(),
+    action: frame.view === 'video' ? '走路' : '站立',
+    phase: 'before',
+    ...(text === '' ? {} : { note: text.slice(0, 200) }),
+    frame,
+  }
+}
+export function newStudentPostureRecord(student: string, teacher: string, segments: PostureSegment[], note = ''): PostureRecord {
+  const text = note.trim()
+  return {
+    id: randomId(), student, teacher, at: new Date().toISOString(), capturedBy: 'student',
+    segments, metrics: [], values: {}, ...(text === '' ? {} : { note: text.slice(0, 200) }),
+  }
 }
 
 export async function savePostureDraft(store: LocalStore, record: PostureRecord): Promise<void> {

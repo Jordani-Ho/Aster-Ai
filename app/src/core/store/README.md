@@ -31,7 +31,7 @@ V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`
 
 | 集合 | 用途与字段 | 备注 |
 | :-- | :-- | :-- |
-| `intake-draft` | 未发送的采集草稿（键为病历 id） | 确认发送或替换后删除 |
+| `intake-draft` | 未发送的采集草稿（键为病历 id）；V2-32 起可含学生在家拍的体态骨架 `posture`（只有关键点，无图片字节） | 确认发送或替换后删除 |
 | `intake-sent` | 已发送问诊包的本机副本 `{encounter,history,attachments}` | 附件字节在 `intake-attachments` |
 | `intake-outbox` | 中继未接通时暂存的问诊包 | `flushIntakeOutbox` 发送成功即删除 |
 | `intake-attachments` | 采集照片处理后的 JPEG 字节（长边 ≤1600、≤500 KB）与问诊舌象的舌头裁剪图（长边 ≤512，V2-08） | 键为附件 id |
