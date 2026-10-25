@@ -131,7 +131,7 @@ export function StudentMe({ store, identity, family, onSwitch, venue, ledger, st
         <span className="ts-chevron">›</span>
       </button>
     </section>
-    <button type="button" className="nl-card me-setting-row" onClick={() => setView('herbs')}>
+    <button type="button" className="nl-card me-herbs-row" onClick={() => setView('herbs')}>
       <span className="me-row-main"><strong>家里的药</strong><span>记录和整理自己的药材</span></span>
       <span className="ts-chevron">›</span>
     </button>

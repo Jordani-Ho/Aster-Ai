@@ -19,6 +19,7 @@
 ## M1-12 面诊记录
 
 - `in-person.ts`：老师端新建 `kind: 'in_person'` 病历（`startInPersonEncounter`）；`recordIntakeField` 由老师代录 intake，非空项来源为 `teacher`、`note` 为 `in_person`，只记录老师写的内容（V2-18 起不做急症判断）。`addInPersonPhoto` 接收 M1-09 `photo.ts` 已处理的 `AttachmentRef`，最多 4 张。
+- V2-24：`in-person-herbs.ts` 在面诊交还前尝试处理本机库存；老师选择“不备药”时完全跳过，库外药不扣，缺货整方不扣，剂量无法处理的库内药跳过并在交还后提示。库存问题不拦签字，发送失败仍冲回已写流水；验收在 `in-person-herbs.test.ts`。
 - 面诊是 `intake` 来源硬规则的唯一例外，且只认 `kind === 'in_person'`：`signEncounter` 与 `verifySignedEncounter` 都按 kind 放行，同样内容改成 `remote_async` 后签不了、学生端也拒收。学生端展示用 `intakeDisplayLabel` 在主诉旁标“老师代录”。
 - 起草复用 M1-10：`inPersonConsultPackage` 把面诊病历转成 `ConsultPackage` 交给 `draftEncounter`（医案检索的案例来自 `teacher-records`）；审改签字与交还复用 M1-11：`signAndHandoverInPerson` 调用 `signEncounter` 后发送，发送成功后把完整签名病历存进 `teacher-records` 并更新改稿习惯摘要；发送失败资料原样保留，老师可在当前会话重发。照片字节存 `attachments` 集合，按保留期限删除。
 - 老师端界面 `app/src/VisitPage.tsx`：选学生（本机已有签字索引或已收到的问诊）→ “您说，智能体记”一段话、智能体拆进望闻问切四格（拆出来的格子标“听到了，待您确认”，点格子可改）→ “说完了，看草稿” → 复用 `SignReview.tsx` 逐块确认与一键签字。截图 `docs/screenshots/phone-teacher-visit.png`。

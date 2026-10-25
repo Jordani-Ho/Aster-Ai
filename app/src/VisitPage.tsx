@@ -5,8 +5,9 @@ import type { LlmClient } from './core/llm'
 import type { Encounter } from './core/record/types'
 import {
   inPersonConsultPackage, knownStudents, loadInPersonDraft, recordIntakeField,
-  saveInPersonDraft, signAndHandoverInPerson, startInPersonEncounter, type SendSignedRecord,
+  saveInPersonDraft, startInPersonEncounter, type SendSignedRecord,
 } from './core/record/in-person'
+import { signAndHandoverInPersonWithHerbs } from './core/record/in-person-herbs'
 import { sendInPersonRecord, listStudentAdherence, type SendEnvelope, type StudentAdherence } from './core/inbox'
 import { teacherCases, teacherRecordsOf, type LoadedTeacherRecord } from './core/records/teacher'
 import { loadTeacherTemplate } from './core/drafting/template'
@@ -20,7 +21,7 @@ import { confirmHeardExams, setExamDraft } from './review-model'
 import { SignReview } from './SignReview'
 import { PostureTool } from './PostureTool'
 import { uiError } from './core/onboarding/ui'
-import { deductPrescription, listHerbs, loadHerbUnits, matchPrescriptionToInventory, parsePrescriptionDose, prescriptionStockNotes, reversePrescription } from './core/herbs'
+import { prescriptionStockNotes } from './core/herbs'
 import './newui.css'
 
 // V2-16 面诊进行中（02）：选学生 → 老师说一段、智能体拆进望闻问切四格 → 说完了看草稿。
@@ -61,6 +62,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
   const [editingExam, setEditingExam] = useState<ExamKey | null>(null)
   const [examText, setExamText] = useState('')
   const [status, setStatus] = useState('')
+  const [postSignNotice, setPostSignNotice] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [comparison, setComparison] = useState<ObservationNote>(null)
@@ -84,7 +86,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
       const [rows, time] = await Promise.all([teacherRecordsOf(store, student), heavenNow(store)])
       const next = startInPersonEncounter({ teacher: identity.publicKey, student, heaven: heavenStampOf(time) })
       setRecords(rows); setPrevious(rows.at(0) ?? null); setEncounter(next); setHeaven(time); setDraft(null)
-      setMaterialNote([]); setComparison(null); setUtterance(''); setStatus(''); setPhase('dictate')
+      setMaterialNote([]); setComparison(null); setUtterance(''); setStatus(''); setPostSignNotice(''); setPhase('dictate')
       await saveInPersonDraft(store, next)
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
@@ -190,23 +192,14 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
       await sendInPersonRecord(store, sendEnvelope, encounter.student, payload)
     }
     try {
-      const signed = await signAndHandoverInPerson({ encounter: final, privateKey: identity.privateKey, send: sendRecord, store, draft,
-        beforeSend: async event => {
-          const prescription = final.plan.prescription.value
-          if (!prescription?.items.length) return
-          const [herbs, units] = await Promise.all([listHerbs(store), loadHerbUnits(store)])
-          const lines = matchPrescriptionToInventory(prescription.items.map(item => parsePrescriptionDose(item.herb, item.dose)), herbs, units)
-          const result = await deductPrescription(store, lines, event.id, 'in-person-sign-' + event.id, { units })
-          if (result.shortages.length) throw Error('库存不足，整张方子都未扣：' + result.shortages.map(item => `${item.herb}差 ${item.missing}${item.unit}`).join('、') + '。请补充库存后再签字。')
-          return async () => { await reversePrescription(store, event.id, 'sign-send-failed-' + event.id) }
-        },
-      })
+      const { signed, inventoryNotice } = await signAndHandoverInPersonWithHerbs({ encounter: final, privateKey: identity.privateKey, send: sendRecord, store, draft })
       try {
         await recordSignedObservation(store, {
           id: signed.id, student: final.student, teacher: identity.publicKey, at: new Date(),
           teacherMinutes: 0, consultations: 1, teacherNote: chosen ?? null, report: null,
         })
       } catch { /* 观察记录暂未保存不影响已交还病历 */ }
+      setPostSignNotice(inventoryNotice ?? '')
       setPhase('sent')
     } catch (cause) { throw cause }
   }
@@ -215,6 +208,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
     return <div className="nl-shell"><div className="nl-page nl-signed">
       <h1>已签字交还</h1>
       <p className="nl-quiet">签名病历已发给学生。照片与代录内容仍在本机，按保留期限统一清理。</p>
+      {postSignNotice && <p role="status" className="nl-quiet">{postSignNotice}</p>}
       <button type="button" className="nl-primary" onClick={onExit}>返回今天</button>
     </div></div>
   }
