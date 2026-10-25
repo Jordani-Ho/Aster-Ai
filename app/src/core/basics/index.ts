@@ -177,8 +177,9 @@ export async function refreshProfile(store: LocalStore, now: Date = new Date()):
     profile.age = field(ageAt(basics.birthDate, localDay(now)))
     profile.bazi = field(await shichenBazi(basics.birthDate, basics.birthShichen ?? null, basics.city ?? null))
   } else {
-    profile.age = current.age
-    profile.bazi = current.bazi
+    // 没有出生日期就不推算：旧 profile 里存过的年龄、八字也不再带给老师（Codex 审核 #67）。
+    profile.age = { value: null, source: 'unknown' }
+    profile.bazi = { value: null, source: 'unknown' }
   }
   await saveProfile(store, profile)
   return profile

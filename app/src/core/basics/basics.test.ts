@@ -102,6 +102,22 @@ describe('V2-23 保存、门槛与问诊', () => {
     expect(profile.city.value).toBe('北京市')
   })
 
+  it('老用户旧 profile 里存着年龄和八字、但没有出生日期：刷新后都清掉，不带给老师', async () => {
+    const store = await open()
+    const old = emptyProfile()
+    old.alias = { value: '合成老用户', source: 'student' }
+    old.age = { value: 40, source: 'student' }
+    old.bazi = { value: { year: '甲子', month: '乙丑', day: '丙寅', hour: null, flags: [] }, source: 'student' }
+    old.city = { value: '北京市', source: 'student' }
+    await saveProfile(store, old)
+    const profile = await refreshProfile(store, NOW)
+    expect(profile.age.value).toBe(null)
+    expect(profile.bazi.value).toBe(null)
+    expect(profile.alias.value).toBe('合成老用户')
+    expect(profile.city.value).toBe('北京市')
+    expect((await loadProfile(store)).age.value).toBe(null)
+  })
+
   it('改出生日期或时辰要先确认，确认后留一条修改记录', async () => {
     const store = await open()
     await saveBasics(store, { ...FULL, birthShichen: '午' }, { now: NOW })
