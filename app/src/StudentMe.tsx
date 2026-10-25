@@ -130,7 +130,7 @@ export function StudentMe({ store, identity, family, onSwitch, venue, ledger, st
       </button>
     </section>
 
-    {onOpenBasics && <button type="button" className="nl-card me-setting-row" onClick={onOpenBasics}>
+    {onOpenBasics && <button type="button" className="nl-card me-basics-row" onClick={onOpenBasics}>
       <span className="me-row-main"><strong>基础信息</strong><span>出生日期、居住城市、病史、作息</span></span>
       <span className="ts-chevron">›</span>
     </button>}
