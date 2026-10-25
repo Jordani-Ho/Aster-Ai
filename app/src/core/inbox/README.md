@@ -9,6 +9,7 @@
 - `records.request` / `records.pull` / `records.backup`（V2-05 互为备份）→ 见 `core/records/README.md`：学生请老师回发记录、老师请学生回发自己签的病历、以及两个方向的回包。
 - `reidentify.request` / `reidentify.confirm` / `reidentify.reject`（V2-07 换手机认回）→ 见 `core/reidentify/README.md`：请求只进老师端待确认区；确认只写“旧公钥 → 新公钥”关系，不改其它；拒绝只发作废通知、不发记录。
 - `ledger.*` → `createLedgerSync().receive`；不认识的类型丢弃。
+- `appointment.*` → V2-25 的 `createAppointmentInbox()`：端到端加密传递邀约/回复/确认，按 offerId 幂等写入双方本机。
 
 ## 我的老师白名单
 

@@ -149,6 +149,7 @@ export interface InboxOptions {
   ledger?: InboxLedger
   send?: SendEnvelope
   now?: () => Date
+  appointments?: { receive(message: Message): Promise<void> }
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -878,6 +879,7 @@ export function createInbox(options: InboxOptions) {
         return
       }
       if (type.startsWith('ledger.') && options.ledger) await options.ledger.receive(message)
+      if (type.startsWith('appointment.') && options.appointments) await options.appointments.receive(message)
       // 不认识的类型丢弃。
     },
   }

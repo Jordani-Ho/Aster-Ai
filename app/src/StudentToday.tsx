@@ -16,6 +16,9 @@ import { seasonalTexts } from '../../domain/tcm/seasonal'
 import { loadTeachers } from './core/inbox'
 import { listIdentityLinks, oldKeysFor } from './core/identity/links'
 import { MemberSwitcher } from './MemberSwitcher'
+import { listAppointments, replyToAppointment, type Appointment } from './core/appointments'
+import type { SendEnvelope } from './core/inbox'
+import { formatAppointmentTime } from './core/schedule/appointments'
 import { TongueCapture } from './TongueCapture'
 import { DailyMirrorCard } from './DailyMirrorCard'
 import './newui.css'
@@ -38,6 +41,7 @@ export interface StudentTodayProps {
   onConsult: () => void
   onHomework: () => void
   onCheckedIn: () => void
+  sendEnvelope?: SendEnvelope
 }
 
 interface TodayRow { homeworkId: string; title: string; note: string; done: boolean }
@@ -52,8 +56,8 @@ function greeting(now: Date): string {
 }
 
 export function StudentToday({
-  store, modelStore, settingsStore, llm, teacher, teacherCall, teacherName,
-  member, family = [], active = 0, onSwitch, onConsult, onHomework, onCheckedIn,
+  store, modelStore, settingsStore, identity, llm, teacher, teacherCall, teacherName,
+  member, family = [], active = 0, onSwitch, onConsult, onHomework, onCheckedIn, sendEnvelope,
 }: StudentTodayProps) {
   const [now, setNow] = useState(() => new Date())
   const [heaven, setHeaven] = useState<HeavenTime | null>(null)
@@ -68,6 +72,8 @@ export function StudentToday({
   // V2-28：舌象保存提示只出现在“照镜子”卡里；打卡提示仍留在“今日作业”。
   const [mirrorStatus, setMirrorStatus] = useState('')
   const [error, setError] = useState('')
+  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [appointmentBusy, setAppointmentBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   // 刚拍完的舌象不能被“读本机旧记录”的异步结果覆盖（CI 上两者会抢）。
   const captured = useRef(false)
@@ -143,6 +149,15 @@ export function StudentToday({
 
   useEffect(() => () => { if (cropUrl) URL.revokeObjectURL(cropUrl) }, [cropUrl])
 
+  useEffect(() => {
+    let cancelled = false
+    const refresh = () => { void listAppointments(store).then(rows => { if (!cancelled) setAppointments(rows) }).catch(() => {}) }
+    refresh()
+    const timer = setInterval(() => { refresh(); setNow(new Date()) }, 15_000)
+    window.addEventListener('aster:data-changed', refresh); window.addEventListener('focus', refresh)
+    return () => { cancelled = true; clearInterval(timer); window.removeEventListener('aster:data-changed', refresh); window.removeEventListener('focus', refresh) }
+  }, [store])
+
   const rows: TodayRow[] = []
   for (const item of assignments) {
     let scheduled
@@ -162,6 +177,8 @@ export function StudentToday({
   const planLine = plan ? (plan.points[0] ?? plan.constitution) : seasonal ? `${seasonal.living} ${seasonal.diet}` : ''
   const greetingName = alias.trim() === '' ? '' : '，' + alias.trim()
   const planSource = plan ? `来自${teacherCall || teacherName || '老师'}给您的方案` : '没有老师给的方案，这是通用的节气建议'
+  const ownAppointments = appointments.filter(row => row.student === identity.publicKey && ['offered', 'accepted', 'confirmed'].includes(row.status)
+    && (row.status === 'offered' ? row.expiresAt > +now : Date.parse(row.slotStart) > +now))
 
   const toggleCheck = async (homeworkId: string) => {
     if (busy) return
@@ -185,6 +202,32 @@ export function StudentToday({
       <p className="nl-jieqi">{heaven ? [formatHeavenTime(heaven), heaven.jieqi].filter(Boolean).join(' · ') : '正在算天时…'}</p>
       <h2>{planLine || '今天先照照镜子，做一件安排好的事。'}</h2>
       <p>{planSource}</p>
+    </section>
+
+    <section className="nl-card" aria-label="老师邀约">
+      <div className="nl-top"><h2>老师邀约</h2><span className="nl-meta">{ownAppointments.length} 条</span></div>
+      {ownAppointments.length === 0 && <p className="nl-empty">老师有合适的面诊时间时，会在这里邀请您。</p>}
+      {ownAppointments.map(item => <div className="nl-appointment" key={item.offerId}>
+        <strong>{item.status === 'confirmed' ? '已确认面诊' : item.status === 'accepted' ? '已回复，等老师确认' : '老师请您来面诊'}</strong>
+        <p>{formatAppointmentTime(item.slotStart, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', item.timezone)} · {item.minutes} 分钟</p>
+        {item.status === 'offered' && <>
+          <p className="nl-quiet">还剩 {Math.max(0, Math.ceil((item.expiresAt - +now) / 60_000))} 分钟回复</p>
+          <div className="nl-actions">
+            <button type="button" className="nl-primary" disabled={appointmentBusy || !sendEnvelope} onClick={() => {
+              if (!sendEnvelope) return
+              setAppointmentBusy(true)
+              void replyToAppointment({ store, identity, offerId: item.offerId, response: 'accept', send: sendEnvelope }).then(() => listAppointments(store).then(setAppointments)).catch(cause => setError(cause instanceof Error ? cause.message : '回复没有发出，请重试。')).finally(() => setAppointmentBusy(false))
+            }}>接受</button>
+            <button type="button" className="nl-link-button" disabled={appointmentBusy || !sendEnvelope} onClick={() => {
+              if (!sendEnvelope) return
+              setAppointmentBusy(true)
+              void replyToAppointment({ store, identity, offerId: item.offerId, response: 'decline', send: sendEnvelope }).then(() => listAppointments(store).then(setAppointments)).catch(cause => setError(cause instanceof Error ? cause.message : '回复没有发出，请重试。')).finally(() => setAppointmentBusy(false))
+            }}>这次不约</button>
+          </div>
+        </>}
+        {item.status === 'accepted' && <p className="nl-quiet">老师正在确认时段容量。</p>}
+      </div>)}
+      {error && <p role="alert" className="nl-danger-strong">{error}</p>}
     </section>
 
     <section className="nl-card" aria-label="照镜子">

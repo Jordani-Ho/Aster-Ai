@@ -3,6 +3,7 @@ import { actors } from './actors.mjs'
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { Page } from '@playwright/test'
+import type { Envelope } from '../app/src/core/transport'
 // 普通问诊在本地正午附近运行，避开子时归前一天；不改真实时间，保留网关鉴权窗口。
 // 凌晨有效日另由固定 UTC 00:30 的 phone.browser 回归覆盖。
 const offset = new Date().getUTCHours() - 12
@@ -220,6 +221,54 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   const packages=(await stored(teacher,'consult-package')).map((row:any)=>row.value)
   const followup=packages.find((value:any)=>Array.isArray(value.history)&&value.history.length===1)??packages[0]
   expect(followup.history).toHaveLength(1);expect(JSON.parse(followup.history[0]).id).toBe(records[0].key)
+})
+
+test('V2-25 两台设备经真实中继完成邀约、接受、确认并显示在老师今天页', async ({ people }) => {
+  test.setTimeout(120000)
+  const teacher = people.teacher.page, student = people.student.page
+  await role(teacher, '老师'); await role(student, '学生')
+  const offer = await teacher.evaluate(async ({ student, relayUrl }) => {
+    const storeModule = '/src/core/store/index.ts', transportModule = '/src/core/transport/index.ts'
+    const groundworkModule = '/src/core/hall/groundwork.ts', scheduleModule = '/src/core/schedule/appointments.ts'
+    const appointmentModule = '/src/core/appointments/index.ts'
+    const { resumeStore } = await import(storeModule)
+    const { createTransport } = await import(transportModule)
+    const { loadGroundwork, saveGroundwork } = await import(groundworkModule)
+    const { appointmentSlots } = await import(scheduleModule)
+    const { sendAppointmentOffer } = await import(appointmentModule)
+    const session = await resumeStore()
+    let readyResolve!: () => void, readyReject!: (reason: Error) => void
+    const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject })
+    const timeout = setTimeout(() => readyReject(new Error('temporary appointment relay did not connect')), 20000)
+    const transport = createTransport({ privateKey: session.identity.privateKey, relays: [relayUrl], onMessage: () => {},
+      onStatus: (status: 'connecting' | 'ready' | 'offline' | 'rejected' | 'invalid-message') => { if (status === 'ready') readyResolve(); if (status === 'rejected') readyReject(new Error('temporary appointment relay rejected')) } })
+    transport.start()
+    try {
+      await ready
+      clearTimeout(timeout)
+      const groundwork = await loadGroundwork(session.store)
+      groundwork.schedule.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+      groundwork.schedule.duration = 30; groundwork.schedule.capacity = 3
+      groundwork.schedule.week = Object.fromEntries(Array.from({ length: 7 }, (_, day) => [String(day), [{ start: '00:00', end: '23:30' }]]))
+      groundwork.schedule.exceptions = []
+      groundwork.invitation = { mode: 'review', afterDays: 14 }
+      await saveGroundwork(session.store, groundwork)
+      const now = new Date()
+      const slot = appointmentSlots(groundwork.schedule, { now, days: 1 })[0]
+      if (!slot) throw new Error('no same-day synthetic appointment slot')
+      const appointment = await sendAppointmentOffer({ store: session.store, identity: session.identity, student, slot, now,
+        send: async (recipient: string, envelope: Envelope) => { await transport.send(recipient, envelope) } })
+      return { offerId: appointment.offerId, slotStart: appointment.slotStart }
+    } finally { clearTimeout(timeout); transport.close(); session.store.close(); session.identity.privateKey.fill(0) }
+  }, { student: actors.student.pubkey, relayUrl: runtime.relayUrl })
+
+  const invitation = student.locator('.nl-appointment').filter({ hasText: '老师请您来面诊' })
+  await expect(invitation).toBeVisible({ timeout: 30000 })
+  await invitation.getByRole('button', { name: '接受', exact: true }).click()
+  await expect(student.locator('.nl-appointment').filter({ hasText: '已确认面诊' })).toBeVisible({ timeout: 30000 })
+  await expect.poll(async () => (await stored(teacher, 'appointments')).find((row: any) => row.key === offer.offerId)?.value.status, { timeout: 30000 }).toBe('confirmed')
+  const todayAppointments = teacher.getByLabel('今天的预约')
+  await expect(todayAppointments).toContainText('30 分钟')
 })
 
 test('V2-33 两台设备经真实中继传库存快照，老师核对页可见且 Encounter 不含快照', async ({ people }) => {

@@ -9,6 +9,8 @@ import { TemplateStudio } from './TemplateStudio'
 import './groundwork.css'
 import { HerbLibrary } from './HerbLibrary'
 import { listHerbs } from './core/herbs'
+import { appointmentsAffectedBySchedule, type Appointment } from './core/appointments'
+import { listTeacherRecords } from './core/records/teacher'
 
 type Item = keyof typeof GROUNDWORK_ITEMS
 const keys = Object.keys(GROUNDWORK_ITEMS) as Item[]
@@ -17,6 +19,7 @@ export function HallGroundwork({ store, onReady, onDone }: { store: LocalStore; 
   const [days, setDays] = useState(90), [error, setError] = useState(''), [busy, setBusy] = useState(false), [notice, setNotice] = useState('')
   const [herbOpen, setHerbOpen] = useState(false)
   const [edited, setEdited] = useState(false)
+  const [scheduleConflicts, setScheduleConflicts] = useState<{ value: Groundwork; rows: Appointment[]; names: Record<string, string> } | null>(null)
   const refresh = async (advance = false) => {
     const status = await groundworkStatus(store)
     setValue(status.value); setMissing(status.missing); onReady?.(!status.missing.length)
@@ -27,10 +30,23 @@ export function HallGroundwork({ store, onReady, onDone }: { store: LocalStore; 
     if (!active) return
     setValue(status.value); setMissing(status.missing); setDays(retention); setItem(keys.find(key => status.missing.includes(GROUNDWORK_ITEMS[key])) ?? 'model'); onReady?.(!status.missing.length)
   })().catch(cause => { if (active) setError(`读取失败：${cause.message}`) }); return () => { active = false } }, [store])
-  const persist = async (key: Item, candidate = value) => {
+  const persist = async (key: Item, candidate = value, keepAppointments = false) => {
     if (!candidate) return
     setBusy(true); setError(''); setNotice('')
     try {
+      if (key === 'schedule' && !keepAppointments) {
+        const rows = await appointmentsAffectedBySchedule(store, candidate.schedule)
+        if (rows.length) {
+          const records = await listTeacherRecords(store), names: Record<string, string> = {}
+          for (const record of records) {
+            const alias = record.encounter.profile.alias.value
+            if (typeof alias === 'string' && alias.trim()) names[record.student] = alias.trim()
+          }
+          setScheduleConflicts({ value: candidate, rows, names })
+          setNotice('排班改动会影响已确认预约，请先确认是否保留。')
+          return
+        }
+      }
       if (key === 'templates') {
         let rows = await loadTemplates(store)
         for (const type of TEMPLATE_TYPES) if (!rows.some(row => row.type === type && row.status === 'active')) {
@@ -47,7 +63,7 @@ export function HallGroundwork({ store, onReady, onDone }: { store: LocalStore; 
       if (key === 'herbs' && next.herbs === 'pending') throw Error('先录入至少一味药材，或选择“不备药”')
       const checked = [...new Set([...next.checked, key])]
       await saveGroundwork(store, { ...next, checked })
-      await refresh(true); setEdited(false); setNotice('已保存。'); window.dispatchEvent(new Event('aster:data-changed'))
+      setScheduleConflicts(null); await refresh(true); setEdited(false); setNotice('已保存。'); window.dispatchEvent(new Event('aster:data-changed'))
     } catch (cause) { setError(`没保存成功：${cause instanceof Error ? cause.message : '本机存储不可用'}`); onReady?.(false) }
     finally { setBusy(false) }
   }
@@ -87,11 +103,17 @@ export function HallGroundwork({ store, onReady, onDone }: { store: LocalStore; 
         <button type="button" onClick={() => patch({ schedule: { ...schedule, exceptions: [...schedule.exceptions, { date: '', kind: 'off' }] } })}>添加日期例外</button>
       </details>
       <button type="button" onClick={() => patch({ schedule: defaultSchedule() })}>恢复默认排班</button>
+      {scheduleConflicts && item === 'schedule' && <section className="nl-card" aria-label="受影响的预约">
+        <h4>这项改动会影响 {scheduleConflicts.rows.length} 位学生</h4>
+        <ul>{scheduleConflicts.rows.map(row => <li key={row.offerId}>{scheduleConflicts.names[row.student] ?? `学生 ${row.student.slice(0, 6)}`} · {row.slotStart.replace('T', ' ').slice(0, 16)}</li>)}</ul>
+        <p>确认后保留已确认预约，再保存新的排班。</p>
+        <button type="button" className="nl-primary" disabled={busy} onClick={() => void persist('schedule', scheduleConflicts.value, true)}>保留预约并保存排班</button>
+      </section>}
     </>}
     {item === 'invitation' && <>
       <label>邀约怎么发<select value={value.invitation.mode} onChange={e => patch({ invitation: { ...value.invitation, mode: e.target.value as 'auto' | 'review' } })}><option value="review">老师过目后再发</option><option value="auto">自动邀约</option></select></label>
       <label>多久没来该请了（天）<input type="number" min="1" max="3650" value={value.invitation.afterDays} onChange={e => patch({ invitation: { ...value.invitation, afterDays: Number(e.target.value) } })} /></label>
-      <p className="nl-quiet">这里先定方式。邀约会在排班与预约功能接好后执行。</p>
+      <p className="nl-quiet">老师智能体每天按这个方式准备面诊邀约；排班和预约变更会在发出前核对。</p>
     </>}
     {item === 'herbs' && <>
       <label><input type="radio" name="herbs" checked={value.herbs === 'none'} onChange={() => patch({ herbs: 'none' })} />不备药</label>
