@@ -59,6 +59,10 @@ if (scene === 'manage') {
 
 Object.assign(window, {
   __opening: {
+    failNextSave: () => {
+      const put = session.store.put.bind(session.store)
+      session.store.put = async () => { session.store.put = put; throw Error('SYNTHETIC_DISK_FULL') }
+    },
     addFirstStudent: async () => {
       await rememberTeacherStudent(session.store, 'a'.repeat(64))
       window.dispatchEvent(new Event('aster:data-changed'))

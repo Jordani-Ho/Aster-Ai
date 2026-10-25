@@ -8,9 +8,11 @@ await server.listen()
 const browser = await chromium.launch({ headless: true })
 
 async function open(scene) {
-  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, permissions: ['clipboard-read', 'clipboard-write'] })
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, permissions: ['clipboard-read', 'clipboard-write'], ...(scene === 'student' ? { timezoneId: 'UTC' } : {}) })
   await context.addInitScript(() => { window.__shared = null; if (navigator.share) return; Object.defineProperty(navigator, 'share', { configurable: true, value: async data => { window.__shared = data } }) })
   const page = await context.newPage()
+  // 子时的“今天”归前一天；固定在边界内，确保合成作业与页面使用同一有效日。
+  if (scene === 'student') await page.clock.setFixedTime(new Date('2026-10-25T00:30:00Z'))
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await page.route('**/chat/completions', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '合成模型回答' } }] }) }))
@@ -98,6 +100,9 @@ try {
     await expect(page.getByText('合成阿慈老师邀请你', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: '就用这个名字', exact: true }).click()
     await expect(page.getByText('✓ 模型已接好', { exact: true })).toBeVisible()
+    for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) {
+      await page.getByRole('button', { name: '就这样，保存' + label, exact: true }).click()
+    }
     await page.getByRole('button', { name: '开馆', exact: true }).click()
     await expect(page.getByRole('heading', { name: '请第一位学生进来', exact: true })).toBeVisible()
     await page.locator('details.op-link-details > summary').click()
