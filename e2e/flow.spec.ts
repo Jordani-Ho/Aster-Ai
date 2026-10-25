@@ -229,7 +229,7 @@ test('V2-33 两台设备经真实中继传库存快照，老师核对页可见�
   await role(teacher, '老师'); await role(student, '学生')
 
   await studentConsult(student)
-  await student.getByRole('button', { name: '整理家里的药 ›', exact: true }).click()
+  await student.getByRole('button', { name: '整理家里的药材 ›', exact: true }).click()
   await expect(student.getByRole('heading', { name: '家里的药', exact: true })).toBeVisible()
   await student.getByLabel('药材名称', { exact: true }).fill('黄芪')
   await student.getByRole('button', { name: '添加药材', exact: true }).click()
