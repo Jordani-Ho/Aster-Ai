@@ -17,7 +17,8 @@ import { priorMaterials } from './core/drafting/materials'
 import { reviseEncounter } from './core/drafting/revise'
 import { TonguePair } from './TonguePair'
 import { TeacherCarePlan } from './TeacherCarePlan'
-import { normalizeHerbName } from './core/herbs'
+import { assessPrescriptionStock, DEFAULT_HERB_UNITS, loadHerbUnits, type HerbUnits, type SharedHomeHerb } from './core/herbs'
+import { loadTeacherHerbSnapshot } from './core/herbs/snapshots'
 import { StudentPostureReview } from './PostureAtHome'
 import { applyPostureMetrics, loadPostureMetrics, type PostureMetric } from './core/posture'
 import { parseTongueAbstract, type TongueAbstract } from '../../domain/tcm/tongue'
@@ -68,6 +69,8 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [postureMetrics, setPostureMetrics] = useState<PostureMetric[]>([])
+  const [herbSnapshot, setHerbSnapshot] = useState<SharedHomeHerb[] | undefined>(consult.homeHerbs)
+  const [herbUnits, setHerbUnits] = useState<HerbUnits>(DEFAULT_HERB_UNITS)
 
   useEffect(() => {
     if (!consult.postures?.length) return
@@ -87,6 +90,11 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
         if (active) setReadiness(state)
         if (!state.ready) { setStatus('附件还在路上，到齐后才能起草。'); return }
         const ready = await assertConsultReady(store, consult.encounter.id)
+        let snapshot = consult.homeHerbs
+        try { snapshot = await loadTeacherHerbSnapshot(store, consult.encounter.id) ?? snapshot } catch { /* 兼容旁车缺失的旧问诊包。 */ }
+        let units = DEFAULT_HERB_UNITS
+        try { units = await loadHerbUnits(store) } catch { /* 换算不可用时，显示库存但不估算。 */ }
+        if (active) { setHerbSnapshot(snapshot); setHerbUnits(units) }
         const book = consultChargeBook(consult)
         const [reports, rows, currentCurrency] = await Promise.all([
           listStudentAdherence(store),
@@ -97,7 +105,7 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
         setAdherence(reports.find(report => report.student === (consult.sender ?? consult.encounter.student)) ?? null)
         setPrevious(rows.at(0) ?? null)
         setCurrency(currentCurrency ?? '')
-        const pkg = draftPackage(ready)
+        const pkg = draftPackage(ready, snapshot)
         let next: Encounter
         if (llm) {
           setStatus('正在整理草稿，老师看过整张卡片后签字发出。')
@@ -209,14 +217,15 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
 
   const alias = managedLabel(consult.encounter.profile)
   const previousPrescription: Prescription | null = previous?.encounter.plan.prescription.value ?? null
-  const homeHerbNames = new Set((consult.homeHerbs ?? []).map(item => normalizeHerbName(item.name)))
+  const homeHerbs = herbSnapshot ?? []
+  const herbLabels = draft.plan.prescription.value ? assessPrescriptionStock(draft.plan.prescription.value.items, homeHerbs, herbUnits) : []
   const extras = <>
     {status && <p role="status" className="nl-quiet">{status}</p>}
     {error && <p role="alert" className="nl-danger-strong">{error}</p>}
-    {consult.homeHerbs?.length ? <section className="nl-card" aria-label="学生家里的药材">
+    {homeHerbs.length ? <section className="nl-card" aria-label="学生家里的药材">
       <h3>学生家里的药</h3>
-      <ul>{consult.homeHerbs.map(item => <li key={item.name}>{item.name} · {item.status}</li>)}</ul>
-      {draft.plan.prescription.value?.items.length ? <><p>这次方子</p><ul>{draft.plan.prescription.value.items.map((item, index) => <li key={`${item.herb}-${index}`}>{item.herb} · {homeHerbNames.has(normalizeHerbName(item.herb)) ? '学生家里有' : '要另抓'}</li>)}</ul></> : null}
+      <ul>{homeHerbs.map(item => <li key={item.name}>{item.name} · {'quantity' in item ? `${item.quantity}${item.unit}` : item.status}</li>)}</ul>
+      {herbLabels.length ? <><p>本方库存对照（不改处方）</p><ul>{herbLabels.map((item, index) => <li key={`${item.herb}-${index}`}>{item.herb} · {item.text}</li>)}</ul></> : null}
     </section> : null}
     <label className="nl-quiet">本次扣费（可选，{currency || '请先在管理页设置钱账币种'}）
       <input type="text" inputMode="decimal" value={charge} onChange={event => setCharge(event.target.value)} placeholder="不填就不扣" />
@@ -245,7 +254,8 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
     alias={alias}
     subtitle="四诊已记好 · 下面是智能体的草稿"
     materialNote={materialNote}
-    homeHerbs={consult.homeHerbs}
+    homeHerbs={homeHerbs}
+    herbUnits={herbUnits}
     previousPrescription={previousPrescription}
     previousEventId={previous?.eventId ?? null}
     comparison={comparison}

@@ -27,7 +27,7 @@ await store.clearScope('f1-') // 删除某位家人的全部记录
 
 V2-04 新增：`money-alias`（老师本机学生称呼，键学生公钥）、`money-drafts`（待恢复原话/待确认草稿，键学生公钥）、`settings/money-currency`（老师所在地币种）。`ledger-index` 与 `ledger-*` 继续保存钱账签名链、异议和待发队列，金额改为最小单位整数并绑定币种；不迁移旧版积分。
 
-V2-24 新增：`herbs`（本机药材与整数最小单位库存）、`herb-ledger`（每次入库、扣减、盘点和冲回流水）、`herb-settings/units`（老师确认的钱、两换算）。老师端与学生端共用相同结构但使用各自本机存储；问诊包只有学生主动选择分享的药材名称和余量状态，不带库存数量。库存余额和流水保持本机，不做旧数据迁移。
+V2-24 新增：`herbs`（本机药材与整数最小单位库存）、`herb-ledger`（每次入库、扣减、盘点和冲回流水）、`herb-settings/units`（老师确认的钱、两换算）。老师端与学生端共用相同结构但使用各自本机存储。V2-33 远程问诊自动携带有数量的家中药材快照；学生端家人与本人共用根库存，库存余额和流水仍只保存在学生本机，不做旧数据迁移。
 
 `kangbi-observations` 记录 id、师生、公历时刻、练习天数、老师分钟数、问诊次数和三方数值/空值。是个人健康观察记录，**长期保留、不进 V2-05 的保留期限清理**（只有计数和评分、没有内容，是将来给康币定值的依据）；不是钱账或已发行康币，生产不写 `kangbi-events`。运营端只调用匿名汇总接口。
 
@@ -67,6 +67,7 @@ V2-24 新增：`herbs`（本机药材与整数最小单位库存）、`herb-ledg
 | `ledger-index` / `ledger-*` | 康币账本索引与每本师生账 `{ledger,notices,conflicts,receipts,pendingDisputes,outbox}` | 单一写入者记账链 |
 | `herbs` / `herb-ledger` | 本机药材与库存流水 `{id,herb,delta,reason,ref,at,balanceAfter,key}` | V2-24：老师与学生各自在本机存；整数 0.1 克或份数；不得硬删有流水的药材 |
 | `herb-settings` | `units` 钱、两换算配置 | V2-24：老师确认；未配置保持 null，不猜数值 |
+| `teacher-herb-snapshots` | `{ encounterId, items }` | V2-33：老师本机按问诊/病历 id 保存学生远程问诊带来的库存快照；独立于签名 `Encounter`，和对应问诊包/签名病历共享保留期限 |
 | `pilot-metrics` | 试点指标 `{idPrefix,durationMs,modificationRate,missingRate,resemblance,homeworkAdherence?}` | 只有数值，无身份/原文 |
 | `student-adherence` | 老师端学生本周坚持率小结（键为学生公钥） | 学生主动上报的数值，无原文 |
 | `family/members` | 家人清单 `{account,alias,relation,gender,birthDate,city,publicKey,privateKey}` | 私钥直接存本机（V2 不再包裹） |

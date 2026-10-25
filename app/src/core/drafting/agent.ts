@@ -25,7 +25,8 @@ export async function draftWithAgent(store: LocalStore, pkg: ConsultPackage, mat
     gather: async () => ({ pkg, materials }),
     inputKey: async (data: { pkg: ConsultPackage; materials: DraftMaterials }) => {
       const { intake, fourExams, profile } = data.pkg.encounter
-      return agentKey([JSON.stringify(canonical({ intake, fourExams, profile }))])
+      const snapshotHash = await agentKey([JSON.stringify(canonical(data.pkg.homeHerbs ?? []))])
+      return agentKey([JSON.stringify(canonical({ intake, fourExams, profile, snapshotHash }))])
     },
     tokens: (data: { pkg: ConsultPackage; materials: DraftMaterials }) => requestTokens(fitDraftMaterials(draftMaterialInput(data.pkg, data.materials, level)).messages),
     run: async (data): Promise<Generated> => {

@@ -2,6 +2,7 @@
 // 由技术合伙人建立；M1-09、M1-10、M1-11、M1-13、M1-14 直接引用，不要重复定义。
 
 import type { FamilyProof } from '../family/proof'
+import type { SharedHomeHerb } from '../herbs'
 import type { HeavenStamp } from '../heaven'
 import type { TongueAbstract } from '../../../../domain/tcm/tongue'
 import type { PeriodObservation } from '../../../../domain/tcm/observation'
@@ -107,6 +108,6 @@ export interface ConsultPackage {
    * 只随传输信封走，不进 Encounter schema，老包没有这个字段照常收。
    */
   postures?: PostureRecord[]
-  /** V2-24：学生主动选择附上的家中药名与余量状态；绝不带数量。 */
-  homeHerbs?: { name: string; status: '够' | '快没了' }[]
+  /** V2-33：远程问诊附带的库存快照，只在问诊包/老师端旁车中，不进入 Encounter。 */
+  homeHerbs?: SharedHomeHerb[]
 }

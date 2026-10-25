@@ -222,6 +222,54 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
   expect(followup.history).toHaveLength(1);expect(JSON.parse(followup.history[0]).id).toBe(records[0].key)
 })
 
+test('V2-33 两台设备经真实中继传库存快照，老师核对页可见且 Encounter 不含快照', async ({ people }) => {
+  test.setTimeout(180000)
+  const teacher = people.teacher.page, student = people.student.page
+  const quote = 'SYNTHETIC_HERB_RELAY_CONSULT'
+  await role(teacher, '老师'); await role(student, '学生')
+
+  await studentConsult(student)
+  await student.getByRole('button', { name: '整理家里的药材 ›', exact: true }).click()
+  await expect(student.getByRole('heading', { name: '家里的药', exact: true })).toBeVisible()
+  await student.getByLabel('药材名称', { exact: true }).fill('黄芪')
+  await student.getByRole('button', { name: '添加药材', exact: true }).click()
+  await expect(student.getByRole('status').filter({ hasText: '已保存。' }).first()).toHaveText('已保存。')
+  await student.getByLabel('黄芪入库数量', { exact: true }).fill('300')
+  await student.getByRole('button', { name: '入库', exact: true }).click()
+  await expect(student.locator('.herb-list li').filter({ hasText: '黄芪' })).toContainText('300 克')
+  await student.getByRole('button', { name: '返回问诊', exact: true }).click()
+
+  await student.getByLabel('按键盘上的🎤说话就行').fill(quote)
+  await student.getByRole('button', { name: '说好了，继续', exact: true }).click()
+  await advanceToCard(student)
+  await student.getByRole('button', { name: '改一改你的话 ›', exact: true }).click()
+  await student.getByLabel('最不舒服的地方（主诉）').fill(quote)
+  await student.getByLabel('现在的情况（现病史）').fill('SYNTHETIC_PRESENT')
+  await student.getByLabel('以前的病（既往史）').fill('SYNTHETIC_HISTORY')
+  await student.getByLabel('在吃的药、过敏').fill('SYNTHETIC_NO_MEDS')
+  await student.getByRole('button', { name: /^发给/ }).click()
+  await expect(student.getByRole('heading', { name: '已发给老师', exact: true })).toBeVisible()
+
+  const inboxRow = teacher.getByRole('button', { name: new RegExp(quote) })
+  await expect(inboxRow).toBeVisible()
+  await inboxRow.click()
+  await expect(teacher.getByRole('heading', { name: /· 核对$/ })).toBeVisible()
+  // 库存在“本次资料”折叠区里；处方每味药旁另有库存对照。
+  await teacher.locator('summary').filter({ hasText: '本次资料' }).click()
+  const stock = teacher.getByRole('region', { name: '学生家里的药材' })
+  await expect(stock).toContainText('黄芪 · 300克')
+
+  const consultations = await stored(teacher, 'consult-package')
+  const received = consultations.map((row: any) => row.value).find((value: any) => value.encounter.intake.chiefComplaint.value === quote)
+  expect(received).toBeTruthy()
+  expect(received.encounter.homeHerbs).toBeUndefined()
+  expect(received.homeHerbs).toEqual([{ name: '黄芪', quantity: 300, unit: '克' }])
+  const sidecars = await stored(teacher, 'teacher-herb-snapshots')
+  expect(sidecars).toHaveLength(1)
+  expect(sidecars[0].key).toBe(received.encounter.id)
+  expect(sidecars[0].value.items).toEqual([{ name: '黄芪', quantity: 300, unit: '克' }])
+})
+
 test('hard: student displays only the valid signature after tampered then valid delivery',async({people})=>{
   const teacher=people.teacher.page,student=people.student.page
   await role(student,'学生')

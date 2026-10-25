@@ -15,6 +15,7 @@ import { localDay } from './core/homework/schedule'
 import { TeacherCarePlan } from './TeacherCarePlan'
 import { PostureTool } from './PostureTool'
 import { loadOwnStorefront, verifyStorefrontEvent, type Storefront } from './core/storefront'
+import { loadTeacherHerbSnapshot } from './core/herbs/snapshots'
 import './newui.css'
 
 // V2-17 老师·学生（06）与一位学生（07）。
@@ -148,6 +149,7 @@ function StudentDetail({ identity, store, llm, send, ledger, row, records, onBac
   const [showAllRecords, setShowAllRecords] = useState(false)
   const [postureOpen, setPostureOpen] = useState(false)
   const [balance, setBalance] = useState<{ text: string; currency: string } | null>(null)
+  const [herbSnapshots, setHerbSnapshots] = useState<Record<string, import('./core/herbs').SharedHomeHerb[] | undefined>>({})
   const report = row.report
   const shownRecords = showAllRecords ? records : records.slice(0, 2)
 
@@ -160,6 +162,14 @@ function StudentDetail({ identity, store, llm, send, ledger, row, records, onBac
     }).catch(() => {})
     return () => { active = false }
   }, [store, row.student])
+
+  useEffect(() => {
+    let active = true
+    void Promise.all(records.map(async record => [record.encounter.id, await loadTeacherHerbSnapshot(store, record.encounter.id)] as const))
+      .then(rows => { if (active) setHerbSnapshots(Object.fromEntries(rows)) })
+      .catch(() => { if (active) setHerbSnapshots({}) })
+    return () => { active = false }
+  }, [store, records])
 
   useEffect(() => {
     let active = true
@@ -228,13 +238,19 @@ function StudentDetail({ identity, store, llm, send, ledger, row, records, onBac
         </div>
         {records.length === 0 && <p className="nl-empty">还没有签字病历。</p>}
         {records.length > 0 && <div className="nl-card ts-records">
-          {shownRecords.map(record => <div className="ts-record" key={record.eventId}>
-            <span className="ts-record-dot" aria-hidden="true" />
-            <div>
-              <strong>{dateLabel(record.encounter.createdAt)} · {visitKind(records, records.indexOf(record))}</strong>
-              <p className="nl-quiet">已签字 · {venued?.displayName || '老师'}老师</p>
+          {shownRecords.map(record => {
+            const snapshot = herbSnapshots[record.encounter.id]
+            return <div className="ts-record" key={record.eventId}>
+              <span className="ts-record-dot" aria-hidden="true" />
+              <div>
+                <strong>{dateLabel(record.encounter.createdAt)} · {visitKind(records, records.indexOf(record))}</strong>
+                <p className="nl-quiet">已签字 · {venued?.displayName || '老师'}老师</p>
+                {snapshot?.length ? <details className="nl-section"><summary>这次问诊的家中药材快照</summary>
+                  <ul>{snapshot.map(item => <li key={item.name}>{item.name} · {'quantity' in item ? `${item.quantity}${item.unit}` : item.status}</li>)}</ul>
+                </details> : null}
+              </div>
             </div>
-          </div>)}
+          })}
         </div>}
       </section>
 

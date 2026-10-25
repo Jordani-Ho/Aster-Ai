@@ -310,7 +310,8 @@ export function buildConsultPackage(
   }
   const unknown = <T,>(): Field<T> => ({ value: null, source: 'unknown' })
   const heaven = options.heaven
-  const homeHerbs = cleanSharedHomeHerbs(options.homeHerbs)
+  let homeHerbs: ConsultPackage['homeHerbs']
+  try { homeHerbs = cleanSharedHomeHerbs(options.homeHerbs) } catch { homeHerbs = undefined }
   if (heaven !== undefined && !isHeavenStamp(heaven)) throw new Error('天时格式无效')
   // V2-32：体态只带关键点、视角、时间与感觉；这里再清洗一次，绝不把图片字节或指标带出手机。
   let postures: PostureRecord[] | undefined

@@ -6,7 +6,7 @@ import { acceptDraftForSigning } from './core/record/sign'
 import { PostureSummary } from './PostureTool'
 import { isLongRecord } from './core/record/fold'
 import { EXAM_LABELS, EXAM_KEYS, type ExamKey } from './four-exams'
-import { normalizeHerbName } from './core/herbs'
+import { assessPrescriptionStock, DEFAULT_HERB_UNITS, type HerbUnits, type SharedHomeHerb } from './core/herbs'
 import {
   changeReasonText, confirmBlock, confirmHeardExams, pendingBlockCount, pendingDraftCount,
   prescriptionChangeReasonNeeded, reviewBlocks, setHomeworkItems, setPrescription, setTextField,
@@ -40,8 +40,9 @@ export interface SignReviewProps {
   subtitle?: string
   /** V2-19：这次起草减了材料时的提示行（不悄悄少带），一行没减就不传。 */
   materialNote?: string[]
-  /** V2-24：学生主动附上的药名和余量状态，只用于老师核对。 */
-  homeHerbs?: { name: string; status: '够' | '快没了' }[]
+  /** V2-33：远程问诊库存旁车；缺省代表面诊，不做对照。 */
+  homeHerbs?: SharedHomeHerb[]
+  herbUnits?: HerbUnits
   /** 上一次签字的方子（改方时比对“去了什么、加了什么”）。 */
   previousPrescription?: Prescription | null
   previousEventId?: string | null
@@ -59,7 +60,7 @@ export interface SignReviewProps {
 
 export function SignReview({
   encounter, alias, subtitle, materialNote, previousPrescription = null, previousEventId = null,
-  comparison = null, onComparisonChange, onSign, onBack, onRevise, extras, postureReview, homeHerbs = [],
+  comparison = null, onComparisonChange, onSign, onBack, onRevise, extras, postureReview, homeHerbs, herbUnits = DEFAULT_HERB_UNITS,
 }: SignReviewProps) {
   const [current, setCurrent] = useState<Encounter>(encounter)
   const [busy, setBusy] = useState(false)
@@ -169,7 +170,7 @@ export function SignReview({
       onCancel={() => setEditing(null)} />
     return <>
       {block.key === 'prescription'
-        ? <PrescriptionBody block={block} diffText={diffText} homeHerbs={homeHerbs} />
+        ? <PrescriptionBody block={block} diffText={diffText} homeHerbs={homeHerbs} herbUnits={herbUnits} />
         : block.key === 'homework'
           ? <HomeworkBody items={block.items} />
           : <TextBody block={block} />}
@@ -267,13 +268,13 @@ function TextBody({ block }: { block: ReviewBlock }) {
   </div>)}</>
 }
 
-function PrescriptionBody({ block, diffText, homeHerbs }: { block: ReviewBlock; diffText: string; homeHerbs: { name: string; status: '够' | '快没了' }[] }) {
+function PrescriptionBody({ block, diffText, homeHerbs, herbUnits }: { block: ReviewBlock; diffText: string; homeHerbs?: SharedHomeHerb[]; herbUnits: HerbUnits }) {
   const value = block.prescription
-  const available = new Set(homeHerbs.map(item => normalizeHerbName(item.name)))
+  const stock = value && homeHerbs !== undefined ? assessPrescriptionStock(value.items, homeHerbs, herbUnits) : []
   return <>
     {!value && <p className="nl-empty">还没有方子。点“改一改”手动填写，或让智能体起草。</p>}
     {value && <>
-      <ul className="nl-herbs">{value.items.map(item => <li key={item.herb + item.dose}>{item.herb} {item.dose}{homeHerbs.length ? <small> · {available.has(normalizeHerbName(item.herb)) ? '学生家里有' : '要另抓'}</small> : null}</li>)}</ul>
+      <ul className="nl-herbs">{value.items.map((item, index) => <li key={item.herb + item.dose}>{item.herb} {item.dose}{homeHerbs !== undefined ? <small> · {stock[index]?.text}</small> : null}</li>)}</ul>
       <p className="nl-quiet">{[value.method, value.days ? '服 ' + value.days + ' 天' : ''].filter(Boolean).join(' · ') || '剂量与煎服法由老师定'}</p>
       {value.changeReason && <p className="nl-quiet">加减理由：{value.changeReason}</p>}
       {diffText && <p className="nl-diff">{diffText}。</p>}

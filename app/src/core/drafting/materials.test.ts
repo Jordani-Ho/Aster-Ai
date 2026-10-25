@@ -111,6 +111,14 @@ describe('V2-19 额度上限与材料裁剪（仅合成资料和模拟模型）'
     expect(result.note.some(line => /相似医案只带了 \d+ 份/.test(line))).toBe(true)
   })
 
+  it('家中药材快照进入不可裁剪的起草材料', async () => {
+    const input = pkg()
+    input.homeHerbs = [{ name: '合成黄芪', quantity: 300, unit: '克' }]
+    const { client, calls } = capture()
+    await draftEncounter(input, { template }, client)
+    expect(payloadOf(calls[0]).homeHerbs).toEqual(input.homeHerbs)
+  })
+
   it('问诊包与模板永远不减：固定材料本身超限也照发，只提示旧病历没带', async () => {
     const long = '长'.repeat(20000)
     const prior = priorMaterials([{ encounter: syntheticEncounter(0) }])
@@ -129,8 +137,8 @@ describe('V2-19 额度上限与材料裁剪（仅合成资料和模拟模型）'
     const list = priorMaterials([{ encounter: older }, { encounter: syntheticEncounter(5) }, { encounter: newer }])
     expect(list.map(item => item.id)).toEqual([older.id, syntheticEncounter(5).id])
     expect(list[0].createdAt > list[1].createdAt).toBe(true)
-    const fit = fitDraftMaterials({ prompt: '合成提示词', encounter: pkg().encounter, template, level: 'record', prior: [list[0]], cases: [] })
+    const fit = fitDraftMaterials({ prompt: '合成提示词', encounter: pkg().encounter, homeHerbs: [], template, level: 'record', prior: [list[0]], cases: [] })
     expect(fit.note).toEqual([])
-    expect(packageOnlyMaterials({ prompt: '合成提示词', encounter: pkg().encounter, template, level: 'record', prior: [list[0]], cases: [] }).note).toEqual(['没参考旧病历和医案'])
+    expect(packageOnlyMaterials({ prompt: '合成提示词', encounter: pkg().encounter, homeHerbs: [], template, level: 'record', prior: [list[0]], cases: [] }).note).toEqual(['没参考旧病历和医案'])
   })
 })

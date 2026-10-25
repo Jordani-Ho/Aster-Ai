@@ -2,7 +2,7 @@ import { expect, it } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { createIdentity } from '../identity'
 import { openStore } from '../store'
-import { adjustHerb, cleanSharedHomeHerbs, createHerb, deductPrescription, deleteHerb, HERB_LEDGER, labelPrescriptionHerbs, listHerbs, loadHerbUnits, lowStockHerbs, matchPrescriptionToInventory, normalizeHerbName, parsePrescriptionDose, prescriptionStockNotes, receiveHerb, reversePrescription, saveHerbUnits, setHerbEnabled, shareHomeHerbs, toSmallestUnit, validateHerbAmount, validateHerbUnit, validateHerbUnits } from './index'
+import { assessPrescriptionStock, adjustHerb, cleanSharedHomeHerbs, createHerb, deductPrescription, deleteHerb, HERB_LEDGER, listHerbs, loadHerbUnits, lowStockHerbs, matchPrescriptionToInventory, normalizeHerbName, parsePrescriptionDose, prescriptionStockNotes, receiveHerb, reversePrescription, saveHerbUnits, setHerbEnabled, snapshotHomeHerbs, studentHerbReminders, toSmallestUnit, validateHerbAmount, validateHerbUnit, validateHerbUnits } from './index'
 
 it('名称全角转半角并去空格；单位、数量、警戒线、换算和 100 千克逐项校验', () => {
   expect(normalizeHerbName('  黄　芪 ')).toBe('黄芪')
@@ -109,20 +109,48 @@ it('签字方作废按原流水冲回一次；有流水的药材不能硬删', a
   } finally { store.close() }
 })
 
-it('学生只分享主动选择的药名和余量状态；老师审方只标家里有或要另抓', async () => {
+it('远程问诊自动附上可核算的数量；老师按每剂标够几剂、差额或另抓', async () => {
   const store = await openStore(createIdentity(), { factory: new IDBFactory() })
   try {
-    const enough = await createHerb(store, { id: 'herb-a', name: '合成家中药', unit: '克', threshold: 5 })
+    const enough = await createHerb(store, { id: 'herb-a', name: '合成家中药', unit: '克', threshold: 50 })
     const low = await createHerb(store, { id: 'herb-b', name: '合成将尽药', unit: '克', threshold: 5 })
+    const unsupported = await createHerb(store, { id: 'herb-c', name: '合成钱药', unit: '钱', threshold: 0 })
+    const disabled = await createHerb(store, { id: 'herb-d', name: '停用药材', unit: '克', threshold: 0 })
     await receiveHerb(store, enough.id, 10, { qianInTenthsGram: null, liangInTenthsGram: null }, 'purchase', 'in-1')
-    await receiveHerb(store, low.id, 5, { qianInTenthsGram: null, liangInTenthsGram: null }, 'purchase', 'in-2')
-    const shared = shareHomeHerbs(await listHerbs(store), [enough.id, low.id])
-    expect(shared).toEqual([{ name: '合成家中药', status: '够' }, { name: '合成将尽药', status: '快没了' }])
-    expect(JSON.stringify(shared)).not.toMatch(/quantity|balance|5|10/)
-    expect(labelPrescriptionHerbs([{ herb: '合成家中药', quantity: 3, unit: '克' }, { herb: '库里没有', quantity: 1, unit: '克' }], shared)).toEqual([
-      { herb: '合成家中药', label: '学生家里有' }, { herb: '库里没有', label: '要另抓' },
+    await receiveHerb(store, low.id, 2, { qianInTenthsGram: null, liangInTenthsGram: null }, 'purchase', 'in-2')
+    await setHerbEnabled(store, disabled.id, false)
+    const snapshot = snapshotHomeHerbs(await listHerbs(store), await loadHerbUnits(store))
+    expect(snapshot).toHaveLength(2)
+    expect(snapshot).toEqual(expect.arrayContaining([{ name: '合成家中药', quantity: 10, unit: '克' }, { name: '合成将尽药', quantity: 2, unit: '克' }]))
+    expect(snapshot.some(item => item.name === unsupported.name || item.name === disabled.name)).toBe(false)
+    expect(assessPrescriptionStock([
+      { herb: '合成家中药', dose: '3克' }, { herb: '库里没有', dose: '1克' }, { herb: '合成将尽药', dose: '3克' },
+    ], snapshot, await loadHerbUnits(store))).toEqual([
+      { herb: '合成家中药', text: '家里有 10 克，够 3 剂', kind: 'enough' },
+      { herb: '库里没有', text: '要另抓 1克', kind: 'buy' },
+      { herb: '合成将尽药', text: '家里不够，差 1 克', kind: 'shortage' },
     ])
+    expect(studentHerbReminders(await listHerbs(store), await loadHerbUnits(store), [{ herb: '合成将尽药', dose: '3克' }])).toContain('合成将尽药不够下一剂，差 1 克')
     expect(parsePrescriptionDose('合成家中药', '3g')).toEqual({ herb: '合成家中药', quantity: 3, unit: '克' })
     expect(() => parsePrescriptionDose('合成家中药', '每次少许')).toThrow('无法识别')
+    expect(cleanSharedHomeHerbs([{ name: '合成旧格式药', status: '够' }])).toEqual([{ name: '合成旧格式药', status: '够' }])
+    expect(cleanSharedHomeHerbs([{ name: '合成新格式药', quantity: 0, unit: '克' }])).toEqual([{ name: '合成新格式药', quantity: 0, unit: '克' }])
+    expect(() => cleanSharedHomeHerbs([{ name: '合成有效药', quantity: 2, unit: '克' }, { name: '合成坏数据', quantity: -1, unit: '克' }])).toThrow()
+  } finally { store.close() }
+})
+
+it('钱、两配置未确认时不发无法计算的余量；配置后按老师换算精确对照', async () => {
+  const store = await openStore(createIdentity(), { factory: new IDBFactory() })
+  try {
+    const herb = await createHerb(store, { id: 'herb-qian', name: '合成钱剂', unit: '钱', threshold: 0 })
+    expect(snapshotHomeHerbs(await listHerbs(store), await loadHerbUnits(store))).toEqual([])
+    await saveHerbUnits(store, { qianInTenthsGram: 35, liangInTenthsGram: 350 })
+    await receiveHerb(store, herb.id, 2, await loadHerbUnits(store), 'purchase', 'qian-in')
+    const snapshot = snapshotHomeHerbs(await listHerbs(store), await loadHerbUnits(store))
+    expect(snapshot).toEqual([{ name: '合成钱剂', quantity: 2, unit: '钱' }])
+    expect(assessPrescriptionStock([{ herb: '合成钱剂', dose: '3.5克' }], snapshot, await loadHerbUnits(store))).toEqual([
+      { herb: '合成钱剂', text: '家里有 7 克，够 2 剂', kind: 'enough' },
+    ])
+    expect(assessPrescriptionStock([{ herb: '合成钱剂', dose: '3.5克' }], snapshot, { qianInTenthsGram: null, liangInTenthsGram: null })[0].kind).toBe('unknown')
   } finally { store.close() }
 })

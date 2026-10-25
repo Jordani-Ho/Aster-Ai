@@ -22,6 +22,8 @@ V2-17：新界面第二批，一页对一张设计稿。`phone.browser.mjs` 场�
 
 V2-20：舌象修复。新增 `e2e/tongue.browser.mjs`，在 **Chromium（华为浏览器 UA，412×915 / 448×924 / 抽样 375，DPR 3）与 WebKit（iPhone 15 Pro，393×852，DPR 3，iPhone UA）** 两个内核上跑：镜子裁剪图 100% 可见（contain、元素按图片宽高比、完整落在框内）、`image/jpg`/大写/空 MIME/长边 6000 图都能送出且请求里是 ≤1600 的 JPEG、模型回复带围栏/说明/0–1000 框/多字段都能解析而乱码失败、1% 面积但短边 160 通过而短边 100 提示靠近、503 一次自动重试成功/连续 503 提示稍后再拍/401 提示检查账户、HEIC 两内核都解不开时给“格式打不开”且不请求模型。非 CI 写两张截图 `docs/screenshots/tongue-mirror-{huawei,iphone}.png`；CI 安装 WebKit 并运行本脚本（`npx playwright install --with-deps chromium webkit`）。`abstractor.browser.mjs` 同步到新文案与 112px 镜子高度。
 
+V2-33：`flow.spec.ts` 经两份独立浏览器上下文与真实本机中继，学生先在本机药材库入库、再发远程问诊，老师核对页收到并显示带数量的快照；同时断言快照按病历 id 独立保存且不进入 `Encounter`。测试只用合成学生、合成库存与本地模型替身，不访问真实模型。
+
 这里只运行合成身份和资料。M1-15a 合并后接入完整九步问诊与四条硬性验收，使用真实编译中继、真实网关和 Chromium；模型与推送为本地替身，不需要 API Key。
 
 ## 一条命令
