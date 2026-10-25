@@ -193,7 +193,7 @@ async function studentWorkspace(kind: 'consult' | 'records' | 'me', sstore = tea
   const profile = await loadProfile(sstore)
   await saveProfile(sstore, { ...profile, alias: { value: '合成小王', source: 'student' }, city: { value: '北京市', source: 'student' } })
   // V2-23：已有学生默认填好基础信息；newstudent 场景故意不填，验证第一次问诊前的门槛。
-  if (basics) await saveBasics(sstore, { alias: '合成小王', gender: 'male', birthDate: '1990-05-06', city: '北京市' })
+  if (basics) await saveBasics(sstore, { alias: '合成小王', gender: 'male', birthDate: '1990-05-06', birthShichen: null, birthPlace: '北京市', city: '北京市', history: '无', meds: '无', allergies: '无', routine: { wake: '07:00', sleep: '23:00' } })
   await sstore.put('care-plans', teacher.identity.publicKey, {
     constitution: '平和质', points: ['霜降养脾胃。早饭吃温热的，别空腹喝冷饮。'], avoid: ['生冷'], updatedAt: new Date().toISOString(), version: 1,
   })
@@ -278,7 +278,7 @@ async function seedStudentHome() {
   await saveActiveTeacher(teacher.store, teacher.identity.publicKey, [teacher.identity.publicKey])
   const profile = await loadProfile(teacher.store)
   await saveProfile(teacher.store, { ...profile, alias: { value: '合成小王', source: 'student' }, city: { value: '北京市', source: 'student' } })
-  await saveBasics(teacher.store, { alias: '合成小王', gender: 'male', birthDate: '1990-05-06', city: '北京市' })
+  await saveBasics(teacher.store, { alias: '合成小王', gender: 'male', birthDate: '1990-05-06', birthShichen: null, birthPlace: '北京市', city: '北京市', history: '无', meds: '无', allergies: '无', routine: { wake: '07:00', sleep: '23:00' } })
   await teacher.store.put('care-plans', teacher.identity.publicKey, {
     constitution: '平和质', points: ['霜降养脾胃。早饭吃温热的，别空腹喝冷饮。'], avoid: ['生冷'], updatedAt: new Date().toISOString(), version: 1,
   })

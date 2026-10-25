@@ -35,7 +35,7 @@ if (!(await loadOwnStorefront(aci.store, aci.identity)).current) {
 await addTeacher(student.store, aci.identity.publicKey)
 await addTeacher(student.store, huang.identity.publicKey)
 // V2-23：已在用的学生，基础信息已填好。
-await saveBasics(student.store, { alias: '合成小王', gender: 'male', birthDate: '1990-05-06', city: '北京市' })
+await saveBasics(student.store, { alias: '合成小王', gender: 'male', birthDate: '1990-05-06', birthShichen: null, birthPlace: '北京市', city: '北京市', history: '无', meds: '无', allergies: '无', routine: { wake: '07:00', sleep: '23:00' } })
 await student.store.put('settings', 'role', { role: 'student' })
 if (!(await loadCachedStorefront(student.store, aci.identity.publicKey))) {
   await saveReceivedStorefront(student.store, makeStorefrontEvent(aci.identity, ACI, 1000), aci.identity.publicKey)

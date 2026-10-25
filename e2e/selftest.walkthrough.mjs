@@ -375,6 +375,11 @@ async function fillBasicsIfAsked(page) {
   if (!(await birth.inputValue())) await birth.fill('1990-05-06')
   const city = page.getByLabel('居住城市', { exact: true })
   if (!(await city.inputValue())) await city.selectOption('北京市')
+  await page.getByLabel('出生时辰', { exact: true }).selectOption('unknown')
+  await page.getByLabel('出生地', { exact: true }).selectOption('北京市')
+  for (const label of ['既往病史', '在用药', '过敏']) await page.getByLabel(label, { exact: true }).fill('无')
+  await page.getByLabel('平时几点起', { exact: true }).fill('07:00')
+  await page.getByLabel('平时几点睡', { exact: true }).fill('23:00')
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await speak.or(home).first().waitFor()
 }

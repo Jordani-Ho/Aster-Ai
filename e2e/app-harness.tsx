@@ -9,7 +9,7 @@ import { saveBasics } from '../app/src/core/basics'
 const { store } = await bootstrapIdentity()
 await store.put('settings', 'role', { role: 'student' })
 // V2-23：这里验收的是“不填 Key 进首页”，基础信息先填好（进馆门槛另由 phone.browser 验收）。
-await saveBasics(store, { alias: '合成学生', gender: 'male', birthDate: '1990-05-06', city: '北京市' })
+await saveBasics(store, { alias: '合成小王', gender: 'male', birthDate: '1990-05-06', birthShichen: null, birthPlace: '北京市', city: '北京市', history: '无', meds: '无', allergies: '无', routine: { wake: '07:00', sleep: '23:00' } })
 
 Object.assign(window, {
   __v228: async () => ({

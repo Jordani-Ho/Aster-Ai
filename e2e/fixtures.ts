@@ -72,7 +72,7 @@ export const test=base.extend<{people:{teacher:Person;student:Person};seedLedger
    const link=await openCommunity(teacher.page)
    await student.page.goto(link);await expect(student.page.getByRole('button',{name:'开始使用',exact:true})).toBeVisible();await student.page.getByRole('button',{name:'开始使用',exact:true}).click();await connectModel(student.page);await expect(student.page.getByRole('heading',{name:'进馆：先填基础信息',exact:true})).toBeVisible()
    // V2-23：合成学生先把基础信息填好（门槛本身由 phone.browser 的 newstudent 场景验收）。
-   await student.page.evaluate(async()=>{const s='/src/core/store/index.ts',b='/src/core/basics/index.ts',{resumeStore}=await import(s),{saveBasics}=await import(b),session=await resumeStore();try{await saveBasics(session.store,{alias:'合成小王',gender:'male',birthDate:'1990-05-06',city:'北京市'})}finally{session.store.close();session.identity.privateKey.fill(0)}});await student.page.reload();await expect(student.page.locator('[data-page=student-today]')).toBeVisible()
+   await student.page.evaluate(async()=>{const s='/src/core/store/index.ts',b='/src/core/basics/index.ts',{resumeStore}=await import(s),{saveBasics}=await import(b),session=await resumeStore();try{await saveBasics(session.store,{alias:'合成小王',gender:'male',birthDate:'1990-05-06',birthShichen:null,birthPlace:'北京市',city:'北京市',history:'无',meds:'无',allergies:'无',routine:{wake:'07:00',sleep:'23:00'}})}finally{session.store.close();session.identity.privateKey.fill(0)}});await student.page.reload();await expect(student.page.locator('[data-page=student-today]')).toBeVisible()
    // 学生连上社区后老师才认得他；建馆引导自动结束，进入正常首页。
    await expect(teacher.page.getByRole('heading',{name:'今天',exact:true})).toBeVisible()
    setActors(await actualActor(teacher.page),await actualActor(student.page))

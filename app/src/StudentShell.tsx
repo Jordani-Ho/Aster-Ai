@@ -100,7 +100,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
 
   if (mustFill) {
     return <StudentBasicsPage key={'join-' + active} store={pagesStore} title={activeMember ? `${activeMember.alias}的基础信息` : '进馆：先填基础信息'}
-      note="老师邀请您进馆。先填好下面这几项，就能开始用了。"
+      note="老师邀请您进馆。这是一件健康工具，请认真填好下面的基础信息，填完就能开始用了。"
       onSaved={missing => { setBasicsMissing(missing); if (missing.length === 0) setMustFill(false) }} />
   }
   if (sub === 'basics') {

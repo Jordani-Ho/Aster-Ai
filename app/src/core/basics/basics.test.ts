@@ -19,7 +19,11 @@ async function open(): Promise<LocalStore> {
 afterEach(async () => { await Promise.all(handles.splice(0).map(store => store.close?.())) })
 
 const NOW = new Date(2026, 9, 24, 12, 0, 0)
-const FULL = { alias: '合成小王', gender: 'male' as const, birthDate: '1990-05-06', city: '北京市' }
+const FULL = {
+  alias: '合成小王', gender: 'male' as const, birthDate: '1990-05-06', birthShichen: null, birthPlace: '北京市', city: '北京市',
+  history: '无', meds: '无', allergies: '无', routine: { wake: '07:00', sleep: '23:00' },
+}
+const ALL = ['称呼', '性别', '出生日期', '出生时辰', '出生地', '居住城市', '既往病史', '在用药', '过敏', '作息']
 
 describe('V2-23 输入校验', () => {
   it('出生日期：不能晚于今天、年龄 0–120、必须是真日期', () => {
@@ -61,9 +65,10 @@ describe('V2-23 保存、门槛与问诊', () => {
     const store = await open()
     let gate = await consultGate(store)
     expect(gate.allowed).toBe(false)
-    expect(gate.missing).toEqual(['称呼', '性别', '出生日期', '居住城市'])
-    const half = await saveBasics(store, { alias: '合成小王', gender: 'male' }, { now: NOW })
-    expect(half.missing).toEqual(['出生日期', '居住城市'])
+    expect(gate.missing).toEqual(ALL)
+    const half = await saveBasics(store, { alias: '合成小王', gender: 'male', birthShichen: null, routine: { wake: '07:00' } }, { now: NOW })
+    // 时辰选了“不知道”也算填了；作息要起床、睡觉都有。
+    expect(half.missing).toEqual(['出生日期', '出生地', '居住城市', '既往病史', '在用药', '过敏', '作息'])
     gate = await consultGate(store)
     expect(gate.allowed).toBe(false)
     await saveBasics(store, FULL, { now: NOW })
@@ -75,7 +80,7 @@ describe('V2-23 保存、门槛与问诊', () => {
     const store = await open()
     await store.put('student-records', 'r1', { at: '2026-10-01' })
     const gate = await consultGate(store)
-    expect(gate).toMatchObject({ allowed: true, existing: true, missing: ['称呼', '性别', '出生日期', '居住城市'] })
+    expect(gate).toMatchObject({ allowed: true, existing: true, missing: ALL })
   })
 
   it('profile 只有原来五项；年龄与八字现算；出生日期、出生地、西医诊断都不进 profile', async () => {
@@ -166,6 +171,21 @@ describe('V2-23 保存、门槛与问诊', () => {
     const dad = await addFamilyMember(store, owner, { alias: '爸爸', relation: 'father', gender: 'male', birthDate: '1960-01-01', city: '北京市' })
     const dadBasics = await loadBasics(memberStore(store, dad.account))
     expect(dadBasics).toMatchObject({ alias: '爸爸', gender: 'male', birthDate: '1960-01-01', city: '北京市' })
-    expect(missingLabels(dadBasics)).toEqual([])
+    // 添加时已知的几项带过去；其余由代管人在这位家人的基础信息里补齐。
+    expect(missingLabels(dadBasics)).toEqual(['出生地', '既往病史', '在用药', '过敏', '作息'])
+  })
+})
+
+describe('V2-23 八字按出生地算', () => {
+  it('出生地与居住城市不同时，八字按出生地的时区推算', async () => {
+    const a = await open(), b = await open()
+    await saveBasics(a, { ...FULL, birthShichen: '子', birthPlace: '洛杉矶', city: '北京市' }, { now: NOW })
+    await saveBasics(b, { ...FULL, birthShichen: '子', birthPlace: '北京市', city: '北京市' }, { now: NOW })
+    const [pa, pb] = [await loadProfile(a), await loadProfile(b)]
+    expect(pa.bazi.value).not.toBe(null)
+    expect(pb.bazi.value).not.toBe(null)
+    // 生在洛杉矶的当地子时，换到北京时间是下午；按出生地算，日柱或时柱与“生在北京”不同。
+    expect(JSON.stringify(pa.bazi.value)).not.toBe(JSON.stringify(pb.bazi.value))
+    expect(pa.city.value).toBe('北京市')
   })
 })

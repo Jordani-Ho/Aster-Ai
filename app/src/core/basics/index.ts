@@ -32,7 +32,12 @@ export interface StudentBasics {
 
 export type BasicsDraft = Partial<Omit<StudentBasics, 'routine'>> & { routine?: Partial<StudentBasics['routine']> }
 
-export const REQUIRED_LABELS = { alias: '称呼', gender: '性别', birthDate: '出生日期', city: '居住城市' } as const
+// 发起人 2026-10-24：这是健康工具，进馆时基础信息都要认真填（不想填可以不接受邀请）。
+// 只有西医诊断（不是人人都有）和家里的药材可以不填；时辰可以选“不知道”，但要主动选；病史、用药、过敏可以写“无”。
+export const REQUIRED_LABELS = {
+  alias: '称呼', gender: '性别', birthDate: '出生日期', birthShichen: '出生时辰', birthPlace: '出生地', city: '居住城市',
+  history: '既往病史', meds: '在用药', allergies: '过敏', routine: '作息',
+} as const
 export type RequiredKey = keyof typeof REQUIRED_LABELS
 
 export class BirthChangeNeedsConfirm extends Error {
@@ -128,7 +133,11 @@ export function normalizeBasics(draft: BasicsDraft, now: Date = new Date()): Par
 
 export function missingRequired(basics: Partial<StudentBasics> | null): RequiredKey[] {
   const value = basics ?? {}
-  return (Object.keys(REQUIRED_LABELS) as RequiredKey[]).filter(key => !value[key])
+  return (Object.keys(REQUIRED_LABELS) as RequiredKey[]).filter(key => {
+    if (key === 'birthShichen') return value.birthShichen === undefined
+    if (key === 'routine') return !value.routine?.wake || !value.routine?.sleep
+    return !value[key]
+  })
 }
 
 export function missingLabels(basics: Partial<StudentBasics> | null): string[] {
@@ -175,7 +184,8 @@ export async function refreshProfile(store: LocalStore, now: Date = new Date()):
   profile.city = basics.city ? field(basics.city) : current.city
   if (basics.birthDate) {
     profile.age = field(ageAt(basics.birthDate, localDay(now)))
-    profile.bazi = field(await shichenBazi(basics.birthDate, basics.birthShichen ?? null, basics.city ?? null))
+    // 八字按出生地的真太阳时算；没填出生地才退回居住城市。
+    profile.bazi = field(await shichenBazi(basics.birthDate, basics.birthShichen ?? null, basics.birthPlace ?? basics.city ?? null))
   } else {
     // 没有出生日期就不推算：旧 profile 里存过的年龄、八字也不再带给老师（Codex 审核 #67）。
     profile.age = { value: null, source: 'unknown' }
@@ -195,7 +205,7 @@ export async function saveBasics(store: LocalStore, draft: BasicsDraft, options:
   const before = await loadBasics(store)
   const changes: { field: 'birthDate' | 'birthShichen'; from: string | null; to: string | null }[] = []
   if (before.birthDate && next.birthDate && before.birthDate !== next.birthDate) changes.push({ field: 'birthDate', from: before.birthDate, to: next.birthDate })
-  if (before.birthDate && next.birthShichen !== undefined && (before.birthShichen ?? null) !== next.birthShichen) changes.push({ field: 'birthShichen', from: before.birthShichen ?? null, to: next.birthShichen })
+  if (before.birthDate && before.birthShichen !== undefined && next.birthShichen !== undefined && before.birthShichen !== next.birthShichen) changes.push({ field: 'birthShichen', from: before.birthShichen ?? null, to: next.birthShichen })
   if (changes.length > 0 && !options.confirmBirth) throw new BirthChangeNeedsConfirm()
   const merged: Partial<StudentBasics> = { ...before, ...next }
   const { city: _city, ...stored } = merged
