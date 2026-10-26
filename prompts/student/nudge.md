@@ -11,7 +11,7 @@
   "mirror.first": "已经 {days} 天没照镜子了，今天照一次。",
   "mirror.again": "今天还没照镜子，抽一分钟照一下。",
   "mirror.daily": "又过了一天，今天照一次镜子。",
-  "revisit.first": "距上次面诊已 {days} 天，复诊间隔是 {interval} 天。去约个时间。",
+  "revisit.first": "距上次看诊已 {days} 天，复诊间隔是 {interval} 天。去约个时间。",
   "revisit.again": "复诊还没约，今天选几个方便的时间。",
   "revisit.daily": "今天把复诊时间约好。",
   "appointment.urgent": "老师的邀约还剩 {minutes} 分钟，请回复。",

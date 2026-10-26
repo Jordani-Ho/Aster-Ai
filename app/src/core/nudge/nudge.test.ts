@@ -98,11 +98,12 @@ describe('V2-27 固定话术与真实输入', () => {
 
   it('签字病历明确写复诊天数时按该数；没有明确文字只用老师签名门面的天数', () => {
     const now = new Date(2026, 9, 25, 11, 0)
-    const visits = [{ id: 'enc-1', at: new Date(2026, 9, 10, 11).toISOString(), kind: 'in_person' as const, next: '14天后复诊' }]
+    const visits = [{ id: 'enc-1', at: new Date(2026, 9, 10, 11).toISOString(), kind: 'remote_live' as const, next: '14天后复诊' }]
     const explicit = chooseNudges(input(now, { assignments: [], visits, revisitDays: 30 }), []).find(row => row.kind === 'revisit')
     expect(explicit?.slots.interval).toBe(14)
+    expect(renderNudge(explicit!)).toContain('距上次看诊')
     expect(chooseNudges(input(now, { assignments: [], visits: [{ ...visits[0], next: '以后再看' }], revisitDays: null }), [])).toEqual([])
-    expect(chooseNudges(input(now, { assignments: [], visits: [{ ...visits[0], next: null }], revisitDays: 14 }), []).some(row => row.kind === 'revisit')).toBe(true)
+    expect(chooseNudges(input(now, { assignments: [], visits: [{ ...visits[0], kind: 'in_person', next: null }], revisitDays: 14 }), []).some(row => row.kind === 'revisit')).toBe(true)
   })
 
   it('本机只记一次提醒，后续真实打卡标成已行动；重复打开不重复推送', async () => {
