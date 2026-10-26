@@ -44,7 +44,7 @@ export async function openCommunity(page:Page):Promise<string>{
  await page.getByLabel('一句介绍',{exact:true}).fill('一起照顾日常作息。')
  await page.getByRole('button',{name:'就用这个名字',exact:true}).click()
  await expect(page.getByText('✓ 模型已接好',{exact:true})).toBeVisible()
- await expect(page.getByRole('button',{name:'开馆',exact:true})).toBeDisabled()
+ await expect(page.getByRole('button',{name:'开馆',exact:true})).toBeEnabled()
  for(const label of ['模板','排班','邀约方式','药材库','保留期限','模型']){
   await page.getByRole('button',{name:'就这样，保存'+label,exact:true}).click()
  }

@@ -52,7 +52,7 @@ try {
     await page.screenshot({ path: root + 'docs/screenshots/v222-hall-groundwork-390.png' })
     await page.setViewportSize({ width: 375, height: 812 })
   }
-  await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeEnabled()
   await page.getByRole('button', { name: '就这样，保存模板', exact: true }).click()
   await expect(page.getByRole('button', { name: '就这样，保存排班', exact: true })).toBeVisible()
   await page.reload()
@@ -60,7 +60,7 @@ try {
   await page.getByLabel('每时段最多接待几位', { exact: true }).fill('0')
   await page.getByRole('button', { name: '就这样，保存排班', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('1–20')
-  await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeEnabled()
   await page.getByLabel('每时段最多接待几位', { exact: true }).fill('3')
   await page.evaluate(() => window.__opening.failNextSave())
   await page.getByRole('button', { name: '就这样，保存排班', exact: true }).click()
@@ -100,6 +100,9 @@ try {
   await manage.goto(`http://127.0.0.1:${server.httpServer.address().port}/@fs/${root}e2e/opening.html?scene=manage&name=opening-manage-browser`)
   await expect(manage.getByRole('heading', { name: '我的馆', exact: true })).toBeVisible()
   await expect(manage.getByText('已开馆', { exact: true })).toBeVisible()
+  for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) {
+    await expect(manage.getByText(`${label} · 还没设，可以以后补`, { exact: true })).toBeVisible()
+  }
   await expect(manage.getByRole('button', { name: '＋ 邀请学生', exact: true })).toBeVisible()
   await expect(manage.getByRole('region', { name: '钱账总览' })).toContainText('还没记过账')
   await manage.getByRole('button', { name: /门面/ }).click()
@@ -109,6 +112,26 @@ try {
   for (const label of ['记录保留多久', '换手机', '向社区分享运行统计', '我的镜子']) await expect(manage.getByRole('button', { name: new RegExp(label) })).toBeVisible()
   await manage.close()
 
+  // V2-35：新老师跳过模型与六项准备，仍能开馆并取得第一张邀请。
+  const optional = await browser.newPage({ viewport: { width: 375, height: 812 } })
+  optional.on('pageerror', error => errors.push(error.message))
+  await optional.route('https://opening.synthetic.invalid/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }))
+  await optional.goto(`http://127.0.0.1:${server.httpServer.address().port}/@fs/${root}e2e/opening.html?scene=guide&name=opening-optional-browser`)
+  await optional.getByRole('button', { name: '先跳过，以后接模型', exact: true }).click()
+  await optional.getByLabel('学生怎么称呼您', { exact: true }).fill('合成小黄')
+  await optional.getByLabel('登记口令', { exact: true }).fill('SYNTHETIC_DEPLOYMENT_TOKEN')
+  await optional.getByRole('button', { name: '登记，下一步', exact: true }).click()
+  await optional.getByLabel('馆名', { exact: true }).fill('合成运动馆')
+  await optional.getByRole('button', { name: '就用这个名字', exact: true }).click()
+  for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) {
+    await expect(optional.getByRole('button', { name: `${label} · 还没设，可以以后补`, exact: true })).toBeVisible()
+  }
+  await optional.getByRole('button', { name: '开馆', exact: true }).click()
+  await expect(optional.getByRole('heading', { name: '请第一位学生进来', exact: true })).toBeVisible()
+  await optional.locator('details.op-link-details > summary').click()
+  await expect(optional.getByLabel('邀请链接', { exact: true })).toHaveValue(/invite=/)
+  await optional.close()
+
   expect(errors).toEqual([])
-  console.log('PASS: V2-17 五步建馆、第 3 步续走、1 小时邀请、过期重生成、第一位学生后进首页、我的馆与设置入口')
+  console.log('PASS: V2-17 五步建馆与 V2-35 六项可选、无模型邀请、我的馆缺项提示')
 } finally { await browser.close(); await server.close() }

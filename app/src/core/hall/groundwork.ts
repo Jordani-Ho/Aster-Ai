@@ -108,6 +108,12 @@ export async function saveGroundwork(store: Pick<LocalStore, 'put'>, value: Grou
   try { await store.put('settings', GROUNDWORK_KEY, clean as unknown as StoreValue) }
   catch (cause) { throw Error(`没保存成功：${cause instanceof Error ? cause.message : '本机存储不可用'}`) }
 }
+/** 默认排班只是表单初值；老师保存排班后才可用于面诊邀约。 */
+export async function hasAppointmentSchedule(store: Pick<LocalStore, 'get'>): Promise<boolean> {
+  const saved = await store.get('settings', GROUNDWORK_KEY) as { checked?: unknown; schedule?: unknown } | undefined
+  if (!Array.isArray(saved?.checked) || !saved.checked.includes('schedule')) return false
+  try { validateSchedule(saved.schedule); return true } catch { return false }
+}
 export function groundworkMissing(value: Groundwork): string[] {
   return Object.entries(GROUNDWORK_ITEMS).filter(([key]) => !value.checked.includes(key) || key === 'herbs' && value.herbs === 'pending').map(([, label]) => label)
 }
@@ -119,13 +125,4 @@ export async function groundworkStatus(store: LocalStore): Promise<{ value: Grou
     .filter(key => key !== 'model' || model !== null).filter(key => key !== 'retention' || validRetentionDays(retention))
     .filter(key => key !== 'herbs' || value.herbs === 'none' || value.herbs === 'ready' && herbs.length > 0)
   return { value, missing: groundworkMissing({ ...value, checked }) }
-}
-export async function assertInviteReady(store: LocalStore): Promise<void> {
-  // 老部署没有本卡确认记录，沿用原使用方式，只提示补齐；新引导写入后严格逐项核对。
-  if (await store.get('settings', GROUNDWORK_KEY) === undefined) {
-    const hall = await store.get('settings', 'hall')
-    if (hall !== undefined || await store.get('settings', 'storefront') !== undefined) return
-  }
-  const status = await groundworkStatus(store)
-  if (status.missing.length) throw Error(`基础工作还差 ${status.missing.length} 项：${status.missing.join('、')}`)
 }

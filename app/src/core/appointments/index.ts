@@ -3,10 +3,10 @@ import type { LocalStore, StoreValue } from '../store'
 import { sendAgentMessage } from '../agent/guard'
 import type { Envelope } from '../transport'
 import { appointmentSlots, slotStartInZone } from '../schedule/appointments'
-import { loadGroundwork, type Schedule } from '../hall/groundwork'
+import { hasAppointmentSchedule, loadGroundwork, type Schedule } from '../hall/groundwork'
 import { loadProfile } from '../intake/session'
 import { isSameCity } from '../city'
-import { loadCachedTeacherCity } from '../storefront'
+import { loadCachedAppointmentAvailability, loadCachedTeacherCity } from '../storefront'
 
 export const APPOINTMENTS = 'appointments'
 export type AppointmentStatus = 'offered' | 'requested' | 'accepted' | 'confirmed' | 'declined' | 'expired' | 'done' | 'no_show' | 'cancelled'
@@ -98,6 +98,7 @@ export async function sendAppointmentOffer(options: CreateAppointmentOfferOption
     || !(now instanceof Date) || !Number.isFinite(+now) || Date.parse(slot.slotStart) < +now + 2 * HOUR
     || (options.campaignId !== undefined && !ID.test(options.campaignId))) throw new Error('预约邀约输入无效')
   if (!(await teacherRelation(store, student))) throw new Error('不能向没有师生关系的人邀约')
+  if (!await hasAppointmentSchedule(store)) throw new Error('老师还没设排班，暂时不能发面诊邀约')
   const studentRow = await store.get('teacher-students', student)
   const studentCity = object(studentRow) && (studentRow.city === null || validCity(studentRow.city)) ? studentRow.city as string | null : null
   const city = await teacherCity(store)
@@ -167,6 +168,7 @@ export async function requestAppointment(options: RequestAppointmentOptions): Pr
   if (!(await roleIs(store, 'student')) || !(await studentRelation(store, teacher))) throw new Error('这位老师不在“我的老师”里')
   const profile = await loadProfile(store)
   const currentTeacherCity = await loadCachedTeacherCity(options.settingsStore ?? store, teacher)
+  if (!await loadCachedAppointmentAvailability(options.settingsStore ?? store, teacher)) throw new Error('老师还没设排班，暂时不能请求面诊')
   if (!isSameCity(profile.city.value, currentTeacherCity)) throw new Error('你现在不在老师所在城市，不能请求面诊')
   const existing = await listAppointments(store)
   if (existing.some(row => row.student === identity.publicKey && row.teacher === teacher
@@ -262,7 +264,8 @@ export function createAppointmentInbox(options: AppointmentInboxOptions) {
     const bookings = existing.map(row => ({ slotStart: row.slotStart, status: row.status }))
     const allSlots = appointmentSlots(groundwork.schedule, { now: receivedAt, days: 61 })
     const openSlots = appointmentSlots(groundwork.schedule, { now: receivedAt, days: 61, bookings })
-    const selected = !sameCity || alreadyBooked ? undefined : payload.startsAt.map(at => openSlots.find(slot => Date.parse(slot.slotStart) === at))
+    const scheduleEnabled = await hasAppointmentSchedule(store)
+    const selected = !scheduleEnabled || !sameCity || alreadyBooked ? undefined : payload.startsAt.map(at => openSlots.find(slot => Date.parse(slot.slotStart) === at))
       .find((slot): slot is NonNullable<typeof slot> => !!slot)
     const scheduled = new Set(allSlots.map(slot => Date.parse(slot.slotStart)))
     const isFull = payload.startsAt.some(at => scheduled.has(at))
@@ -274,7 +277,7 @@ export function createAppointmentInbox(options: AppointmentInboxOptions) {
       offerId: payload.requestId, student: message.sender, teacher: options.identity.publicKey,
       slotStart: slotStartInZone(payload.startsAt[0], payload.timezone), minutes: groundwork.schedule.duration,
       timezone: payload.timezone, capacity: groundwork.schedule.capacity, expiresAt: 0, createdAt: receivedAt.toISOString(),
-      status: 'cancelled', reason: !sameCity ? 'different_city' : alreadyBooked ? 'already_booked' : isFull ? 'slot_full' : 'unavailable',
+      status: 'cancelled', reason: !scheduleEnabled ? 'no_schedule' : !sameCity ? 'different_city' : alreadyBooked ? 'already_booked' : isFull ? 'slot_full' : 'unavailable',
       ...(city ? { teacherCity: city } : {}), ...(studentCity ? { studentCity } : {}),
     }
     await store.put(APPOINTMENTS, appointment.offerId, appointment as unknown as StoreValue)

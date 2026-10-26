@@ -170,6 +170,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
       store={pagesStore} modelStore={store} settingsStore={store} identity={pagesIdentity} llm={llm}
       teacher={venue.active} teacherCall={venue.call} teacherName={venue.name}
       teacherCity={venue.active ? venue.cities[venue.active] ?? null : null}
+      canRequestAppointment={venue.active ? venue.appointmentAvailability[venue.active] !== false : false}
       member={activeMember} family={family} active={active} onSwitch={onSwitch}
       onConsult={openConsult} onHomework={() => setSub('homework')} onCheckedIn={reportAdherence} sendEnvelope={sendEnvelope ?? stack?.send} />}
     {tab === 'records' && <StudentRecordsHome store={pagesStore} identity={pagesIdentity} onOpenAllRecords={() => setSub('records')} />}

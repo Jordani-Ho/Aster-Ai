@@ -473,8 +473,12 @@ test('hard: student displays only the valid signature after tampered then valid 
     const unknown=()=>({value:null,source:'unknown'}),field=(value:string)=>({value,source:'student'})
     const encounter={id:'a'.repeat(32),version:1,kind:'remote_async',student,teacher,createdAt:new Date().toISOString(),profile:{alias:unknown(),gender:unknown(),age:unknown(),bazi:unknown(),city:unknown()},intake:{chiefComplaint:field('SYNTHETIC_VALID_RECORD'),presentIllness:unknown(),history:unknown(),medsAllergies:unknown(),attachments:[]},fourExams:{look:unknown(),listenSmell:unknown(),ask:unknown(),pulse:unknown()},judgment:{symptomSummary:{value:'SYNTHETIC_VALID_SUMMARY',source:'teacher'},pattern:unknown(),mechanism:unknown(),rationale:unknown()},plan:{principle:unknown(),prescription:unknown(),advice:unknown(),homework:[]}}
     const valid=JSON.parse(JSON.stringify(signEncounter(encounter,Uint8Array.from(key)))),tampered={...valid,content:valid.content.replace('SYNTHETIC_VALID_RECORD','TAMPERED_RECORD_MUST_NOT_DISPLAY')}
-    const channel=createTransport({privateKey:Uint8Array.from(key),relays:[relay],onMessage:()=>{}});channel.start()
-    try {await channel.send(student,{type:'record.signed',version:1,payload:tampered});await channel.send(student,{type:'record.signed',version:1,payload:valid})}finally{channel.close()}
+    // 先等中继连上再发，避免连接未就绪时两条信件丢失（CI 上偶发）。
+    let ready!:()=>void,fail!:(e:Error)=>void
+    const connected=new Promise<void>((resolve,reject)=>{ready=resolve;fail=reject})
+    const timer=setTimeout(()=>fail(new Error('teacher relay did not connect')),20000)
+    const channel=createTransport({privateKey:Uint8Array.from(key),relays:[relay],onMessage:()=>{},onStatus:(status:string)=>{if(status==='ready')ready();if(status==='rejected')fail(new Error('teacher relay rejected'))}});channel.start()
+    try {await connected;await channel.send(student,{type:'record.signed',version:1,payload:tampered});await channel.send(student,{type:'record.signed',version:1,payload:valid})}finally{clearTimeout(timer);channel.close()}
   },{key:actors.teacher.key,student:actors.student.pubkey,teacher:actors.teacher.pubkey,relay:runtime.relayUrl})
   await studentRecords(student, true)
   await expect(student.getByText('SYNTHETIC_VALID_RECORD',{exact:false})).toBeVisible()

@@ -348,7 +348,7 @@ export function App() {
   if (role === 'teacher' && store && identity && hallOpened === false) {
     return <OpeningGuide identity={identity} store={store} gateway={gateway} send={stack?.send as SendEnvelope | undefined} modelGateway={modelGateway} modelConfig={modelConfig} onModelSaved={saveOwnModel} onDone={() => setHallOpened(true)} />
   }
-  if(identity&&role&&store&&!modelConfig&&!communityConfig){
+  if(identity&&role==='student'&&store&&!modelConfig&&!communityConfig){
     if(modelConfig===undefined||communityConfig===undefined)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1><p>正在读取接入设置…</p></main>
     return <ModelSettings initial store={store} gateway={modelGateway} current={null} onSaved={saveOwnModel}
       community={communityOffered?{available:true,busy:communityBusy,error:communityNotice,onStart:()=>void startWithCommunity()}:undefined} />

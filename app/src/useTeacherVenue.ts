@@ -3,7 +3,7 @@ import type { LocalStore } from './core/store'
 import { loadTeacherVenue, saveActiveTeacher, type TeacherVenue } from './core/storefront/active'
 
 // V2-09：学生当前在用的馆。切换只改视角与发送对象，不改已有收件、方案和钱账数据。
-const EMPTY: TeacherVenue = { teachers: [], active: null, labels: {}, venues: {}, cities: {}, call: '', name: '' }
+const EMPTY: TeacherVenue = { teachers: [], active: null, labels: {}, venues: {}, cities: {}, appointmentAvailability: {}, call: '', name: '' }
 
 export function useTeacherVenue(store: LocalStore): TeacherVenue & { switchTo: (teacher: string) => Promise<void>; refresh: () => void } {
   const [venue, setVenue] = useState<TeacherVenue>(EMPTY)

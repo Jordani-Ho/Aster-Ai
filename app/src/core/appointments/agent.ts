@@ -3,7 +3,7 @@ import type { LocalStore, StoreValue } from '../store'
 import { createRunner } from '../agent/runner'
 import { defineTask, type AgentTask } from '../agent/tasks'
 import { listTeacherRecords } from '../records/teacher'
-import { loadGroundwork } from '../hall/groundwork'
+import { hasAppointmentSchedule, loadGroundwork } from '../hall/groundwork'
 import { heavenNow } from '../heaven'
 import { appointmentSlots } from '../schedule/appointments'
 import { isSameCity } from '../city'
@@ -20,6 +20,7 @@ export interface InviteMaterials {
   city: string | null
   afterDays: number
   schedule: Awaited<ReturnType<typeof loadGroundwork>>['schedule']
+  scheduleEnabled: boolean
   visits: Visit[]
   appointments: Appointment[]
 }
@@ -38,8 +39,8 @@ function localDate(at: Date, timezone: string): string {
 }
 
 async function gather(store: LocalStore, now: Date): Promise<InviteMaterials> {
-  const [groundwork, records, appointments, heaven, roster] = await Promise.all([
-    loadGroundwork(store), listTeacherRecords(store), listAppointments(store), heavenNow(store, now), store.list(TEACHER_STUDENTS),
+  const [groundwork, records, appointments, heaven, roster, scheduleEnabled] = await Promise.all([
+    loadGroundwork(store), listTeacherRecords(store), listAppointments(store), heavenNow(store, now), store.list(TEACHER_STUDENTS), hasAppointmentSchedule(store),
   ])
   const rosterCities = new Map(roster.filter(row => row.value && typeof row.value === 'object' && 'student' in row.value && (row.value as { student: unknown }).student === row.key)
     .map(row => [row.key, row.value as { city?: string | null }]))
@@ -64,7 +65,7 @@ async function gather(store: LocalStore, now: Date): Promise<InviteMaterials> {
   }
   return {
     now: now.toISOString(), timezone: groundwork.schedule.timezone, city: heaven.city,
-    afterDays: groundwork.invitation.afterDays, schedule: groundwork.schedule,
+    afterDays: groundwork.invitation.afterDays, schedule: groundwork.schedule, scheduleEnabled,
     visits: [...visits.values()], appointments,
   }
 }
@@ -72,6 +73,7 @@ async function gather(store: LocalStore, now: Date): Promise<InviteMaterials> {
 export function planAppointmentInvitations(materials: InviteMaterials): AppointmentInvitePlan {
   const now = new Date(materials.now)
   if (!Number.isFinite(+now) || !Number.isSafeInteger(materials.afterDays) || materials.afterDays < 1 || materials.afterDays > 3650) throw new Error('邀约规则无效')
+  if (!materials.scheduleEnabled) return { localDate: localDate(now, materials.timezone), slot: null, candidates: [] }
   const recentlyInvited = new Set(materials.appointments.filter(row => +now - Date.parse(row.createdAt) < DAY).map(row => row.student))
   const futureBooked = new Set(materials.appointments.filter(row => ['accepted', 'confirmed'].includes(row.status) && Date.parse(row.slotStart) > +now).map(row => row.student))
   const candidates = materials.visits.filter(row => +now - Date.parse(row.at) >= materials.afterDays * DAY

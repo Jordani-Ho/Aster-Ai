@@ -4,7 +4,6 @@ import { makeInvite } from '../onboarding'
 import { loadOwnStorefront } from '../storefront'
 import { storefrontInviteLink } from '../storefront/invite'
 import { teacherStudents } from '../records/teacher'
-import { assertInviteReady } from './groundwork'
 
 // V2-15 建馆：开馆是本机状态 + 门面签发，不新增服务器接口。
 // 引导进度只存在本机 settings；第一位学生的邀请沿用现有签名邀请，1 小时只是参数。
@@ -116,7 +115,6 @@ export interface CreateFirstInviteOptions {
 export async function createFirstInvite(options: CreateFirstInviteOptions): Promise<GuideInvite> {
   const { identity, store, base, gateway } = options
   const now = options.now ?? Date.now()
-  await assertInviteReady(store)
   if (gateway === '') throw new Error('还没有配置社区网关，暂时不能生成邀请。')
   const invite = makeInvite(identity, gateway + '/invite/redeem', Math.floor(now / 1000), FIRST_INVITE_SECONDS)
   const own = await loadOwnStorefront(store, identity)

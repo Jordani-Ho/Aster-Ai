@@ -4,6 +4,7 @@ import type { LocalStore, StoreValue } from '../store'
 import type { Envelope } from '../transport'
 import { validCityName } from '../city'
 import { loadProfile } from '../intake/session'
+import { hasAppointmentSchedule } from '../hall/groundwork'
 
 // V2-09 老师门面：一份只含外观的配置，由老师本人签名。学生端只缓存验签通过的最新一版。
 // 配置是数据不是代码：这里只有馆名、显示称呼、标志、主题、短介绍、欢迎语六项。
@@ -115,18 +116,19 @@ export function inviteTitle(storefront: Storefront | null | undefined, key?: str
 }
 
 function validRevisitDays(value: unknown): value is number { return Number.isSafeInteger(value) && (value as number) >= 1 && (value as number) <= 3650 }
-function contentOf(storefront: Storefront, receiveRecordings: boolean, revisitDays: number | null, city: string | null): string {
-  return JSON.stringify({ type: 'aster.storefront', version: 1, storefront, receiveRecordings, city, ...(revisitDays === null ? {} : { revisitDays }) })
+function contentOf(storefront: Storefront, receiveRecordings: boolean, revisitDays: number | null, city: string | null, appointmentsEnabled: boolean): string {
+  return JSON.stringify({ type: 'aster.storefront', version: 1, storefront, receiveRecordings, city, appointmentsEnabled, ...(revisitDays === null ? {} : { revisitDays }) })
 }
 
-export function makeStorefrontEvent(identity: Identity, storefront: Storefront, now = Math.floor(Date.now() / 1000), receiveRecordings = true, revisitDays: number | null = null, city: string | null = null): StorefrontEvent {
+export function makeStorefrontEvent(identity: Identity, storefront: Storefront, now = Math.floor(Date.now() / 1000), receiveRecordings = true, revisitDays: number | null = null, city: string | null = null, appointmentsEnabled = true): StorefrontEvent {
   const clean = normalizeStorefront(storefront)
   if (!clean) throw new Error('门面配置无效')
   if (!Number.isSafeInteger(now) || now <= 0) throw new Error('门面时间无效')
   if (typeof receiveRecordings !== 'boolean') throw new Error('接收录音设置无效')
   if (revisitDays !== null && !validRevisitDays(revisitDays)) throw new Error('复诊间隔无效')
   if (city !== null && !validCityName(city)) throw new Error('老师城市无效')
-  const event = finalizeEvent({ kind: STOREFRONT_KIND, created_at: now, tags: [], content: contentOf(clean, receiveRecordings, revisitDays, city) }, identity.privateKey)
+  if (typeof appointmentsEnabled !== 'boolean') throw new Error('面诊邀约设置无效')
+  const event = finalizeEvent({ kind: STOREFRONT_KIND, created_at: now, tags: [], content: contentOf(clean, receiveRecordings, revisitDays, city, appointmentsEnabled) }, identity.privateKey)
   // JSON 往返去掉 verify 缓存 Symbol，签名事件才能安全落盘/进信封。
   return JSON.parse(JSON.stringify(event)) as StorefrontEvent
 }
@@ -148,6 +150,7 @@ export interface VerifiedStorefront {
   receiveRecordings: boolean
   revisitDays: number | null
   city: string | null
+  appointmentsEnabled: boolean
 }
 
 /** 结构 + 内容 + 签名都通过才算有效；expectedTeacher 给出时还要求签名人就是这位老师。 */
@@ -158,18 +161,19 @@ export function verifyStorefrontEvent(value: unknown, expectedTeacher?: string):
   let content: unknown
   try { content = JSON.parse(event.content) } catch { return null }
   if (!content || typeof content !== 'object' || Array.isArray(content)) return null
-  const fields = content as { type?: unknown; version?: unknown; storefront?: unknown; receiveRecordings?: unknown; revisitDays?: unknown; city?: unknown }
+  const fields = content as { type?: unknown; version?: unknown; storefront?: unknown; receiveRecordings?: unknown; revisitDays?: unknown; city?: unknown; appointmentsEnabled?: unknown }
   if (fields.type !== 'aster.storefront' || fields.version !== 1) return null
   if (fields.receiveRecordings !== undefined && typeof fields.receiveRecordings !== 'boolean') return null
   if (fields.revisitDays !== undefined && !validRevisitDays(fields.revisitDays)) return null
   if (fields.city !== undefined && fields.city !== null && !validCityName(fields.city)) return null
+  if (fields.appointmentsEnabled !== undefined && typeof fields.appointmentsEnabled !== 'boolean') return null
   const storefront = normalizeStorefront(fields.storefront)
   if (!storefront) return null
   let idMatches = false
   try { idMatches = getEventHash(event) === event.id } catch { idMatches = false }
   if (!idMatches) return null
   try { if (!verifyEvent(event as Event)) return null } catch { return null }
-  return { event, storefront, receiveRecordings: fields.receiveRecordings !== false, revisitDays: validRevisitDays(fields.revisitDays) ? fields.revisitDays : null, city: validCityName(fields.city) ? fields.city : null }
+  return { event, storefront, receiveRecordings: fields.receiveRecordings !== false, revisitDays: validRevisitDays(fields.revisitDays) ? fields.revisitDays : null, city: validCityName(fields.city) ? fields.city : null, appointmentsEnabled: fields.appointmentsEnabled !== false }
 }
 
 // ---- 学生端缓存 ----
@@ -194,6 +198,21 @@ export async function loadCachedReceiveRecordings(store: Pick<LocalStore, 'get'>
 export async function loadCachedRevisitDays(store: Pick<LocalStore, 'get'>, teacher: string): Promise<number | null> {
   const event = await cachedEvent(store, teacher)
   return event ? verifyStorefrontEvent(event, teacher)?.revisitDays ?? null : null
+}
+
+/** 旧门面沿用原可约行为；新门面明确标明老师是否保存过排班。 */
+export async function loadCachedAppointmentAvailability(store: Pick<LocalStore, 'get'>, teacher: string): Promise<boolean> {
+  const event = await cachedEvent(store, teacher)
+  return event ? verifyStorefrontEvent(event, teacher)?.appointmentsEnabled ?? true : true
+}
+
+export async function loadCachedAppointmentAvailabilityMap(store: Pick<LocalStore, 'list'>): Promise<Record<string, boolean>> {
+  const result: Record<string, boolean> = {}
+  for (const row of await store.list(STOREFRONT_COLLECTION)) if (HEX64.test(row.key)) {
+    const verified = verifyStorefrontEvent(row.value, row.key)
+    if (verified) result[row.key] = verified.appointmentsEnabled
+  }
+  return result
 }
 
 /** 城市只从老师本人签名的门面事件取；旧门面返回 null，不作推断。 */
@@ -285,7 +304,7 @@ export async function publishStorefront(options: {
   const timestamp = Math.max(Math.floor((options.now ?? new Date()).getTime() / 1000), (own.current?.created_at ?? 0) + 1)
   const profile = await loadProfile(store as LocalStore)
   const city = validCityName(profile.city.value) ? profile.city.value : null
-  const event = makeStorefrontEvent(identity, clean, timestamp, preference, days, city)
+  const event = makeStorefrontEvent(identity, clean, timestamp, preference, days, city, await hasAppointmentSchedule(store))
   const next: OwnStorefront = { current: event, previous: own.current }
   await saveOwn(store, next)
   return { event, own: next }
@@ -307,7 +326,7 @@ export async function restoreStorefront(options: {
   const timestamp = Math.max(Math.floor((options.now ?? new Date()).getTime() / 1000), (own.current?.created_at ?? 0) + 1)
   const profile = await loadProfile(store as LocalStore)
   const city = validCityName(profile.city.value) ? profile.city.value : null
-  const event = makeStorefrontEvent(identity, storefront, timestamp, current?.receiveRecordings ?? previous.receiveRecordings, current?.revisitDays ?? previous.revisitDays, city)
+  const event = makeStorefrontEvent(identity, storefront, timestamp, current?.receiveRecordings ?? previous.receiveRecordings, current?.revisitDays ?? previous.revisitDays, city, await hasAppointmentSchedule(store))
   await saveOwn(store, { current: event, previous: own.current })
   return { event, storefront }
 }
