@@ -120,8 +120,7 @@ export function TeacherToday({ identity, store, status, send, onStartVisit, onOp
     return consult ? aliasOf(consult) : '学生 ' + student.slice(0, 4)
   }
   const heroName = storefront?.name?.trim() || '我的馆'
-  const teacherZone = inviteRun?.output.slot?.timezone ?? 'UTC'
-  const teacherCity = heaven?.city || teacherZone
+  const teacherCity = heaven?.city || ''
   const todaysAppointments = appointments.filter(row => row.status === 'confirmed'
     && new Intl.DateTimeFormat('en-CA', { timeZone: row.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(row.slotStart))
       === new Intl.DateTimeFormat('en-CA', { timeZone: row.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()))
@@ -163,7 +162,7 @@ export function TeacherToday({ identity, store, status, send, onStartVisit, onOp
       <ul className="nl-list">{todaysAppointments.map(row => <li key={row.offerId}>
         <div className="nl-row">
           <span className="nl-avatar" aria-hidden="true">{nameOf(row.student).slice(0, 1)}</span>
-          <span className="nl-row-main"><strong>{nameOf(row.student)}</strong><span>{formatAppointmentTime(row.slotStart, row.timezone, teacherCity)} · {row.minutes} 分钟</span></span>
+          <span className="nl-row-main"><strong>{nameOf(row.student)}</strong><span>{formatAppointmentTime(row.slotStart, row.timezone, row.teacherCity || teacherCity, row.timezone)} · {row.minutes} 分钟</span></span>
           <span className="nl-actions">
             <button type="button" className="nl-link-button" onClick={() => void markAppointmentAttendance(store, row.offerId, 'done').then(() => listAppointments(store).then(setAppointments)).catch(() => setError('预约状态没能保存，请重试。'))}>来了</button>
             <button type="button" className="nl-link-button" onClick={() => void markAppointmentAttendance(store, row.offerId, 'no_show').then(() => listAppointments(store).then(setAppointments)).catch(() => setError('预约状态没能保存，请重试。'))}>没来</button>
@@ -178,7 +177,7 @@ export function TeacherToday({ identity, store, status, send, onStartVisit, onOp
       {inviteRun && inviteRun.output.candidates.length === 0 && <p className="nl-empty">暂时没有达到复诊时间的学生。</p>}
       {inviteRun && inviteRun.output.candidates.length > 0 && !inviteRun.output.slot && <p className="nl-empty">当前排班里没有符合提前量的空时段。</p>}
       {inviteRun?.output.slot && <>
-        <p className="nl-quiet">建议时段：{formatAppointmentTime(inviteRun.output.slot.slotStart, inviteRun.output.slot.timezone, teacherCity)} · 同一时段可邀约 {inviteRun.output.slot.capacity + 1} 位</p>
+        <p className="nl-quiet">建议时段：{formatAppointmentTime(inviteRun.output.slot.slotStart, inviteRun.output.slot.timezone, teacherCity, inviteRun.output.slot.timezone)} · 同一时段可邀约 {inviteRun.output.slot.capacity + 1} 位</p>
         {inviteRun.status === 'draft' && <>
           <ul className="nl-list">{inviteRun.output.candidates.slice(0, inviteRun.output.slot.capacity + 1).map(row => <li key={row.student} className="nl-row"><span className="nl-avatar" aria-hidden="true">{row.alias.slice(0, 1)}</span><span className="nl-row-main"><strong>{row.alias}</strong><span>距上次面诊已满设定天数</span></span></li>)}</ul>
           {!send && <p className="nl-quiet">中继未连接，草稿已保存在本机；连接后可以一键发出。</p>}

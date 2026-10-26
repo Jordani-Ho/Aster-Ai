@@ -16,7 +16,7 @@ import { seasonalTexts } from '../../domain/tcm/seasonal'
 import { loadTeachers } from './core/inbox'
 import { listIdentityLinks, oldKeysFor } from './core/identity/links'
 import { MemberSwitcher } from './MemberSwitcher'
-import { listAppointments, replyToAppointment, type Appointment } from './core/appointments'
+import { listAppointments, replyToAppointment, requestAppointment, type Appointment } from './core/appointments'
 import type { SendEnvelope } from './core/inbox'
 import { formatAppointmentTime } from './core/schedule/appointments'
 import { TongueCapture } from './TongueCapture'
@@ -73,7 +73,10 @@ export function StudentToday({
   const [mirrorStatus, setMirrorStatus] = useState('')
   const [error, setError] = useState('')
   const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [appointmentNote, setAppointmentNote] = useState('')
   const [appointmentBusy, setAppointmentBusy] = useState(false)
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [requestSlots, setRequestSlots] = useState([''])
   const [busy, setBusy] = useState(false)
   // 刚拍完的舌象不能被“读本机旧记录”的异步结果覆盖（CI 上两者会抢）。
   const captured = useRef(false)
@@ -177,8 +180,25 @@ export function StudentToday({
   const planLine = plan ? (plan.points[0] ?? plan.constitution) : seasonal ? `${seasonal.living} ${seasonal.diet}` : ''
   const greetingName = alias.trim() === '' ? '' : '，' + alias.trim()
   const planSource = plan ? `来自${teacherCall || teacherName || '老师'}给您的方案` : '没有老师给的方案，这是通用的节气建议'
-  const ownAppointments = appointments.filter(row => row.student === identity.publicKey && ['offered', 'accepted', 'confirmed'].includes(row.status)
-    && (row.status === 'offered' ? row.expiresAt > +now : Date.parse(row.slotStart) > +now))
+  const ownAppointments = appointments.filter(row => row.student === identity.publicKey && (!teacher || row.teacher === teacher)
+    && (['offered', 'accepted', 'confirmed', 'requested'].includes(row.status)
+      ? (row.status === 'offered' ? row.expiresAt > +now : Date.parse(row.slotStart) > +now)
+      : row.status === 'cancelled' && +now - Date.parse(row.createdAt) < 14 * 86_400_000))
+  const hasFutureAppointment = ownAppointments.some(row => ['offered', 'requested', 'accepted', 'confirmed'].includes(row.status) && Date.parse(row.slotStart) > +now)
+
+  const submitAppointmentRequest = async () => {
+    if (!teacher || !sendEnvelope || appointmentBusy) return
+    const selected = requestSlots.filter(Boolean).map(value => new Date(value).getTime())
+    setAppointmentBusy(true); setError('')
+    try {
+      await requestAppointment({ store, identity, teacher, startsAt: selected,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', send: sendEnvelope })
+      setAppointments(await listAppointments(store))
+      setRequestOpen(false); setRequestSlots([''])
+      setAppointmentNote('预约请求已发给老师，确认后会在这里显示。')
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '预约请求没有发出，请重试。') }
+    finally { setAppointmentBusy(false) }
+  }
 
   const toggleCheck = async (homeworkId: string) => {
     if (busy) return
@@ -208,8 +228,10 @@ export function StudentToday({
       <div className="nl-top"><h2>老师邀约</h2><span className="nl-meta">{ownAppointments.length} 条</span></div>
       {ownAppointments.length === 0 && <p className="nl-empty">老师有合适的面诊时间时，会在这里邀请您。</p>}
       {ownAppointments.map(item => <div className="nl-appointment" key={item.offerId}>
-        <strong>{item.status === 'confirmed' ? '已确认面诊' : item.status === 'accepted' ? '已回复，等老师确认' : '老师请您来面诊'}</strong>
-        <p>{formatAppointmentTime(item.slotStart, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', item.timezone)} · {item.minutes} 分钟</p>
+        <strong>{item.status === 'confirmed' ? '已确认面诊' : item.status === 'accepted' ? '已回复，等老师确认' : item.status === 'requested' ? '预约请求已发出' : item.status === 'cancelled' ? '预约有变动' : '老师请您来面诊'}</strong>
+        <p>{item.status === 'requested' || (item.status === 'cancelled' && ['slot_full', 'unavailable'].includes(item.reason ?? '')) ? '您选的时间：' + formatAppointmentTime(item.slotStart, item.timezone) : formatAppointmentTime(item.slotStart, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', item.teacherCity, item.timezone)} · {item.minutes} 分钟</p>
+        {item.status === 'requested' && <p className="nl-quiet">等老师按排班确认一个时间。</p>}
+        {item.status === 'cancelled' && <p className="nl-quiet">{item.reason === 'slot_full' ? '老师选的时段约满了，请换几个时间再试。' : item.reason === 'schedule_changed' ? '老师调整了排班，这次预约已取消。' : item.reason === 'already_booked' ? '您已有待回复邀约、预约请求或未来预约。' : '老师暂时无法确认这些时间，可以重新预约。'}</p>}
         {item.status === 'offered' && <>
           <p className="nl-quiet">还剩 {Math.max(0, Math.ceil((item.expiresAt - +now) / 60_000))} 分钟回复</p>
           <div className="nl-actions">
@@ -227,6 +249,22 @@ export function StudentToday({
         </>}
         {item.status === 'accepted' && <p className="nl-quiet">老师正在确认时段容量。</p>}
       </div>)}
+      {teacher && <>
+        {!requestOpen && <button type="button" className="nl-link-button" disabled={!sendEnvelope || hasFutureAppointment} onClick={() => setRequestOpen(true)}>{hasFutureAppointment ? '已有待回复邀约、预约请求或未来预约' : '想预约？选几个方便的时间'}</button>}
+        {requestOpen && <div className="nl-request-slots">
+          <p className="nl-quiet">最多选三个时间，老师会按排班自动确认其中一个。请选择两小时后、60 天内的整分时间。</p>
+          {requestSlots.map((value, index) => <label key={index}>时间 {index + 1}
+            <input type="datetime-local" step="60" value={value} min={new Date(Date.now() + 2 * 60 * 60_000 - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16)}
+              max={new Date(Date.now() + 60 * 86_400_000 - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16)}
+              onChange={event => setRequestSlots(current => current.map((slot, slotIndex) => slotIndex === index ? event.target.value : slot))} />
+            {requestSlots.length > 1 && <button type="button" className="nl-link-button" onClick={() => setRequestSlots(current => current.filter((_, slotIndex) => slotIndex !== index))}>移除</button>}
+          </label>)}
+          {requestSlots.length < 3 && <button type="button" className="nl-link-button" onClick={() => setRequestSlots(current => [...current, ''])}>再加一个时间</button>}
+          <div className="nl-actions"><button type="button" className="nl-primary" disabled={appointmentBusy || !sendEnvelope || requestSlots.some(value => !value)} onClick={() => void submitAppointmentRequest()}>发给老师</button>
+            <button type="button" className="nl-link-button" disabled={appointmentBusy} onClick={() => { setRequestOpen(false); setRequestSlots(['']) }}>先不约</button></div>
+        </div>}
+      </>}
+      {appointmentNote && <p role="status" className="nl-quiet">{appointmentNote}</p>}
       {error && <p role="alert" className="nl-danger-strong">{error}</p>}
     </section>
 

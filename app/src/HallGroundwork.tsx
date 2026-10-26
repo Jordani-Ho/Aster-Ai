@@ -9,7 +9,7 @@ import { TemplateStudio } from './TemplateStudio'
 import './groundwork.css'
 import { HerbLibrary } from './HerbLibrary'
 import { listHerbs } from './core/herbs'
-import { appointmentsAffectedBySchedule, type Appointment } from './core/appointments'
+import { appointmentsAffectedBySchedule, cancelAppointment, type Appointment } from './core/appointments'
 import { listTeacherRecords } from './core/records/teacher'
 import type { Identity } from './core/identity'
 import type { SendEnvelope } from './core/inbox'
@@ -34,11 +34,11 @@ export function HallGroundwork({ store, identity, send, onReady, onDone }: { sto
     if (!active) return
     setValue(status.value); setMissing(status.missing); setDays(retention); setItem(keys.find(key => status.missing.includes(GROUNDWORK_ITEMS[key])) ?? 'model'); onReady?.(!status.missing.length)
   })().catch(cause => { if (active) setError(`读取失败：${cause.message}`) }); return () => { active = false } }, [store])
-  const persist = async (key: Item, candidate = value, keepAppointments = false) => {
+  const persist = async (key: Item, candidate = value, scheduleChoice: 'keep' | 'cancel' | null = null) => {
     if (!candidate) return
     setBusy(true); setError(''); setNotice('')
     try {
-      if (key === 'schedule' && !keepAppointments) {
+      if (key === 'schedule' && scheduleChoice === null) {
         const rows = await appointmentsAffectedBySchedule(store, candidate.schedule)
         if (rows.length) {
           const records = await listTeacherRecords(store), names: Record<string, string> = {}
@@ -49,6 +49,15 @@ export function HallGroundwork({ store, identity, send, onReady, onDone }: { sto
           setScheduleConflicts({ value: candidate, rows, names })
           setNotice('排班改动会影响已确认预约，请先确认是否保留。')
           return
+        }
+      }
+      if (key === 'schedule' && scheduleChoice === 'cancel') {
+        if (!identity || !send) throw Error('需要连上中继后才能取消并通知学生')
+        const affected = scheduleConflicts?.rows ?? await appointmentsAffectedBySchedule(store, candidate.schedule)
+        for (const appointment of affected) {
+          const current = await store.get('appointments', appointment.offerId) as Appointment | undefined
+          if (current?.status === 'cancelled' && current.reason === 'schedule_changed') continue
+          await cancelAppointment(store, identity, appointment.offerId, 'schedule_changed', new Date(), send)
         }
       }
       if (key === 'templates') {
@@ -86,7 +95,7 @@ export function HallGroundwork({ store, identity, send, onReady, onDone }: { sto
   }
   if (!value) return <section aria-label="开馆基础工作"><p>{error || '正在读取基础工作…'}</p>{error && <button type="button" onClick={() => void refresh(true).catch(cause => setError(cause.message))}>重新读取</button>}</section>
   if (herbOpen) return <section className="groundwork" aria-label="药材库准备"><HerbLibrary store={store} role="老师" /><button type="button" onClick={() => { setHerbOpen(false); void refresh() }}>返回基础工作</button></section>
-  const patch = (next: Partial<Groundwork>) => { setValue({ ...value, ...next }); setEdited(true); setNotice(''); onReady?.(false) }
+  const patch = (next: Partial<Groundwork>) => { setValue({ ...value, ...next }); setScheduleConflicts(null); setEdited(true); setNotice(''); onReady?.(false) }
   const schedule = value.schedule
   const editPeriods = (day: string, periods: Period[]) => patch({ schedule: { ...schedule, week: { ...schedule.week, [day]: periods } } })
   return <section aria-label="开馆基础工作" className="groundwork">
@@ -125,8 +134,12 @@ export function HallGroundwork({ store, identity, send, onReady, onDone }: { sto
       {scheduleConflicts && item === 'schedule' && <section className="nl-card" aria-label="受影响的预约">
         <h4>这项改动会影响 {scheduleConflicts.rows.length} 位学生</h4>
         <ul>{scheduleConflicts.rows.map(row => <li key={row.offerId}>{scheduleConflicts.names[row.student] ?? `学生 ${row.student.slice(0, 6)}`} · {row.slotStart.replace('T', ' ').slice(0, 16)}</li>)}</ul>
-        <p>确认后保留已确认预约，再保存新的排班。</p>
-        <button type="button" className="nl-primary" disabled={busy} onClick={() => void persist('schedule', scheduleConflicts.value, true)}>保留预约并保存排班</button>
+        <p>选择保留预约，或取消并通知学生，再保存新的排班。</p>
+        <div className="nl-actions">
+          <button type="button" className="nl-primary" disabled={busy} onClick={() => void persist('schedule', scheduleConflicts.value, 'keep')}>保留预约并保存</button>
+          <button type="button" className="nl-link-button" disabled={busy || !identity || !send} onClick={() => void persist('schedule', scheduleConflicts.value, 'cancel')}>取消并通知后保存</button>
+        </div>
+        {(!identity || !send) && <p className="nl-quiet">中继连接后才能通知学生并取消预约。</p>}
       </section>}
     </>}
     {item === 'invitation' && <>

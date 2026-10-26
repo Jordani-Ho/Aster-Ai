@@ -64,6 +64,12 @@ function isoWithOffset(instant: number, timezone: string): string {
   return `${dayText(local)}T${String(local.hour).padStart(2, '0')}:${String(local.minute).padStart(2, '0')}:00${sign}${String(Math.floor(magnitude / 60)).padStart(2, '0')}:${String(magnitude % 60).padStart(2, '0')}`
 }
 
+/** 把学生选定的绝对时刻保存为其本地时区的带偏移时刻。 */
+export function slotStartInZone(instant: number, timezone: string): string {
+  if (!Number.isSafeInteger(instant) || instant % 60_000 !== 0 || typeof timezone !== 'string') throw new Error('预约时间无效')
+  return isoWithOffset(instant, timezone)
+}
+
 /** 排班、节假日、至少提前两小时与容量共用的唯一可约时段算法。 */
 export function appointmentSlots(scheduleInput: Schedule, options: SlotOptions = {}): AppointmentSlot[] {
   const schedule = validateSchedule(scheduleInput)
@@ -103,7 +109,7 @@ export function appointmentSlots(scheduleInput: Schedule, options: SlotOptions =
   return result.sort((left, right) => Date.parse(left.slotStart) - Date.parse(right.slotStart))
 }
 
-export function formatAppointmentTime(slotStart: string, viewerTimezone: string, teacherCity?: string): string {
+export function formatAppointmentTime(slotStart: string, viewerTimezone: string, teacherCity?: string, teacherTimezone?: string): string {
   const instant = new Date(slotStart)
   if (!Number.isFinite(+instant)) throw new Error('预约时间无效')
   const found = new Intl.DateTimeFormat('zh-CN', {
@@ -112,5 +118,6 @@ export function formatAppointmentTime(slotStart: string, viewerTimezone: string,
   }).formatToParts(instant)
   const values = Object.fromEntries(found.map(part => [part.type, part.value]))
   const viewer = `${values.month}月${values.day}日 ${values.weekday} ${values.hour}:${values.minute}`
-  return teacherCity ? `${viewer}（老师时间：${teacherCity}）` : viewer
+  const teacherLabel = [teacherCity, teacherTimezone ? `时区 ${teacherTimezone}` : undefined].filter(Boolean).join(' · ')
+  return teacherLabel ? `${viewer}（老师时间：${teacherLabel}）` : viewer
 }

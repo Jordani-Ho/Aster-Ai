@@ -271,6 +271,60 @@ test('V2-25 两台设备经真实中继完成邀约、接受、确认并显示�
   await expect(todayAppointments).toContainText('30 分钟')
 })
 
+test('V2-25b 学生主动预约经真实中继确认，排班取消后收到通知并显示老师城市', async ({ people }) => {
+  test.setTimeout(150000)
+  const teacher = people.teacher.page, student = people.student.page
+  await role(teacher, '老师'); await role(student, '学生')
+  const preferred = await teacher.evaluate(async () => {
+    const storeModule = '/src/core/store/index.ts', groundworkModule = '/src/core/hall/groundwork.ts', profileModule = '/src/core/intake/session.ts'
+    const { resumeStore } = await import(storeModule)
+    const { loadGroundwork, saveGroundwork } = await import(groundworkModule)
+    const { emptyProfile, saveProfile } = await import(profileModule)
+    const session = await resumeStore()
+    try {
+      const slot = new Date(); slot.setDate(slot.getDate() + 3); slot.setHours(9, 0, 0, 0)
+      const groundwork = await loadGroundwork(session.store)
+      groundwork.schedule.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+      groundwork.schedule.duration = 30; groundwork.schedule.capacity = 3
+      groundwork.schedule.week = Object.fromEntries(Array.from({ length: 7 }, (_, day) => [String(day), day === slot.getDay() ? [{ start: '09:00', end: '09:30' }] : []]))
+      groundwork.schedule.exceptions = []
+      await saveGroundwork(session.store, groundwork)
+      const profile = emptyProfile(); profile.city = { value: '杭州', source: 'teacher' }
+      await saveProfile(session.store, profile)
+      const date = `${slot.getFullYear()}-${String(slot.getMonth() + 1).padStart(2, '0')}-${String(slot.getDate()).padStart(2, '0')}`
+      return { localTime: new Date(+slot - slot.getTimezoneOffset() * 60_000).toISOString().slice(0, 16), date, timezone: groundwork.schedule.timezone }
+    } finally { session.store.close(); session.identity.privateKey.fill(0) }
+  })
+
+  await student.locator('[aria-label="老师邀约"]').getByRole('button', { name: /想预约/ }).click()
+  await student.getByLabel('时间 1').fill(preferred.localTime)
+  await student.locator('[aria-label="老师邀约"]').getByRole('button', { name: '发给老师', exact: true }).click()
+  const confirmed = student.locator('.nl-appointment').filter({ hasText: '已确认面诊' })
+  await expect(confirmed).toBeVisible({ timeout: 30000 })
+  await expect(confirmed).toContainText('杭州')
+  await expect(confirmed).toContainText('时区 ' + preferred.timezone)
+  const requestId = await student.evaluate(async () => {
+    const storeModule = '/src/core/store/index.ts', { resumeStore } = await import(storeModule), session = await resumeStore()
+    try { return (await session.store.list('appointments')).find((row: any) => row.value.status === 'confirmed')?.key }
+    finally { session.store.close(); session.identity.privateKey.fill(0) }
+  })
+  await expect.poll(async () => (await stored(teacher, 'appointments')).find((row: any) => row.key === requestId)?.value.status, { timeout: 30000 }).toBe('confirmed')
+
+  await teacher.locator('nav.nl-tabbar').getByRole('button', { name: '我的馆', exact: true }).click()
+  await teacher.locator('.hall-row').filter({ hasText: '设置' }).click()
+  await teacher.getByRole('button', { name: '开馆基础工作', exact: true }).click()
+  await teacher.locator('.ground-tabs button').filter({ hasText: '排班' }).click()
+  await teacher.getByText('日期例外：休息或临时加诊', { exact: true }).click()
+  await teacher.getByRole('button', { name: '添加日期例外', exact: true }).click()
+  await teacher.locator('.groundwork input[type="date"]').last().fill(preferred.date)
+  await teacher.locator('.groundwork select').last().selectOption('off')
+  await teacher.getByRole('button', { name: '就这样，保存排班', exact: true }).click()
+  await expect(teacher.getByLabel('受影响的预约')).toContainText('1 位学生')
+  await teacher.getByRole('button', { name: '取消并通知后保存', exact: true }).click()
+  await expect(student.locator('.nl-appointment').filter({ hasText: '预约有变动' })).toContainText('老师调整了排班', { timeout: 30000 })
+  await expect.poll(async () => (await stored(teacher, 'appointments')).find((row: any) => row.key === requestId)?.value.status, { timeout: 30000 }).toBe('cancelled')
+})
+
 test('V2-33 两台设备经真实中继传库存快照，老师核对页可见且 Encounter 不含快照', async ({ people }) => {
   test.setTimeout(180000)
   const teacher = people.teacher.page, student = people.student.page

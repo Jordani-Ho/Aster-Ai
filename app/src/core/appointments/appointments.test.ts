@@ -3,7 +3,8 @@ import { IDBFactory } from 'fake-indexeddb'
 import { createIdentity } from '../identity'
 import { openStore, type StoreValue } from '../store'
 import { defaultSchedule, type Schedule } from '../hall/groundwork'
-import { appointmentsAffectedBySchedule, createAppointmentInbox, listAppointments, markAppointmentAttendance, replyToAppointment, sendAppointmentOffer, type AppointmentMessage } from './index'
+import { appointmentsAffectedBySchedule, cancelAppointment, createAppointmentInbox, listAppointments, markAppointmentAttendance, replyToAppointment, requestAppointment, sendAppointmentOffer, type AppointmentMessage } from './index'
+import { emptyProfile, saveProfile } from '../intake/session'
 
 const now = new Date('2026-10-25T12:00:00Z')
 const slot = { slotStart: '2026-10-26T09:00:00+08:00', minutes: 30, timezone: 'Asia/Shanghai', capacity: 3 }
@@ -26,6 +27,93 @@ async function pair() {
 }
 
 describe('预约信封和状态机', () => {
+  it('学生提交 1–3 个偏好时段，老师按可约时段自动确认，并回传城市和时区', async () => {
+    const { teacher, student, teacherStore, studentStore } = await pair()
+    const profile = emptyProfile(); profile.city = { value: '杭州', source: 'teacher' }
+    await saveProfile(teacherStore, profile)
+    const toTeacher: { type: string; version: 1; payload: any }[] = []
+    const toStudent: { type: string; version: 1; payload: any }[] = []
+    const studentInbox = createAppointmentInbox({ identity: student, store: studentStore, now: () => now })
+    const teacherInbox = createAppointmentInbox({ identity: teacher, store: teacherStore, now: () => now,
+      send: async (_recipient, envelope) => { toStudent.push(envelope) } })
+    try {
+      const request = await requestAppointment({ store: studentStore, identity: student, teacher: teacher.publicKey,
+        startsAt: [Date.parse(slot.slotStart)], timezone: 'America/Los_Angeles', now,
+        send: async (_recipient, envelope) => { toTeacher.push(envelope) } })
+      expect(request.status).toBe('requested')
+      expect(toTeacher[0].type).toBe('appointment.request')
+      await teacherInbox.receive(message(student.publicKey, toTeacher[0].type, toTeacher[0].payload))
+      expect((await listAppointments(teacherStore)).find(row => row.offerId === request.offerId)).toMatchObject({ status: 'confirmed', teacherCity: '杭州' })
+      expect(toStudent[0]).toMatchObject({ type: 'appointment.confirmed', payload: { teacherCity: '杭州', timezone: 'Asia/Shanghai' } })
+      await studentInbox.receive(message(teacher.publicKey, toStudent[0].type, toStudent[0].payload))
+      expect((await listAppointments(studentStore)).find(row => row.offerId === request.offerId)).toMatchObject({ status: 'confirmed', teacherCity: '杭州', timezone: 'Asia/Shanghai' })
+      await expect(requestAppointment({ store: studentStore, identity: student, teacher: teacher.publicKey,
+        startsAt: [Date.parse(slot.slotStart)], timezone: 'America/Los_Angeles', now,
+        send: async () => {} })).rejects.toThrow('已有待回复邀约、预约请求或未来预约')
+      await teacherInbox.receive(message(student.publicKey, toTeacher[0].type, toTeacher[0].payload))
+      expect((await listAppointments(teacherStore)).filter(row => row.offerId === request.offerId)).toHaveLength(1)
+    } finally { teacherStore.close(); studentStore.close() }
+  }, 20000)
+
+  it('学生申请排班外时间时收到不可约回复', async () => {
+    const { teacher, student, teacherStore, studentStore } = await pair()
+    const toTeacher: { type: string; payload: any }[] = [], toStudent: { type: string; payload: any }[] = []
+    const studentInbox = createAppointmentInbox({ identity: student, store: studentStore, now: () => now })
+    const teacherInbox = createAppointmentInbox({ identity: teacher, store: teacherStore, now: () => now,
+      send: async (_recipient, envelope) => { toStudent.push(envelope) } })
+    try {
+      const outside = Date.parse('2026-10-26T13:00:00+08:00')
+      const request = await requestAppointment({ store: studentStore, identity: student, teacher: teacher.publicKey,
+        startsAt: [outside], timezone: 'America/Los_Angeles', now, send: async (_recipient, envelope) => { toTeacher.push(envelope) } })
+      await teacherInbox.receive(message(student.publicKey, toTeacher[0].type, toTeacher[0].payload))
+      expect((await listAppointments(teacherStore)).find(row => row.offerId === request.offerId)).toMatchObject({ status: 'cancelled', reason: 'unavailable' })
+      await studentInbox.receive(message(teacher.publicKey, toStudent[0].type, toStudent[0].payload))
+      expect((await listAppointments(studentStore)).find(row => row.offerId === request.offerId)).toMatchObject({ status: 'cancelled', reason: 'unavailable' })
+    } finally { teacherStore.close(); studentStore.close() }
+  }, 20000)
+
+  it('学生预约输入校验拒绝过去、过近、超期、重复、超过三个时段和未知老师', async () => {
+    const { teacher, student, studentStore, teacherStore } = await pair()
+    const valid = Date.parse(slot.slotStart)
+    const send = async () => {}
+    try {
+      for (const startsAt of [
+        [+now - 60_000], [+now + 60_000], [+now + 61 * 86_400_000], [valid, valid], [valid, valid + 60_000, valid + 120_000, valid + 180_000],
+      ]) await expect(requestAppointment({ store: studentStore, identity: student, teacher: teacher.publicKey, startsAt, now, send })).rejects.toThrow()
+      await expect(requestAppointment({ store: studentStore, identity: student, teacher: teacher.publicKey, startsAt: [valid], timezone: 'Invalid/Zone', now, send })).rejects.toThrow()
+      await expect(requestAppointment({ store: studentStore, identity: student, teacher: createIdentity().publicKey, startsAt: [valid], now, send })).rejects.toThrow()
+      await expect(requestAppointment({ store: teacherStore, identity: teacher, teacher: student.publicKey, startsAt: [valid], now, send })).rejects.toThrow()
+      expect(await listAppointments(studentStore)).toEqual([])
+    } finally { teacherStore.close(); studentStore.close() }
+  }, 20000)
+
+  it('学生申请的时段已满时自动回约满，且拒绝陌生关系与非法请求信封', async () => {
+    const { teacher, student, teacherStore, studentStore } = await pair()
+    const another = [createIdentity(), createIdentity(), createIdentity()]
+    for (const [index, identity] of another.entries()) {
+      await teacherStore.put('teacher-students', identity.publicKey, { student: identity.publicKey } as unknown as StoreValue)
+      await teacherStore.put('appointments', 'occupied-' + index, {
+        offerId: 'occupied-' + index, student: identity.publicKey, teacher: teacher.publicKey, slotStart: slot.slotStart,
+        minutes: 30, timezone: slot.timezone, capacity: 3, expiresAt: 0, createdAt: now.toISOString(), status: 'confirmed',
+      } as unknown as StoreValue)
+    }
+    const sent: { type: string; payload: any }[] = []
+    const inbox = createAppointmentInbox({ identity: teacher, store: teacherStore, now: () => now,
+      send: async (_recipient, envelope) => { sent.push(envelope) } })
+    const payload = { requestId: 'student-request-full', startsAt: [Date.parse(slot.slotStart)], timezone: 'America/Los_Angeles' }
+    try {
+      await inbox.receive(message(student.publicKey, 'appointment.request', payload))
+      await inbox.receive(message(student.publicKey, 'appointment.request', payload))
+      expect((await listAppointments(teacherStore)).find(row => row.offerId === payload.requestId)).toMatchObject({ status: 'cancelled', reason: 'slot_full' })
+      expect(sent).toHaveLength(1)
+      expect(sent[0]).toMatchObject({ type: 'appointment.cancel', payload: { reason: 'slot_full' } })
+      await inbox.receive(message(createIdentity().publicKey, 'appointment.request', { ...payload, requestId: 'unrelated-request' }))
+      await inbox.receive(message(student.publicKey, 'appointment.request', { ...payload, requestId: 'bad-request', startsAt: [1, 1] }))
+      expect(await teacherStore.get('appointments', 'unrelated-request')).toBeUndefined()
+      expect(await teacherStore.get('appointments', 'bad-request')).toBeUndefined()
+    } finally { teacherStore.close(); studentStore.close() }
+  }, 20000)
+
   it('两端经问诊收件箱完成邀约、接受、确认；重复消息不重复计数', async () => {
     const { teacher, student, teacherStore, studentStore } = await pair()
     const studentInbox = createAppointmentInbox({ identity: student, store: studentStore, now: () => now })
@@ -112,4 +200,23 @@ describe('预约信封和状态机', () => {
     await expect(markAppointmentAttendance(teacherStore, 'booking-one', 'no_show')).rejects.toThrow()
     teacherStore.close(); studentStore.close()
   })
+
+  it('老师明确取消受排班影响的预约时，先通知学生并保存取消状态', async () => {
+    const { teacher, student, teacherStore, studentStore } = await pair()
+    const booking = { offerId: 'schedule-change', student: student.publicKey, teacher: teacher.publicKey, slotStart: slot.slotStart,
+      minutes: 30, timezone: slot.timezone, capacity: 3, expiresAt: 0, createdAt: now.toISOString(), status: 'confirmed' }
+    await teacherStore.put('appointments', booking.offerId, booking as unknown as StoreValue)
+    const sent: { type: string; payload: any }[] = []
+    try {
+      await expect(cancelAppointment(teacherStore, teacher, booking.offerId, 'schedule_changed', now, async () => { throw Error('relay offline') })).rejects.toThrow('relay offline')
+      expect((await listAppointments(teacherStore)).find(row => row.offerId === booking.offerId)?.status).toBe('confirmed')
+      await cancelAppointment(teacherStore, teacher, booking.offerId, 'schedule_changed', now, async (_recipient, envelope) => { sent.push(envelope) })
+      expect(sent).toMatchObject([{ type: 'appointment.cancel', payload: { offerId: booking.offerId, reason: 'schedule_changed' } }])
+      expect((await listAppointments(teacherStore)).find(row => row.offerId === booking.offerId)).toMatchObject({ status: 'cancelled', reason: 'schedule_changed' })
+      const studentInbox = createAppointmentInbox({ identity: student, store: studentStore, now: () => now })
+      await studentStore.put('appointments', booking.offerId, { ...booking, student: student.publicKey } as unknown as StoreValue)
+      await studentInbox.receive(message(teacher.publicKey, sent[0].type, sent[0].payload))
+      expect((await listAppointments(studentStore)).find(row => row.offerId === booking.offerId)).toMatchObject({ status: 'cancelled', reason: 'schedule_changed' })
+    } finally { teacherStore.close(); studentStore.close() }
+  }, 20000)
 })

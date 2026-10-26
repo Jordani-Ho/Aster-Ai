@@ -43,4 +43,9 @@
 - 实现已提交到 `task/V2-25-appointments`，待发起人用 `v2-25.bundle` 推送并创建 PR。
 - 验证通过：`app` 类型检查、638 项单元测试、生产构建、`npm run typecheck:e2e`。
 - 新增真实中继双端浏览器验收用例，但本机未能运行：Playwright Chromium 下载时 `cdn.playwright.dev` DNS 解析失败；单独构建中继时 WSL 返回 `Wsl/E_ACCESSDENIED`。CI 仍需跑过真实中继用例。
-- 仍未实现：学生主动预约请求；排班变更时的“取消并通知”选项（当前会列出受影响预约并允许明确保留后保存）；给学生显示老师城市（当前标明老师时区）。这些改动此前被自动审查阻止，待发起人确认后再补。
+
+## V2-25b 后续实现
+
+- 在 `task/V2-25b-appointments-rest` 完成学生主动请求 1–3 个时段、排班变更时选择“保留”或“取消并通知”、以及学生端显示老师城市和时区补充；已增加本地状态机、输入校验和真实中继浏览器验收。
+- 验证通过：app 类型检查、643 项单元测试、生产构建、`npm run typecheck:e2e`。
+- 本机真实中继浏览器用例未能启动：Chromium 下载失败，原始网络错误为 `getaddrinfo ENOTFOUND cdn.playwright.dev`；需 CI 执行该用例。
