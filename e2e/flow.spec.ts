@@ -275,6 +275,8 @@ test('V2-36 两台设备经真实中继请出、保留原预约、再用新邀�
   test.setTimeout(120000)
   const teacher = people.teacher.page, student = people.student.page
   await role(teacher, '老师'); await role(student, '学生')
+  await teacher.getByRole('button', { name: '学生', exact: true }).click()
+  await expect(teacher.getByRole('button', { name: '学生', exact: true })).toHaveAttribute('aria-current', 'page')
   const confirmed = { offerId: 'synthetic-confirmed', student: actors.student.pubkey, teacher: actors.teacher.pubkey,
     slotStart: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16) + ':00+00:00', minutes: 30, timezone: 'UTC', capacity: 3,
     expiresAt: Date.now() + 2 * 3600000, createdAt: new Date().toISOString(), status: 'confirmed' }
@@ -283,23 +285,13 @@ test('V2-36 两台设备经真实中继请出、保留原预约、再用新邀�
     try { await session.store.put('appointments', appointment.offerId, appointment) }
     finally { session.store.close(); session.identity.privateKey.fill(0) }
   }, confirmed)
-  const leaveCount = await teacher.evaluate(async ({ studentKey, relayUrl, appointment }) => {
+  await teacher.evaluate(async ({ studentKey, appointment }) => {
     const storePath = '/src/core/store/index.ts', groundworkPath = '/src/core/hall/groundwork.ts', schedulePath = '/src/core/homework/schedule.ts'
-    const transportPath = '/src/core/transport/index.ts', rosterPath = '/src/core/roster/index.ts'
     const { resumeStore } = await import(storePath)
     const { loadGroundwork, saveGroundwork } = await import(groundworkPath)
     const { localDay, addDays } = await import(schedulePath)
-    const { createTransport } = await import(transportPath)
-    const { runDailyRosterLeaves } = await import(rosterPath)
     const session = await resumeStore()
-    let resolveReady!: () => void, rejectReady!: (reason: Error) => void
-    const ready = new Promise<void>((resolve, reject) => { resolveReady = resolve; rejectReady = reject })
-    const timeout = setTimeout(() => rejectReady(new Error('roster relay did not connect')), 20000)
-    const transport = createTransport({ privateKey: session.identity.privateKey, relays: [relayUrl], onMessage: () => {},
-      onStatus: (status: string) => { if (status === 'ready') resolveReady(); if (status === 'rejected') rejectReady(new Error('roster relay rejected')) } })
-    transport.start()
     try {
-      await ready
       const today = localDay(new Date())
       const old = localDay(addDays(new Date(), -31))
       const groundwork = await loadGroundwork(session.store)
@@ -309,11 +301,10 @@ test('V2-36 两台设备经真实中继请出、保留原预约、再用新邀�
         student: studentKey, weekStart: today, weeklyRate: 0, streak: 0, practiceDays: 0, scheduled: 7, done: 0,
         hasHomework: true, homeworkSince: old, lastCheckinDay: old, receivedAt: new Date().toISOString(),
       })
-      return (await runDailyRosterLeaves(session.store, session.identity,
-        async (recipient: string, envelope: Envelope) => { await transport.send(recipient, envelope) }, new Date())).length
-    } finally { clearTimeout(timeout); transport.close(); session.store.close(); session.identity.privateKey.fill(0) }
-  }, { studentKey: actors.student.pubkey, relayUrl: runtime.relayUrl, appointment: confirmed })
-  expect(leaveCount).toBe(1)
+      window.dispatchEvent(new Event('focus'))
+    } finally { session.store.close(); session.identity.privateKey.fill(0) }
+  }, { studentKey: actors.student.pubkey, appointment: confirmed })
+  await expect.poll(async () => (await stored(teacher, 'teacher-roster-leaves')).length, { timeout: 45000 }).toBe(1)
   await expect(student.getByRole('heading', { name: '与老师的智能体失联' })).toBeVisible({ timeout: 45000 })
   await expect(student.getByText('想回来，请老师重新邀请你', { exact: false })).toBeVisible()
   await expect.poll(async () => (await stored(student, 'settings')).find((row: any) => row.key === 'teachers')?.value ?? [], { timeout: 15000 }).toEqual([])
@@ -323,6 +314,8 @@ test('V2-36 两台设备经真实中继请出、保留原预约、再用新邀�
   await student.getByRole('button', { name: /不舒服？告诉/ }).click()
   await expect(student.getByText('请先请老师重新邀请你', { exact: true })).toBeVisible()
   await expect.poll(async () => (await stored(teacher, 'teacher-students')).some((row: any) => row.key === actors.student.pubkey)).toBe(false)
+  await teacher.getByRole('button', { name: '今天', exact: true }).click()
+  await expect(teacher.getByRole('heading', { name: '今天请出了谁' })).toBeVisible()
   await student.waitForTimeout(1100)
   const invite = await teacher.evaluate(async base => {
     const storePath = '/src/core/store/index.ts', onboardingPath = '/src/core/onboarding/index.ts'

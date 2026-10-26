@@ -11,7 +11,7 @@ import { listAppointments, markAppointmentAttendance, type Appointment } from '.
 import { confirmDailyAppointmentInvitations, latestAppointmentInviteRun, processAppointmentCampaigns, runDailyAppointmentInvitations, type AppointmentInvitePlan } from './core/appointments/agent'
 import { formatAppointmentTime } from './core/schedule/appointments'
 import type { SendEnvelope } from './core/inbox'
-import { listRosterLeaves, runDailyRosterLeaves, type RosterLeave } from './core/roster'
+import { listRosterLeaves, type RosterLeave } from './core/roster'
 import './newui.css'
 
 // V2-16 老师·今天（01）：最上面“学生到了？”，中间“等您签字”，下面一行“学生动态”。
@@ -93,10 +93,6 @@ export function TeacherToday({ identity, store, status, send, onStartVisit, onOp
     let active = true
     const tick = async () => {
       const now = new Date()
-      if (send) try {
-        const departed = await runDailyRosterLeaves(store, identity, send, now)
-        if (active && departed.length) { setLeaves(await listRosterLeaves(store)); window.dispatchEvent(new Event('aster:data-changed')) }
-      } catch { /* 中继暂不可用时下一次再试，不静默请出。 */ }
       if (send) try { await processAppointmentCampaigns(store, identity, send, now) } catch { /* 下一次页面检查继续尝试 */ }
       try {
         const run = await runDailyAppointmentInvitations(store, identity, send, now)

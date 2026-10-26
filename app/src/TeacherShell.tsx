@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
 import type { Wiring } from './core/wiring'
@@ -11,6 +11,7 @@ import { TeacherStudentsPage } from './TeacherStudentsPage'
 import { VisitPage } from './VisitPage'
 import { RemoteReview } from './RemoteReview'
 import { HallGroundwork, GroundworkNotice } from './HallGroundwork'
+import { runDailyRosterLeaves } from './core/roster'
 import './newui.css'
 import './newui2.css'
 import './teacher.css'
@@ -35,6 +36,28 @@ export function TeacherShell({ identity, store, stack, llm, gateway, status, set
   const [tab, setTab] = useState<Tab>('today')
   const [flow, setFlow] = useState<Flow>(null)
   const [groundwork, setGroundwork] = useState(false)
+  useEffect(() => {
+    if (!stack?.send) return
+    let active = true
+    let running = false
+    const notified = new Set<string>()
+    const tick = async () => {
+      if (running) return
+      running = true
+      try {
+        const leaves = await runDailyRosterLeaves(store, identity, stack.send, new Date())
+        if (active && leaves.some(row => !notified.has(`${row.day}:${row.student}`))) {
+          for (const row of leaves) notified.add(`${row.day}:${row.student}`)
+          window.dispatchEvent(new Event('aster:data-changed'))
+        }
+      } catch { /* 中继暂不可用时下一次再试，不静默请出。 */ }
+      finally { running = false }
+    }
+    void tick()
+    const timer = setInterval(() => { void tick() }, 15_000)
+    window.addEventListener('focus', tick)
+    return () => { active = false; clearInterval(timer); window.removeEventListener('focus', tick) }
+  }, [store, identity, stack])
   if (groundwork) return <div className="nl-shell"><div className="nl-page"><button type="button" className="nl-back" onClick={() => setGroundwork(false)}>返回今天</button><HallGroundwork store={store} identity={identity} send={stack?.send as SendEnvelope | undefined} onDone={() => setGroundwork(false)} /></div></div>
 
   if (flow?.kind === 'visit') return <VisitPage identity={identity} store={store} llm={llm} send={stack?.send as SendEnvelope | undefined} initialStudent={flow.student} onExit={() => setFlow(null)} />
