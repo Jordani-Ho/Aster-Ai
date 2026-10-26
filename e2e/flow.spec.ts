@@ -480,6 +480,9 @@ test('hard: student displays only the valid signature after tampered then valid 
     const channel=createTransport({privateKey:Uint8Array.from(key),relays:[relay],onMessage:()=>{},onStatus:(status:string)=>{if(status==='ready')ready();if(status==='rejected')fail(new Error('teacher relay rejected'))}});channel.start()
     try {await connected;await channel.send(student,{type:'record.signed',version:1,payload:tampered});await channel.send(student,{type:'record.signed',version:1,payload:valid})}finally{clearTimeout(timer);channel.close()}
   },{key:actors.teacher.key,student:actors.student.pubkey,teacher:actors.teacher.pubkey,relay:runtime.relayUrl})
+  // 先等有效病历落到学生本机，再进“记录”页；页面打开后才到的病历要等下次刷新才显示。
+  await expect.poll(async()=>(await stored(student,'student-records')).length,{timeout:45000}).toBe(1)
+  await student.reload();await role(student,'学生')
   await studentRecords(student, true)
   await expect(student.getByText('SYNTHETIC_VALID_RECORD',{exact:false})).toBeVisible()
   await expect(student.getByText('TAMPERED_RECORD_MUST_NOT_DISPLAY',{exact:false})).toHaveCount(0)
