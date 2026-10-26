@@ -12,7 +12,7 @@ import { confirmDailyAppointmentInvitations, planAppointmentInvitations, process
 const now = new Date('2026-10-25T12:00:00Z')
 function materials(patch: Partial<InviteMaterials> = {}): InviteMaterials {
   const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'
-  return { now: now.toISOString(), timezone: 'Asia/Shanghai', city: '上海市', afterDays: 14, schedule, visits: [], appointments: [], ...patch }
+  return { now: now.toISOString(), timezone: 'Asia/Shanghai', city: '上海市', afterDays: 14, schedule, scheduleEnabled: true, visits: [], appointments: [], ...patch }
 }
 
 async function addSignedVisit(store: Awaited<ReturnType<typeof openStore>>, teacher: ReturnType<typeof createIdentity>, student: string, at: Date, alias: string) {
@@ -22,6 +22,20 @@ async function addSignedVisit(store: Awaited<ReturnType<typeof openStore>>, teac
 }
 
 describe('老师智能体预约邀约', () => {
+  it('未设排班不产生邀约；只设排班后维持过目模式', async () => {
+    expect(planAppointmentInvitations(materials({ scheduleEnabled: false, visits: [{ student: 'a'.repeat(64), alias: '合成学生', at: '2026-09-01T12:00:00Z' }] })).slot).toBeNull()
+    const teacher = createIdentity(), store = await openStore(teacher, { factory: new IDBFactory() })
+    await store.put('settings', 'role', { role: 'teacher' })
+    try {
+      const empty = await runDailyAppointmentInvitations(store, teacher, undefined, now)
+      expect((empty.output as any).slot).toBeNull()
+      const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'
+      await store.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: ['schedule'] } as unknown as StoreValue)
+      const ready = await runDailyAppointmentInvitations(store, teacher, undefined, new Date(+now + 86_400_000))
+      expect(ready.status).toBe('draft')
+      expect((ready.output as any).slot).not.toBeNull()
+    } finally { store.close() }
+  })
   it('只挑满 14 天、无未来预约、24 小时内没被邀约的人，优先最久未到', () => {
     const older = 'a'.repeat(64), exact = 'b'.repeat(64), recent = 'c'.repeat(64), booked = 'd'.repeat(64)
     const result = planAppointmentInvitations(materials({
@@ -57,7 +71,7 @@ describe('老师智能体预约邀约', () => {
     const teacher = createIdentity(), store = await openStore(teacher, { factory: new IDBFactory() })
     const schedule = defaultSchedule()
     await store.put('settings', 'role', { role: 'teacher' })
-    await store.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: [] } as unknown as StoreValue)
+    await store.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: ['schedule'] } as unknown as StoreValue)
     try {
       const run = await runDailyAppointmentInvitations(store, teacher, undefined, now)
       expect(run.status).toBe('draft')
@@ -69,7 +83,7 @@ describe('老师智能体预约邀约', () => {
     const teacher = createIdentity(), store = await openStore(teacher, { factory: new IDBFactory() })
     const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'
     await store.put('settings', 'role', { role: 'teacher' })
-    await store.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: [] } as unknown as StoreValue)
+    await store.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: ['schedule'] } as unknown as StoreValue)
     const students = Array.from({ length: 5 }, (_, i) => ({ key: String.fromCharCode(97 + i).repeat(64), name: `合成学生${i + 1}` }))
     for (const [index, student] of students.entries()) await addSignedVisit(store, teacher, student.key, new Date(+now - (30 + index) * 86_400_000), student.name)
     const send = vi.fn(async (_recipient: string, _payload: unknown) => {})
@@ -92,7 +106,7 @@ describe('老师智能体预约邀约', () => {
     const teacher = createIdentity(), teacherStore = await openStore(teacher, { factory: new IDBFactory() })
     const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'
     await teacherStore.put('settings', 'role', { role: 'teacher' })
-    await teacherStore.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: [] } as unknown as StoreValue)
+    await teacherStore.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: ['schedule'] } as unknown as StoreValue)
     const campaignId = 'overflow-campaign'
     const slot = { slotStart: '2026-10-26T09:00:00+08:00', minutes: 30, timezone: 'Asia/Shanghai', capacity: 3 }
     await teacherStore.put('appointment-campaigns', campaignId, { id: campaignId, slot, candidates: [], cursor: 0, createdAt: now.toISOString() } as unknown as StoreValue)

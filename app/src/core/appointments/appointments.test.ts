@@ -21,13 +21,23 @@ async function pair() {
   await teacherStore.put('teacher-students', student.publicKey, { student: student.publicKey })
   const schedule = defaultSchedule()
   schedule.timezone = 'Asia/Shanghai'
-  await teacherStore.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: [] } as unknown as StoreValue)
+  await teacherStore.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: ['schedule'] } as unknown as StoreValue)
   await studentStore.put('settings', 'role', { role: 'student' })
   await studentStore.put('settings', 'teachers', [teacher.publicKey])
   return { teacher, student, teacherStore, studentStore }
 }
 
 describe('预约信封和状态机', () => {
+  it('老师未设排班时不发面诊邀约，学生签名门面也不开放请求时段', async () => {
+    const { teacher, student, teacherStore, studentStore } = await pair()
+    const groundwork = await teacherStore.get('settings', 'hall-groundwork') as Record<string, unknown>
+    await teacherStore.put('settings', 'hall-groundwork', { ...groundwork, checked: [] } as StoreValue)
+    await saveReceivedStorefront(studentStore, makeStorefrontEvent(teacher, DEFAULT_STOREFRONT, Math.floor(+now / 1000), true, null, null, false), teacher.publicKey)
+    try {
+      await expect(sendAppointmentOffer({ store: teacherStore, identity: teacher, student: student.publicKey, slot, now, send: async () => {} })).rejects.toThrow('排班')
+      await expect(requestAppointment({ store: studentStore, identity: student, teacher: teacher.publicKey, startsAt: [Date.parse(slot.slotStart)], timezone: slot.timezone, now, send: async () => {} })).rejects.toThrow('排班')
+    } finally { teacherStore.close(); studentStore.close() }
+  })
   it('学生提交 1–3 个偏好时段，老师按可约时段自动确认，并回传城市和时区', async () => {
     const { teacher, student, teacherStore, studentStore } = await pair()
     const profile = emptyProfile(); profile.city = { value: '杭州市', source: 'teacher' }
@@ -166,7 +176,7 @@ describe('预约信封和状态机', () => {
     const teacher = createIdentity(), teacherStore = await openStore(teacher, { factory: new IDBFactory() })
     await teacherStore.put('settings', 'role', { role: 'teacher' })
     const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'
-    await teacherStore.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: [] } as unknown as StoreValue)
+    await teacherStore.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: ['schedule'] } as unknown as StoreValue)
     const students = await Promise.all(Array.from({ length: 4 }, async () => {
       const identity = createIdentity(), store = await openStore(identity, { factory: new IDBFactory() })
       await teacherStore.put('teacher-students', identity.publicKey, { student: identity.publicKey })

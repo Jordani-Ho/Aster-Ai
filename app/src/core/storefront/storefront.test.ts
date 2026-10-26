@@ -9,7 +9,7 @@ import { addTeacher, createInbox } from '../inbox'
 import {
   ACTIVE_TEACHER_SETTING, DEFAULT_STOREFRONT, EMBLEMS, STOREFRONT_COLLECTION, STOREFRONT_KIND,
   THEMES, displayTeacherName, inviteTitle, inviteWelcome, loadCachedStorefront, loadCachedStorefronts,
-  loadCachedReceiveRecordings, loadCachedRevisitDays, loadCachedTeacherCity, loadOwnStorefront, loadStorefrontDraft, makeStorefrontEvent, normalizeStorefront, publishStorefront,
+  loadCachedReceiveRecordings, loadCachedRevisitDays, loadCachedTeacherCity, loadCachedAppointmentAvailability, loadOwnStorefront, loadStorefrontDraft, makeStorefrontEvent, normalizeStorefront, publishStorefront,
   restoreStorefront, sameStorefront, saveReceivedStorefront, saveStorefrontDraft,
   sendStorefrontTo, storefrontEnvelope, themeOf, verifyStorefrontEvent,
   type Storefront,
@@ -18,6 +18,7 @@ import { readStorefrontLink, storefrontInviteLink } from './invite'
 import { booksForTeacher, loadTeacherVenue, pickActiveTeacher, saveActiveTeacher, teacherCall, venueHeading } from './active'
 import { parseStorefrontInstruction, reviseStorefront } from './instruction'
 import { emptyProfile, saveProfile } from '../intake/session'
+import { loadGroundwork, saveGroundwork } from '../hall/groundwork'
 
 // 只用合成身份、合成馆名，不连真实中继、不调用真实模型。
 const aci = createIdentity()
@@ -107,6 +108,21 @@ describe('V2-09 门面配置与签名', () => {
     expect(await saveReceivedStorefront(cache, published.event, aci.publicKey)).toBe(true)
     expect(await loadCachedTeacherCity(cache, aci.publicKey)).toBe('广州市')
     teacher.close(); cache.close()
+  })
+
+  it('未设排班的签名门面关闭学生请求；保存排班后重新签发才开放', async () => {
+    const teacher = await storeOf(aci), cache = await storeOf(student)
+    try {
+      const first = await publishStorefront({ store: teacher, identity: aci, storefront: ACI, now: now() })
+      expect(verifyStorefrontEvent(first.event, aci.publicKey)?.appointmentsEnabled).toBe(false)
+      await saveReceivedStorefront(cache, first.event, aci.publicKey)
+      expect(await loadCachedAppointmentAvailability(cache, aci.publicKey)).toBe(false)
+      const groundwork = await loadGroundwork(teacher)
+      await saveGroundwork(teacher, { ...groundwork, checked: ['schedule'] })
+      const second = await publishStorefront({ store: teacher, identity: aci, storefront: ACI, now: now() })
+      await saveReceivedStorefront(cache, second.event, aci.publicKey)
+      expect(await loadCachedAppointmentAvailability(cache, aci.publicKey)).toBe(true)
+    } finally { teacher.close(); cache.close() }
   })
 
   it('配置只有六项、限长；介绍写什么都进不了状态类字段', () => {

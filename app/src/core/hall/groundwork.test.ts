@@ -2,10 +2,14 @@ import { expect, it } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { createIdentity } from '../identity'
 import { openStore } from '../store'
-import { defaultSchedule, validateSchedule, effectivePeriods, loadGroundwork, saveGroundwork, groundworkMissing, groundworkStatus, assertInviteReady, GROUNDWORK_ITEMS } from './groundwork'
+import { defaultSchedule, validateSchedule, effectivePeriods, loadGroundwork, saveGroundwork, groundworkMissing, groundworkStatus, hasAppointmentSchedule, GROUNDWORK_ITEMS } from './groundwork'
 import { defaultSchema, TEMPLATE_TYPES } from '../../../../domain/tcm/templates/schema'
 import { saveTemplateDraft, publishTemplate } from '../templates'
 import { loadAgentRole } from '../agent/role'
+import { loadTeacherTemplate } from '../drafting/template'
+import { loadRetentionDays, RETENTION_DEFAULT_DAYS } from '../records/retention'
+import { loadPersonalModel } from '../llm/personal'
+import initialTemplate from '../../../../domain/tcm/templates/default.json'
 
 it('排班默认、边界、例外、时区逐项拒绝坏输入，过去例外不参与计算', () => {
   const schedule = defaultSchedule()
@@ -39,11 +43,14 @@ it('基础工作逐项确认、重开续做，默认不过目自动邀约；保�
   try {
     const initial = await loadGroundwork(store)
     expect(initial.invitation).toEqual({ mode: 'review', afterDays: 14 })
+    expect(initial.herbs).toBe('none')
+    expect(await hasAppointmentSchedule(store)).toBe(false)
     expect(groundworkMissing(initial)).toContain('排班')
     const next = { ...initial, schedule: defaultSchedule(), checked: ['schedule'] }
     await saveGroundwork(store, next)
     expect(await loadGroundwork(store)).toEqual(next)
     expect(groundworkMissing(await loadGroundwork(store))).not.toContain('排班')
+    expect(await hasAppointmentSchedule(store)).toBe(true)
     for (const invitation of [{ mode: 'wrong', afterDays: 14 }, { mode: 'review', afterDays: 0 }, { mode: 'auto', afterDays: 1.5 }]) {
       await expect(saveGroundwork(store, { ...next, invitation } as never)).rejects.toThrow()
     }
@@ -53,24 +60,32 @@ it('基础工作逐项确认、重开续做，默认不过目自动邀约；保�
   } finally { store.close() }
 })
 
-it('新馆不能只勾选绕过，默认六项确认后可邀请；旧馆不重走，但仍提示补齐', async () => {
+it('六项全空时模板、邀约、药材、保留期限和模型各走默认路径', async () => {
   const owner = createIdentity(), store = await openStore(owner, { factory: new IDBFactory() })
   try {
-    await expect(assertInviteReady(store)).rejects.toThrow('6 项')
-    await store.put('settings', 'hall', { openedAt: '2026-10-20T00:00:00Z', completedAt: null })
-    await expect(assertInviteReady(store)).resolves.toBeUndefined()
+    expect(await loadTeacherTemplate(store)).toEqual(initialTemplate)
+    expect((await loadAgentRole(store, owner.publicKey, 'teacher')).invitation).toBe('review')
+    expect((await loadGroundwork(store)).herbs).toBe('none')
+    expect(await loadRetentionDays(store)).toBe(RETENTION_DEFAULT_DAYS)
+    expect(await loadPersonalModel(store)).toBeNull()
+    expect(await hasAppointmentSchedule(store)).toBe(false)
+  } finally { store.close() }
+})
+
+it('六项缺失只供提示，真实配置仍按保存内容核对', async () => {
+  const owner = createIdentity(), store = await openStore(owner, { factory: new IDBFactory() })
+  try {
     expect((await groundworkStatus(store)).missing).toHaveLength(6)
     const value = { ...await loadGroundwork(store), checked: Object.keys(GROUNDWORK_ITEMS) }
     await saveGroundwork(store, value)
-    await expect(assertInviteReady(store)).rejects.toThrow('模板')
+    expect((await groundworkStatus(store)).missing).toContain('模板')
     for (const type of TEMPLATE_TYPES) await publishTemplate(store, (await saveTemplateDraft(store, type, '合成模板', defaultSchema(type))).id)
     await store.put('settings', 'personal-model', { provider: 'other', baseUrl: 'https://synthetic.invalid/v1', model: 'synthetic', apiKey: 'SYNTHETIC', testedAt: '2026-10-24T00:00:00Z' })
     await store.put('settings', 'retention-days', 90)
     expect((await groundworkStatus(store)).missing).toEqual([])
-    await expect(assertInviteReady(store)).resolves.toBeUndefined()
     const role = await loadAgentRole(store, owner.publicKey, 'teacher')
     expect(role.invitation).toBe('review'); expect(role.template).toHaveProperty('record')
     await saveGroundwork(store, { ...value, herbs: 'pending' })
-    await expect(assertInviteReady(store)).rejects.toThrow('药材库')
+    expect((await groundworkStatus(store)).missing).toContain('药材库')
   } finally { store.close() }
 })

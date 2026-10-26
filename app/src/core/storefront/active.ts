@@ -2,7 +2,7 @@ import type { LocalStore, StoreValue } from '../store'
 import { loadTeachers } from '../inbox'
 import { loadTeacherLabels, type TeacherLabels } from '../identity/teacher-labels'
 import { listIdentityLinks, type IdentityLink } from '../identity/links'
-import { ACTIVE_TEACHER_SETTING, displayTeacherName, loadCachedStorefronts, loadCachedTeacherCities, type Storefront } from './index'
+import { ACTIVE_TEACHER_SETTING, displayTeacherName, loadCachedStorefronts, loadCachedTeacherCities, loadCachedAppointmentAvailabilityMap, type Storefront } from './index'
 
 const HEX64 = /^[0-9a-f]{64}$/
 
@@ -13,6 +13,7 @@ export interface TeacherVenue {
   labels: TeacherLabels
   venues: Record<string, Storefront>
   cities: Record<string, string | null>
+  appointmentAvailability: Record<string, boolean>
   /** “阿慈老师”“老师 1a2b3c”这类显示称呼。 */
   call: string
   /** 当前馆名；没配门面时为空。 */
@@ -37,7 +38,7 @@ export async function loadTeacherVenue(store: LocalStore): Promise<TeacherVenue>
   const teachers = await loadTeachers(store)
   const saved = await store.get('settings', ACTIVE_TEACHER_SETTING)
   const active = pickActiveTeacher(teachers, saved)
-  const [labels, venues, cities] = await Promise.all([loadTeacherLabels(store), loadCachedStorefronts(store), loadCachedTeacherCities(store)])
+  const [labels, venues, cities, appointmentAvailability] = await Promise.all([loadTeacherLabels(store), loadCachedStorefronts(store), loadCachedTeacherCities(store), loadCachedAppointmentAvailabilityMap(store)])
   const storefront = active ? venues[active] ?? null : null
   return {
     teachers,
@@ -45,6 +46,7 @@ export async function loadTeacherVenue(store: LocalStore): Promise<TeacherVenue>
     labels,
     venues,
     cities,
+    appointmentAvailability,
     call: active ? teacherCall(labels[active], storefront?.displayName ?? '', active) : '',
     name: storefront?.name ?? '',
   }

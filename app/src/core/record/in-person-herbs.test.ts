@@ -50,6 +50,17 @@ it('不备药仍能签字交还，不扣库存也不提示', async () => {
   } finally { f.store.close() }
 })
 
+it('未填写开馆药材库时仍能开方签字且没有库存提示', async () => {
+  const f = await fixture()
+  try {
+    const result = await f.sign([{ herb: '合成黄芪', dose: '3克' }])
+    expect(result.signed.id).toBe(f.sent.at(-1))
+    expect(result.inventoryNotice).toBeNull()
+    expect(await f.store.list(HERB_LEDGER)).toHaveLength(0)
+    expect(await f.store.list('teacher-records')).toHaveLength(1)
+  } finally { f.store.close() }
+})
+
 it('库存不足时仍签字交还，整方不扣并在签后提示差额', async () => {
   const f = await fixture()
   try {

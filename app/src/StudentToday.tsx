@@ -36,6 +36,7 @@ export interface StudentTodayProps {
   teacherCall: string
   teacherName: string
   teacherCity: string | null
+  canRequestAppointment: boolean
   member?: Pick<FamilyMember, 'account' | 'alias'> | null
   family?: readonly Pick<FamilyMember, 'account' | 'alias'>[]
   active?: number
@@ -58,7 +59,7 @@ function greeting(now: Date): string {
 }
 
 export function StudentToday({
-  store, modelStore, settingsStore, identity, llm, teacher, teacherCall, teacherName, teacherCity,
+  store, modelStore, settingsStore, identity, llm, teacher, teacherCall, teacherName, teacherCity, canRequestAppointment,
   member, family = [], active = 0, onSwitch, onConsult, onHomework, onCheckedIn, sendEnvelope,
 }: StudentTodayProps) {
   const [now, setNow] = useState(() => new Date())
@@ -283,7 +284,7 @@ export function StudentToday({
           <button type="button" className="nl-link-button" disabled={cityPromptBusy} onClick={() => setCityPromptDismissed(cityPromptKey)}>保留</button>
         </div>
       </div>}
-      {teacher && sameCity && <>
+      {teacher && sameCity && canRequestAppointment && <>
         {!requestOpen && <button type="button" className="nl-link-button" disabled={!sendEnvelope || hasFutureAppointment} onClick={() => setRequestOpen(true)}>{hasFutureAppointment ? '已有待回复邀约、预约请求或未来预约' : '想预约？选几个方便的时间'}</button>}
         {requestOpen && <div className="nl-request-slots">
           <p className="nl-quiet">最多选三个时间，老师会按排班自动确认其中一个。请选择两小时后、60 天内的整分时间。</p>
@@ -298,7 +299,7 @@ export function StudentToday({
             <button type="button" className="nl-link-button" disabled={appointmentBusy} onClick={() => { setRequestOpen(false); setRequestSlots(['']) }}>先不约</button></div>
         </div>}
       </>}
-      {teacher && !sameCity && <button type="button" className="nl-link-button" onClick={onConsult}>远程问诊</button>}
+      {teacher && (!sameCity || !canRequestAppointment) && <button type="button" className="nl-link-button" onClick={onConsult}>远程问诊</button>}
       {appointmentNote && <p role="status" className="nl-quiet">{appointmentNote}</p>}
       {error && <p role="alert" className="nl-danger-strong">{error}</p>}
     </section>

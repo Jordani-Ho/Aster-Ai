@@ -23,7 +23,6 @@ import { StorefrontWelcome, VenueEmblem } from './StorefrontWelcome'
 import './newui.css'
 import './newui2.css'
 import { HallGroundwork } from './HallGroundwork'
-import { groundworkStatus } from './core/hall/groundwork'
 
 // V2-17 建馆五步（05a–05e）：逻辑沿用 V2-15（断点续走、第一位学生 1 小时邀请、“先进去看看”），
 // 只换界面：模型 → 登记 → 起馆名 → 开馆 → 邀请第一位学生。
@@ -61,7 +60,6 @@ function clockLabel(at: number): string {
 
 export function OpeningGuide({ identity, store, gateway, send, modelGateway, modelConfig, onModelSaved, onDone }: OpeningGuideProps) {
   const [loaded, setLoaded] = useState(false)
-  const [groundReady, setGroundReady] = useState(false)
   const [step, setStep] = useState<GuideStep>(1)
   // V2-31：扫码链接 #setup=<口令> 在第 2 步自动填好；读到时立刻从地址栏清掉。
   const [token, setToken] = useState(() => takeSetupToken())
@@ -214,7 +212,6 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
     if (!clean || clean.name === '' || clean.displayName === '') { setError('门面还没填完整，请返回上一步。'); return }
     setBusy(true); setError('')
     try {
-      if ((await groundworkStatus(store)).missing.length) throw Error('基础工作还没齐')
       await publishStorefront({ store, identity, storefront: clean })
       await saveStorefrontDraft(store, clean)
       await markHallOpened(store)
@@ -255,7 +252,7 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
       <section aria-label="接入自己的模型">
         <p className="op-eyebrow">先认识您的智能体</p>
         <h1 className="op-title">让它帮您打理馆</h1>
-        <p className="op-desc">接上您常用的模型。以后您说，<br />它替您整理；签字还是您自己来。</p>
+        <p className="op-desc">有自己的模型可以现在接上；<br />也可以开馆后再接。签字始终由您来。</p>
         <div className="op-card">
           <div className="op-card-head"><h2>选择模型</h2><span className="op-chip-soft">可随时更换</span></div>
           <div className="op-providers" role="group" aria-label="选择服务商">
@@ -271,7 +268,7 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
         </div>
         <div className="op-hint"><span className="op-hint-icon" aria-hidden="true"><VenueEmblem emblem="leaf" /></span><span>接入后，会先试一句话，<br />看看能不能正常回答。</span></div>
       </section>
-      <footer className="op-foot"><button type="button" className="nl-primary" disabled={busy} onClick={() => void connectModel()}>测试并继续</button></footer>
+      <footer className="op-foot"><button type="button" className="nl-primary" disabled={busy} onClick={() => void connectModel()}>测试并继续</button><button type="button" className="op-link-button" disabled={busy} onClick={() => void go(2)}>先跳过，以后接模型</button></footer>
     </main>
   }
 
@@ -280,7 +277,7 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
       {header}{progress}
       {errorLine}
       <section aria-label="登记为社区老师">
-        <p className="op-eyebrow">模型已接好 ✓</p>
+        <p className="op-eyebrow">{modelConfig ? '模型已接好 ✓' : '模型以后再接'}</p>
         <h1 className="op-title">先登记您这位老师</h1>
         <p className="op-desc">填一个学生认得的称呼。<br />登记好，就可以起馆名了。</p>
         <div className="op-card">
@@ -335,15 +332,15 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
         <div className="op-card op-open-card">
           {draft.intro && <p>{draft.intro}</p>}
           <ul className="op-checks">
-            <li>✓ 模型已接好</li>
+            <li>{modelConfig ? '✓ 模型已接好' : '模型还没设，可以以后补'}</li>
             <li>✓ 老师已登记</li>
             <li>✓ 门面已备好</li>
           </ul>
         </div>
-        <p className="nl-quiet op-open-note">先定好基础工作，就能邀请第一位学生。名字和门面以后还可以改。</p>
+        <p className="nl-quiet op-open-note">下面的基础工作可以以后补；现在也能开馆、邀请学生。</p>
       </section>
-      <HallGroundwork store={store} identity={identity} send={send} onReady={setGroundReady} />
-      <footer className={`op-foot${groundReady ? '' : ' ground-footer'}`}><button type="button" className={groundReady ? 'nl-primary' : 'ground-open'} disabled={busy || !groundReady} onClick={() => void openHall()}>开馆</button></footer>
+      <HallGroundwork store={store} identity={identity} send={send} />
+      <footer className="op-foot ground-footer"><button type="button" className="nl-primary" disabled={busy} onClick={() => void openHall()}>开馆</button></footer>
     </main>
   }
 

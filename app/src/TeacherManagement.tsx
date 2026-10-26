@@ -8,7 +8,6 @@ import { parseChainFields } from './core/ledger'
 import { formatMoney } from './core/ledger/money'
 import { InviteSettings } from './InviteSettings'
 import { HallGroundwork, GroundworkNotice } from './HallGroundwork'
-import { assertInviteReady } from './core/hall/groundwork'
 import { StorefrontSettings } from './StorefrontSettings'
 import { RetentionSettings } from './RetentionSettings'
 import { ReidentifyLinks, TeacherReidentifyInbox } from './ReidentifyPages'
@@ -70,13 +69,11 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
   const [view, setView] = useState<View>('hall')
   const [own, setOwn] = useState<Storefront | null>(null)
   const [totals, setTotals] = useState<Totals | null>(null)
-  const [inviteReady, setInviteReady] = useState(false)
   const [lowStock, setLowStock] = useState<string[]>([])
 
   useEffect(() => {
     let active = true
     const refresh = () => {
-      void assertInviteReady(store).then(() => { if (active) setInviteReady(true) }).catch(() => { if (active) setInviteReady(false) })
       void loadOwnStorefront(store, identity).then(value => {
         if (!active) return
         setOwn(value.current ? verifyStorefrontEvent(value.current, identity.publicKey)?.storefront ?? null : null)
@@ -145,7 +142,7 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
       </span>
       <span className="ts-badge ok">已开馆</span>
     </section>
-    <button type="button" className="nl-primary hall-invite" disabled={!inviteReady} onClick={() => setView('invite')}>＋ 邀请学生</button>
+    <button type="button" className="nl-primary hall-invite" onClick={() => setView('invite')}>＋ 邀请学生</button>
     <GroundworkNotice store={store} onOpen={() => setView('groundwork')} />
     <button type="button" className="nl-row hall-row" onClick={() => setView('storefront')}>
       <span className="nl-row-main"><strong>门面</strong><span>馆名、颜色、介绍和话术</span></span>

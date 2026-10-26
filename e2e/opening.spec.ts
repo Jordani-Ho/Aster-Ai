@@ -90,6 +90,43 @@ test('V2-15 全新部署：只看到引导，五步走完后第一位学生用 1
   } finally { await teacher.context.close() }
 })
 
+test('V2-35 六项准备全空：老师照常开馆邀请，学生仍须填写进馆基础信息', async ({ browser, request }) => {
+  await reset(request)
+  const teacher = await freshPage(browser)
+  const page = teacher.page
+  try {
+    await page.getByRole('button', { name: '先跳过，以后接模型', exact: true }).click()
+    await page.getByLabel('学生怎么称呼您', { exact: true }).fill('合成阿慈')
+    await page.getByLabel('登记口令', { exact: true }).fill('SYNTHETIC_DEPLOYMENT_TOKEN')
+    await page.getByRole('button', { name: '登记，下一步', exact: true }).click()
+    await page.getByLabel('馆名', { exact: true }).fill('合成养生馆')
+    await page.getByRole('button', { name: '就用这个名字', exact: true }).click()
+    for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) {
+      await expect(page.getByRole('button', { name: `${label} · 还没设，可以以后补`, exact: true })).toBeVisible()
+    }
+    await page.getByRole('button', { name: '开馆', exact: true }).click()
+    await expect(page.getByRole('heading', { name: '请第一位学生进来', exact: true })).toBeVisible()
+    await page.locator('details.op-link-details > summary').click()
+    const invite = await page.getByLabel('邀请链接', { exact: true }).inputValue()
+    const studentContext = await browser.newContext({ viewport: { width: 375, height: 812 }, baseURL: runtime.baseURL })
+    await mockModel(studentContext)
+    try {
+      const student = await studentContext.newPage()
+      await student.goto(invite)
+      await student.getByRole('button', { name: '开始使用', exact: true }).click()
+      await connectModel(student)
+      await fillJoinBasics(student)
+      await expect(student.locator('[aria-label="老师邀约"]').getByRole('button', { name: /想预约/ })).toHaveCount(0)
+      await expect(student.getByRole('button', { name: '远程问诊', exact: true })).toBeVisible()
+      await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
+      await page.getByRole('button', { name: '我的馆', exact: true }).click()
+      for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) {
+        await expect(page.getByText(`${label} · 还没设，可以以后补`, { exact: true })).toBeVisible()
+      }
+    } finally { await studentContext.close() }
+  } finally { await teacher.context.close() }
+})
+
 test('V2-15 第一个邀请超过 1 小时：学生看到不可用，老师重新生成后可用', async ({ browser, request }) => {
   await reset(request)
   const teacher = await freshPage(browser)
