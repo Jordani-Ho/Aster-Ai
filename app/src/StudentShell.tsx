@@ -15,10 +15,11 @@ import type { FamilyMember } from './core/family'
 import { listCheckins, type Assignment } from './core/homework'
 import { adherenceReport } from './core/adherence'
 import { adherenceEnvelope, loadTeachers } from './core/inbox'
-import { effectiveDay, checkinDay } from './core/homework/schedule'
+import { effectiveDay, checkinDay, localDay } from './core/homework/schedule'
 import { useTeacherVenue } from './useTeacherVenue'
 import { themeOf } from './core/storefront'
 import { observationId, recordObservation } from './core/kangbi'
+import { runStudentNudges, type NudgeEvent } from './core/nudge'
 import './student.css'
 import './newui.css'
 import './newui2.css'
@@ -41,13 +42,14 @@ export interface StudentShellProps {
   sendConsult?: (pkg: import('./core/record/types').ConsultPackage) => Promise<void>
   sendEnvelope?: (recipient: string, envelope: import('./core/transport').Envelope) => Promise<unknown>
   onFamilyChanged?: () => void
+  notifySelf?: () => Promise<void>
 }
 
 type Tab = 'today' | 'records' | 'me'
 type Sub = 'consult' | 'homework' | 'records' | 'basics' | 'herbs' | null
 
 // V2-16 新外壳：学生端底部三个标签“今天 / 记录 / 我”；V2-17 把记录、问诊、我也按设计稿重画。
-export function StudentShell({ store, identity, llm, stack, stackStatus, modelNotice, modelSettings, family = [], active = 0, onSwitch, memberStore: scopedStore, memberIdentity: scopedIdentity, sendConsult, sendEnvelope, onFamilyChanged }: StudentShellProps) {
+export function StudentShell({ store, identity, llm, stack, stackStatus, modelNotice, modelSettings, family = [], active = 0, onSwitch, memberStore: scopedStore, memberIdentity: scopedIdentity, sendConsult, sendEnvelope, onFamilyChanged, notifySelf }: StudentShellProps) {
   const [tab, setTab] = useState<Tab>('today')
   const [sub, setSub] = useState<Sub>(null)
   // V2-23：基础信息还差哪几项；新学生填全前不能第一次问诊，老用户只提示。
@@ -56,11 +58,37 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   // 发起人 2026-10-24：出生日期等是被老师邀请进馆时的必填项（填错也由学生自己负责）。
   // 新学生必填项不全时，进馆后第一屏就是基础信息，填好才进首页；老用户不拦，只在首页提示。
   const [mustFill, setMustFill] = useState(false)
+  const [nudges, setNudges] = useState<NudgeEvent[]>([])
   const pagesStore = scopedStore ?? store
   const pagesIdentity = scopedIdentity ?? identity
   const activeMember = family.find(member => member.account === active) ?? null
   const venue = useTeacherVenue(store)
   const theme = themeOf(venue.active ? venue.venues[venue.active] : null)
+
+  useEffect(() => {
+    let live = true, pending = false
+    const refresh = () => {
+      if (pending) return
+      pending = true
+      void runStudentNudges({ store: pagesStore, settingsStore: store, identity: pagesIdentity, teacher: venue.active, notifySelf })
+        .then(rows => { if (live) setNudges(rows) }).catch(() => {}).finally(() => { pending = false })
+    }
+    refresh()
+    const timer = setInterval(refresh, 60_000)
+    window.addEventListener('focus', refresh); window.addEventListener('aster:data-changed', refresh)
+    return () => { live = false; clearInterval(timer); window.removeEventListener('focus', refresh); window.removeEventListener('aster:data-changed', refresh) }
+  }, [pagesStore, store, pagesIdentity, venue.active, active, notifySelf])
+
+  const latest = new Map<string, NudgeEvent>()
+  for (const row of nudges) if (!row.actedAt && localDay(new Date(row.at)) === localDay(new Date())) {
+    const key = row.kind + ':' + row.target
+    if (!latest.has(key)) latest.set(key, row)
+  }
+  const visibleNudges = [...latest.values()]
+  const bedtime = visibleNudges.find(row => row.kind === 'sleep')
+  const nudgePanel = latest.size > 0 ? <section className="nl-card nl-nudge" aria-label="我的提醒">
+    <h2>我的提醒</h2>{(bedtime ? [bedtime] : visibleNudges.slice(0, 3)).map(row => <p key={row.id}>{row.text}</p>)}
+  </section> : null
 
   // M1-23a 第 5 条：把本周坚持率小结发给“我的老师”（只有数值，不含原文/身份）。
   const reportAdherence = () => {
@@ -114,6 +142,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   }
   if (sub === 'herbs') {
     return <div className="nl-shell" style={{ '--nl-bg': theme.background, '--nl-accent': theme.primary } as CSSProperties}>
+      {nudgePanel}
       <header className="nl-flow-head"><button type="button" className="nl-back" aria-label="返回问诊" onClick={() => setSub('consult')}>‹</button><div><h1>家里的药</h1><small>一家共用一份库存</small></div></header>
       <div className="nl-flow-body"><HerbLibrary store={store} role="学生" /></div>
     </div>
@@ -125,6 +154,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   }
   if (sub === 'consult') {
     return <div className="nl-shell" style={{ '--nl-bg': theme.background, '--nl-accent': theme.primary } as CSSProperties}>
+      {nudgePanel}
       <ConsultPage key={active} store={pagesStore} modelStore={store} identity={pagesIdentity} llm={llm} sendConsult={sendConsult ?? stack?.sendConsult} member={activeMember} family={family} active={active} onSwitch={onSwitch} managerIdentity={activeMember ? identity : undefined} teacher={venue.active} teacherName={venue.call} onBack={() => setSub(null)} onOpenHerbs={() => setSub('herbs')} />
     </div>
   }
@@ -132,6 +162,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   const style = { '--nl-bg': theme.background, '--nl-accent': theme.primary, '--nl-accent-deep': theme.primary } as CSSProperties
   return <div className="nl-shell" style={style}>
     {modelNotice}
+    {nudgePanel}
     {tab === 'today' && basicsMissing.length > 0 && <button type="button" className="nl-card basics-banner" onClick={() => { setBasicsNote(''); setSub('basics') }}>
       <strong>基础信息还差：{basicsMissing.join('、')}</strong><span>补齐后老师才看得到您的年龄和八字 ›</span>
     </button>}

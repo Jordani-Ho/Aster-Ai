@@ -169,4 +169,7 @@
 .nl-request-slots { border-top: 1px solid var(--nl-line); padding-top: 10px; }
 .nl-request-slots label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; color: var(--nl-ink); font-size: 14px; }
 .nl-request-slots input { flex: 1 1 190px; min-width: 0; min-height: 44px; border: 1px solid var(--nl-line); border-radius: 12px; background: var(--nl-card); color: var(--nl-ink); padding: 8px 10px; font: inherit; }
+.nl-nudge { border-left: 4px solid var(--nl-accent, #2f5d4a); margin: 12px 20px; }
+.nl-nudge h2 { margin: 0 0 8px; font-size: 18px; }
+.nl-nudge p { margin: 6px 0; line-height: 1.6; }
 @media (max-width: 359px) { .nl-shell h1 { font-size: 34px; } .nl-exam { min-height: 100px; } }

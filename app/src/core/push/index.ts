@@ -45,6 +45,15 @@ export function createPushClient(config: PushConfig) {
       if (!/^[0-9a-f]{64}$/.test(pubkey)) throw new Error('收件公钥无效')
       await post('/push/notify', { pubkey })
     },
+    /** 本人的督促只发一个无内容的唤醒通知；提醒文字始终留在本机。 */
+    async notifySubscribedSelf(pubkey: string): Promise<boolean> {
+      if (!/^[0-9a-f]{64}$/.test(pubkey)) throw new Error('收件公钥无效')
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !('serviceWorker' in navigator)) return false
+      const registration = await navigator.serviceWorker.getRegistration('/sw.js')
+      if (!registration || !await registration.pushManager.getSubscription()) return false
+      await post('/push/notify', { pubkey })
+      return true
+    },
   }
 }
 // 供 M1-05 接入真实同步函数；初次打开、前台恢复及网络恢复都尝试同步。

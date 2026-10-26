@@ -9,7 +9,7 @@ import { addTeacher, createInbox } from '../inbox'
 import {
   ACTIVE_TEACHER_SETTING, DEFAULT_STOREFRONT, EMBLEMS, STOREFRONT_COLLECTION, STOREFRONT_KIND,
   THEMES, displayTeacherName, inviteTitle, inviteWelcome, loadCachedStorefront, loadCachedStorefronts,
-  loadCachedReceiveRecordings, loadOwnStorefront, loadStorefrontDraft, makeStorefrontEvent, normalizeStorefront, publishStorefront,
+  loadCachedReceiveRecordings, loadCachedRevisitDays, loadOwnStorefront, loadStorefrontDraft, makeStorefrontEvent, normalizeStorefront, publishStorefront,
   restoreStorefront, sameStorefront, saveReceivedStorefront, saveStorefrontDraft,
   sendStorefrontTo, storefrontEnvelope, themeOf, verifyStorefrontEvent,
   type Storefront,
@@ -77,6 +77,24 @@ describe('V2-09 门面配置与签名', () => {
     expect(await saveReceivedStorefront(cache, legacySigned, aci.publicKey)).toBe(true)
     expect(await loadCachedReceiveRecordings(cache, aci.publicKey)).toBe(true)
     cache.close()
+  })
+
+  it('老师设的复诊间隔只从签名门面读取；同一秒更新也能下发，坏数值拒收', async () => {
+    const teacher = await storeOf(aci), cache = await storeOf(student)
+    await teacher.put('settings', 'hall-groundwork', { invitation: { afterDays: 21 } })
+    const first = await publishStorefront({ store: teacher, identity: aci, storefront: ACI, now: now() })
+    expect(verifyStorefrontEvent(first.event, aci.publicKey)?.revisitDays).toBe(21)
+    expect(await saveReceivedStorefront(cache, first.event, aci.publicKey)).toBe(true)
+    expect(await loadCachedRevisitDays(cache, aci.publicKey)).toBe(21)
+    await teacher.put('settings', 'hall-groundwork', { invitation: { afterDays: 7 } })
+    const next = await publishStorefront({ store: teacher, identity: aci, storefront: ACI, now: now() })
+    expect(next.event.created_at).toBeGreaterThan(first.event.created_at)
+    expect(await saveReceivedStorefront(cache, next.event, aci.publicKey)).toBe(true)
+    expect(await loadCachedRevisitDays(cache, aci.publicKey)).toBe(7)
+    expect(() => makeStorefrontEvent(aci, ACI, 9000, true, 0)).toThrow('复诊间隔')
+    const legacy = makeStorefrontEvent(aci, ACI, 9001)
+    expect(verifyStorefrontEvent(legacy, aci.publicKey)?.revisitDays).toBeNull()
+    teacher.close(); cache.close()
   })
 
   it('配置只有六项、限长；介绍写什么都进不了状态类字段', () => {

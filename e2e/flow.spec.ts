@@ -325,6 +325,39 @@ test('V2-25b 学生主动预约经真实中继确认，排班取消后收到通�
   await expect.poll(async () => (await stored(teacher, 'appointments')).find((row: any) => row.key === requestId)?.value.status, { timeout: 30000 }).toBe('cancelled')
 })
 
+test('V2-27 本机真实作业到点后显示督促，打卡后记录已行动且老师端没有督促日志', async ({ people }) => {
+  const student = people.student.page, teacher = people.teacher.page
+  await role(student, '学生')
+  await student.evaluate(async () => {
+    const storeModule = '/src/core/store/index.ts', scheduleModule = '/src/core/homework/schedule.ts'
+    const { resumeStore } = await import(storeModule)
+    const { localDay } = await import(scheduleModule)
+    const session = await resumeStore()
+    try {
+      const due = new Date(Date.now() - 15 * 60_000)
+      const time = String(due.getHours()).padStart(2, '0') + ':' + String(due.getMinutes()).padStart(2, '0')
+      await session.store.put('homework', 'nudge-synthetic', {
+        homework: { id: 'nudge-synthetic', title: '合成伸展', detail: '合成示例', schedule: { kind: 'daily', time }, source: 'teacher' },
+        startsOn: localDay(due),
+      })
+      const minute = new Date(Date.now() + 60_000), wake = new Date(Date.now() + 120_000)
+      const hhmm = (date: Date) => String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0')
+      await session.store.put('settings', 'agent-routine', { sleep: hhmm(minute), wake: hhmm(wake) })
+    } finally { session.store.close(); session.identity.privateKey.fill(0) }
+  })
+  await student.reload(); await role(student, '学生')
+  await expect(student.getByRole('region', { name: '我的提醒' })).toContainText('合成伸展', { timeout: 30000 })
+  expect((await stored(teacher, 'student-nudges'))).toEqual([])
+  await student.evaluate(async () => {
+    const storeModule = '/src/core/store/index.ts', homeworkModule = '/src/core/homework/index.ts'
+    const { resumeStore } = await import(storeModule), { checkIn } = await import(homeworkModule)
+    const session = await resumeStore()
+    try { await checkIn(session.store, 'nudge-synthetic'); window.dispatchEvent(new Event('aster:data-changed')) }
+    finally { session.store.close(); session.identity.privateKey.fill(0) }
+  })
+  await expect.poll(async () => (await stored(student, 'student-nudges')).find((row: any) => row.value.target === 'nudge-synthetic')?.value.actedAt, { timeout: 30000 }).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+})
+
 test('V2-33 两台设备经真实中继传库存快照，老师核对页可见且 Encounter 不含快照', async ({ people }) => {
   test.setTimeout(180000)
   const teacher = people.teacher.page, student = people.student.page

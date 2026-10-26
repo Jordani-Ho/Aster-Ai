@@ -112,16 +112,18 @@ export function inviteTitle(storefront: Storefront | null | undefined, key?: str
   return displayTeacherName(displayName, key) + '邀请你'
 }
 
-function contentOf(storefront: Storefront, receiveRecordings: boolean): string {
-  return JSON.stringify({ type: 'aster.storefront', version: 1, storefront, receiveRecordings })
+function validRevisitDays(value: unknown): value is number { return Number.isSafeInteger(value) && (value as number) >= 1 && (value as number) <= 3650 }
+function contentOf(storefront: Storefront, receiveRecordings: boolean, revisitDays: number | null): string {
+  return JSON.stringify({ type: 'aster.storefront', version: 1, storefront, receiveRecordings, ...(revisitDays === null ? {} : { revisitDays }) })
 }
 
-export function makeStorefrontEvent(identity: Identity, storefront: Storefront, now = Math.floor(Date.now() / 1000), receiveRecordings = true): StorefrontEvent {
+export function makeStorefrontEvent(identity: Identity, storefront: Storefront, now = Math.floor(Date.now() / 1000), receiveRecordings = true, revisitDays: number | null = null): StorefrontEvent {
   const clean = normalizeStorefront(storefront)
   if (!clean) throw new Error('门面配置无效')
   if (!Number.isSafeInteger(now) || now <= 0) throw new Error('门面时间无效')
   if (typeof receiveRecordings !== 'boolean') throw new Error('接收录音设置无效')
-  const event = finalizeEvent({ kind: STOREFRONT_KIND, created_at: now, tags: [], content: contentOf(clean, receiveRecordings) }, identity.privateKey)
+  if (revisitDays !== null && !validRevisitDays(revisitDays)) throw new Error('复诊间隔无效')
+  const event = finalizeEvent({ kind: STOREFRONT_KIND, created_at: now, tags: [], content: contentOf(clean, receiveRecordings, revisitDays) }, identity.privateKey)
   // JSON 往返去掉 verify 缓存 Symbol，签名事件才能安全落盘/进信封。
   return JSON.parse(JSON.stringify(event)) as StorefrontEvent
 }
@@ -141,6 +143,7 @@ export interface VerifiedStorefront {
   event: StorefrontEvent
   storefront: Storefront
   receiveRecordings: boolean
+  revisitDays: number | null
 }
 
 /** 结构 + 内容 + 签名都通过才算有效；expectedTeacher 给出时还要求签名人就是这位老师。 */
@@ -151,16 +154,17 @@ export function verifyStorefrontEvent(value: unknown, expectedTeacher?: string):
   let content: unknown
   try { content = JSON.parse(event.content) } catch { return null }
   if (!content || typeof content !== 'object' || Array.isArray(content)) return null
-  const fields = content as { type?: unknown; version?: unknown; storefront?: unknown; receiveRecordings?: unknown }
+  const fields = content as { type?: unknown; version?: unknown; storefront?: unknown; receiveRecordings?: unknown; revisitDays?: unknown }
   if (fields.type !== 'aster.storefront' || fields.version !== 1) return null
   if (fields.receiveRecordings !== undefined && typeof fields.receiveRecordings !== 'boolean') return null
+  if (fields.revisitDays !== undefined && !validRevisitDays(fields.revisitDays)) return null
   const storefront = normalizeStorefront(fields.storefront)
   if (!storefront) return null
   let idMatches = false
   try { idMatches = getEventHash(event) === event.id } catch { idMatches = false }
   if (!idMatches) return null
   try { if (!verifyEvent(event as Event)) return null } catch { return null }
-  return { event, storefront, receiveRecordings: fields.receiveRecordings !== false }
+  return { event, storefront, receiveRecordings: fields.receiveRecordings !== false, revisitDays: validRevisitDays(fields.revisitDays) ? fields.revisitDays : null }
 }
 
 // ---- 学生端缓存 ----
@@ -179,6 +183,12 @@ export async function loadCachedStorefront(store: Pick<LocalStore, 'get'>, teach
 export async function loadCachedReceiveRecordings(store: Pick<LocalStore, 'get'>, teacher: string): Promise<boolean> {
   const event = await cachedEvent(store, teacher)
   return event ? verifyStorefrontEvent(event, teacher)?.receiveRecordings ?? true : true
+}
+
+/** 只读老师签名门面里明确公布的复诊间隔；老门面没有时不猜数值。 */
+export async function loadCachedRevisitDays(store: Pick<LocalStore, 'get'>, teacher: string): Promise<number | null> {
+  const event = await cachedEvent(store, teacher)
+  return event ? verifyStorefrontEvent(event, teacher)?.revisitDays ?? null : null
 }
 
 export async function loadCachedStorefronts(store: Pick<LocalStore, 'list'>): Promise<Record<string, Storefront>> {
@@ -236,6 +246,7 @@ export async function publishStorefront(options: {
   identity: Identity
   storefront: Storefront
   receiveRecordings?: boolean
+  revisitDays?: number
   now?: Date
 }): Promise<{ event: StorefrontEvent; own: OwnStorefront }> {
   const { store, identity } = options
@@ -244,7 +255,12 @@ export async function publishStorefront(options: {
   const own = await loadOwnStorefront(store, identity)
   const priorPreference = own.current ? verifyStorefrontEvent(own.current, identity.publicKey)?.receiveRecordings : undefined
   const preference = options.receiveRecordings ?? priorPreference ?? true
-  const event = makeStorefrontEvent(identity, clean, Math.floor((options.now ?? new Date()).getTime() / 1000), preference)
+  const groundwork = await store.get('settings', 'hall-groundwork') as { invitation?: { afterDays?: unknown } } | undefined
+  const configured = groundwork?.invitation?.afterDays
+  const priorDays = own.current ? verifyStorefrontEvent(own.current, identity.publicKey)?.revisitDays : null
+  const days = options.revisitDays ?? (validRevisitDays(configured) ? configured : priorDays ?? null)
+  const timestamp = Math.max(Math.floor((options.now ?? new Date()).getTime() / 1000), (own.current?.created_at ?? 0) + 1)
+  const event = makeStorefrontEvent(identity, clean, timestamp, preference, days)
   const next: OwnStorefront = { current: event, previous: own.current }
   await saveOwn(store, next)
   return { event, own: next }
@@ -262,7 +278,9 @@ export async function restoreStorefront(options: {
   const previous = verifyStorefrontEvent(own.previous, identity.publicKey)
   const storefront = previous?.storefront
   if (!storefront) return null
-  const event = makeStorefrontEvent(identity, storefront, Math.floor((options.now ?? new Date()).getTime() / 1000), previous.receiveRecordings)
+  const current = own.current ? verifyStorefrontEvent(own.current, identity.publicKey) : null
+  const timestamp = Math.max(Math.floor((options.now ?? new Date()).getTime() / 1000), (own.current?.created_at ?? 0) + 1)
+  const event = makeStorefrontEvent(identity, storefront, timestamp, current?.receiveRecordings ?? previous.receiveRecordings, current?.revisitDays ?? previous.revisitDays)
   await saveOwn(store, { current: event, previous: own.current })
   return { event, storefront }
 }

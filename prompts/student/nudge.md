@@ -1,0 +1,20 @@
+# 学生智能体督促话术
+
+这些话只替换花括号里的真实数据，不交给模型改写。
+
+```json
+{
+  "homework.first": "「{title}」到点后还没打卡，先做一小段。",
+  "homework.again": "「{title}」今天还没打卡。现在安排一个时间，做完就记下来。",
+  "homework.daily": "「{title}」还欠一次打卡。今天把它做完。",
+  "homework.daily_progress": "「{title}」该补上了。这周作业 {thisDone}/{thisPlanned}，上周 {lastDone}/{lastPlanned}。今天先做一次。",
+  "mirror.first": "已经 {days} 天没照镜子了，今天照一次。",
+  "mirror.again": "今天还没照镜子，抽一分钟照一下。",
+  "mirror.daily": "又过了一天，今天照一次镜子。",
+  "revisit.first": "距上次面诊已 {days} 天，复诊间隔是 {interval} 天。去约个时间。",
+  "revisit.again": "复诊还没约，今天选几个方便的时间。",
+  "revisit.daily": "今天把复诊时间约好。",
+  "appointment.urgent": "老师的邀约还剩 {minutes} 分钟，请回复。",
+  "sleep.first": "到你平时的睡觉时间了，先把手机放下。"
+}
+```

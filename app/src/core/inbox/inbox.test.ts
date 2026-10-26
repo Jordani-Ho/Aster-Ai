@@ -563,14 +563,21 @@ it('V2-26 收件老师能播放原始录音；签字后老师和学生都清除�
   })).rejects.toThrow('有效原话依据')
   expect(blockedSend).not.toHaveBeenCalled()
   expect(await teacherStore.get('attachments', audioRef.id)).toEqual(clip.data)
+  expect((await teacherStore.get('consult-package', pkg.encounter.id) as any).originals).toEqual(pkg.originals)
 
   await completeConsultSigning({
     identity: teacherId, store: teacherStore, consult,
     final: { ...consult.encounter, teacherOrganized: teacherOrg }, send: teacher.send,
   })
   expect(await teacherStore.get('attachments', audioRef.id)).toBeUndefined()
-  const storedConsult = await teacherStore.get('consult-package', pkg.encounter.id) as { attachments: { type: string }[] }
+  const storedConsult = await teacherStore.get('consult-package', pkg.encounter.id) as { attachments: { type: string }[]; originals?: unknown; qa?: unknown; organized?: unknown; materialsCleared?: boolean }
   expect(storedConsult.attachments.some(ref => ref.type === 'audio')).toBe(false)
+  expect(storedConsult).not.toHaveProperty('originals')
+  expect(storedConsult).not.toHaveProperty('qa')
+  expect(storedConsult).not.toHaveProperty('organized')
+  expect(storedConsult.materialsCleared).toBe(true)
+  await teacher.inbox.receive({ id: crypto.randomUUID(), sender: studentPub, at: Math.floor(Date.now() / 1000), envelope: consultEnvelope(pkg) })
+  expect(await teacherStore.get('consult-package', pkg.encounter.id)).toEqual(storedConsult)
   const pairs = await waitFor(async () => {
     const found = await loadOrganizationPairs(studentStore, teacherPub)
     return found.length ? found : null
