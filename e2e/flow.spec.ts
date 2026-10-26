@@ -375,6 +375,9 @@ test('V2-34 学生改城市经真实中继同步，异地入口切为同城预�
   await studentTab(student, '我')
   await student.locator('.me-setting-row').click()
   await student.getByLabel('居住城市').selectOption('广州市')
+  await expect.poll(async () => (await stored(student, 'profile')).find((row: any) => row.key === 'self')?.value.city?.value, { timeout: 10000 }).toBe('广州市')
+  // 改完城市回到“今天”，老师邀约那一栏才在页面上。
+  await studentTab(student, '今天')
   await expect(student.locator('[aria-label="老师邀约"]').getByRole('button', { name: /想预约/ })).toBeVisible({ timeout: 30000 })
   await expect(student.getByRole('button', { name: '远程问诊', exact: true })).toHaveCount(0)
   await expect.poll(async () => (await stored(teacher, 'teacher-students')).find((row: any) => row.key === actors.student.pubkey)?.value.city, { timeout: 30000 }).toBe('广州市')
