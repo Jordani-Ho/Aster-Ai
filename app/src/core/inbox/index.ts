@@ -14,7 +14,7 @@ import { isHeavenStamp } from '../heaven/stamp'
 import type { HeavenStamp } from '../heaven/stamp'
 import { parsePeriodObservation, type PeriodObservation } from '../../../../domain/tcm/observation'
 import { sanitizeStudentPostures, type PostureRecord } from '../../../../domain/tcm/posture'
-import { saveTeacherRecord, rememberTeacherStudent } from '../records/teacher'
+import { latestTeacherRecord, saveTeacherRecord, rememberTeacherStudent } from '../records/teacher'
 import { updateFingerprint } from '../records/fingerprint'
 import { cleanSharedHomeHerbs, type SharedHomeHerb } from '../herbs'
 import { saveTeacherHerbSnapshot } from '../herbs/snapshots'
@@ -116,6 +116,8 @@ export interface StoredConsult {
   originals?: ConsultPackage['originals']
   organized?: ConsultPackage['organized']
   qa?: IntakeQuestionAnswer[]
+  /** 签字交还后清过原话；中继重放不能把它们重新写回。 */
+  materialsCleared?: boolean
 }
 
 export interface ConsultReadiness {
@@ -548,6 +550,8 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
   if (!isEncounter(value.encounter)) return
   if (value.encounter.teacher !== identity.publicKey) return
   if (value.encounter.student !== message.sender) return
+  const previous = await store.get(INBOX_COLLECTIONS.consult, value.encounter.id) as unknown as StoredConsult | undefined
+  if (previous?.materialsCleared || await latestTeacherRecord(store, value.encounter.id)) return
   // 家人代管问诊时带代管人公钥；格式不对就整包丢弃，避免账本记到错误的书上。
   if (value.manager !== undefined && (typeof value.manager !== 'string' || !HEX64.test(value.manager) || value.manager === value.encounter.student)) return
   // 代管人必须有代管证明（代管人私钥签的 kind 2732，p 标签指向家人且家人就是发件人）。
@@ -1099,13 +1103,15 @@ export async function completeConsultSigning(options: ConsultSigningOptions): Pr
   const signed = signEncounter(final, options.identity.privateKey)
   await options.send(options.consult.sender, { type: 'record.signed', version: 1, payload: signed })
   await saveTeacherRecord(options.store, signed)
-  // V2-26：方案签字并成功交还后，老师本机清除这次问诊的录音字节。
+  // V2-26：方案签字并成功交还后，老师本机清除录音与逐句原话、追问答案。
   for (const ref of options.consult.attachments) if (ref.type === 'audio') await options.store.delete(INBOX_COLLECTIONS.attachments, ref.id)
   const storedConsult = await options.store.get(INBOX_COLLECTIONS.consult, final.id) as unknown as StoredConsult | undefined
-  if (storedConsult && Array.isArray(storedConsult.attachments)) {
-    await options.store.put(INBOX_COLLECTIONS.consult, final.id, {
-      ...storedConsult, attachments: storedConsult.attachments.filter(ref => ref.type !== 'audio'),
-    } as unknown as StoreValue)
+  if (storedConsult) {
+    const kept = structuredClone(storedConsult)
+    delete kept.originals; delete kept.qa; delete kept.organized
+    kept.attachments = (Array.isArray(kept.attachments) ? kept.attachments : []).filter(ref => ref.type !== 'audio')
+    kept.materialsCleared = true
+    await options.store.put(INBOX_COLLECTIONS.consult, final.id, kept as unknown as StoreValue)
   }
   if (options.draft) await updateFingerprint(options.store, options.final.teacher, options.draft, final)
   const chargeError = await recordCharge(options.ledger, options.final.teacher, bookStudent, signed.id, options.charge, options.chargeBook?.forMember, options.currency)

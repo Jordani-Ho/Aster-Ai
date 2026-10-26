@@ -76,7 +76,7 @@ export function HallGroundwork({ store, identity, send, onReady, onDone }: { sto
       if (key === 'herbs' && next.herbs === 'pending') throw Error('先录入至少一味药材，或选择“不备药”')
       const checked = [...new Set([...next.checked, key])]
       await saveGroundwork(store, { ...next, checked })
-      if (key === 'templates' && identity) {
+      if ((key === 'templates' || key === 'invitation') && identity) {
         try {
           const own = await loadOwnStorefront(store, identity)
           const current = own.current ? verifyStorefrontEvent(own.current, identity.publicKey)?.storefront ?? null : null

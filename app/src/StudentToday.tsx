@@ -196,6 +196,7 @@ export function StudentToday({
       setAppointments(await listAppointments(store))
       setRequestOpen(false); setRequestSlots([''])
       setAppointmentNote('预约请求已发给老师，确认后会在这里显示。')
+      window.dispatchEvent(new Event('aster:data-changed'))
     } catch (cause) { setError(cause instanceof Error ? cause.message : '预约请求没有发出，请重试。') }
     finally { setAppointmentBusy(false) }
   }
@@ -209,6 +210,7 @@ export function StudentToday({
       setNow(new Date())
       setStatus('已记在这台手机上')
       onCheckedIn()
+      window.dispatchEvent(new Event('aster:data-changed'))
     } catch { setError('打卡没能保存，请重试。') } finally { setBusy(false) }
   }
 
@@ -238,12 +240,12 @@ export function StudentToday({
             <button type="button" className="nl-primary" disabled={appointmentBusy || !sendEnvelope} onClick={() => {
               if (!sendEnvelope) return
               setAppointmentBusy(true)
-              void replyToAppointment({ store, identity, offerId: item.offerId, response: 'accept', send: sendEnvelope }).then(() => listAppointments(store).then(setAppointments)).catch(cause => setError(cause instanceof Error ? cause.message : '回复没有发出，请重试。')).finally(() => setAppointmentBusy(false))
+              void replyToAppointment({ store, identity, offerId: item.offerId, response: 'accept', send: sendEnvelope }).then(() => listAppointments(store).then(setAppointments)).then(() => window.dispatchEvent(new Event('aster:data-changed'))).catch(cause => setError(cause instanceof Error ? cause.message : '回复没有发出，请重试。')).finally(() => setAppointmentBusy(false))
             }}>接受</button>
             <button type="button" className="nl-link-button" disabled={appointmentBusy || !sendEnvelope} onClick={() => {
               if (!sendEnvelope) return
               setAppointmentBusy(true)
-              void replyToAppointment({ store, identity, offerId: item.offerId, response: 'decline', send: sendEnvelope }).then(() => listAppointments(store).then(setAppointments)).catch(cause => setError(cause instanceof Error ? cause.message : '回复没有发出，请重试。')).finally(() => setAppointmentBusy(false))
+              void replyToAppointment({ store, identity, offerId: item.offerId, response: 'decline', send: sendEnvelope }).then(() => listAppointments(store).then(setAppointments)).then(() => window.dispatchEvent(new Event('aster:data-changed'))).catch(cause => setError(cause instanceof Error ? cause.message : '回复没有发出，请重试。')).finally(() => setAppointmentBusy(false))
             }}>这次不约</button>
           </div>
         </>}
@@ -286,6 +288,7 @@ export function StudentToday({
         const blob = new Blob([crop.slice().buffer as ArrayBuffer], { type: 'image/jpeg' })
         setCropUrl(previous => { if (previous) URL.revokeObjectURL(previous); return URL.createObjectURL(blob) })
         setMirrorStatus('已保存舌象裁剪图与候选特征，原图已从应用内清除')
+        window.dispatchEvent(new Event('aster:data-changed'))
       }} />
       {mirrorStatus && <p role="status" className="nl-quiet">{mirrorStatus}</p>}
     </section>

@@ -1,6 +1,7 @@
 # 网页推送客户端
 
 `createPushClient(config)`提供 subscribe、unsubscribe、notifyRecipient(pubkey)。订阅必须由用户点击触发；使用标准 SW、PushManager 和 VAPID 公钥。
+V2-27 的 `notifySubscribedSelf(pubkey)` 只在本人已订阅且允许通知时发送无内容的自我唤醒；督促文字、坚持数据只留本机。网页关闭时没有本机数据判断，不能保证定时推送；再次打开时补评估，过时邀约不补发。
 App 的提醒设置提供开启/关闭按钮和 iOS未安装/不支持环境的主屏幕提示。配置地址和公钥只保留在当前界面内存；私钥从本地已解锁身份传入，不上传。
 每个请求的 NIP-98 事件带随机 nonce（main 的签名 helper 已实现），同一秒内的重复请求也会得到不同事件 id；网关不需要额外字段。
 

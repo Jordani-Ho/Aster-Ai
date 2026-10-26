@@ -47,6 +47,22 @@ it('不支持推送或 iOS 未安装时提示；打开及恢复可见时调用�
  target.dispatchEvent(new Event('focus'))
  expect(sync).toHaveBeenCalledTimes(count)
 })
+it('督促只在本人已订阅时发无内容唤醒，未获通知权限不发送', async()=>{
+ const pubkey='a'.repeat(64), subscription={endpoint:'https://push.synthetic.example/sub'}
+ const registration={pushManager:{getSubscription:vi.fn(async()=>subscription)}}
+ vi.stubGlobal('navigator',{serviceWorker:{getRegistration:vi.fn(async()=>registration)}})
+ const notification={permission:'denied'}
+ vi.stubGlobal('Notification',notification)
+ const fetcher=vi.fn(async()=>new Response('{}',{status:200}))
+ vi.stubGlobal('fetch',fetcher)
+ const client=createPushClient({gatewayUrl:'https://gateway.example',secretKey:generateSecretKey(),vapidPublicKey:'BAAA'})
+ expect(await client.notifySubscribedSelf(pubkey)).toBe(false)
+ expect(fetcher).not.toHaveBeenCalled()
+ notification.permission='granted'
+ expect(await client.notifySubscribedSelf(pubkey)).toBe(true)
+ expect(JSON.parse(String((fetcher.mock.calls as unknown as [string,RequestInit][])[0][1].body))).toEqual({pubkey})
+ await expect(client.notifySubscribedSelf('bad')).rejects.toThrow('公钥')
+})
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 it('SW忽略任意推送内容，始终显示固定文案，点击聚焦同源应用', async()=>{

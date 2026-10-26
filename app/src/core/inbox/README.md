@@ -24,7 +24,7 @@
 - `sendConsultPackage(send, pkg)`：先发问诊包（只带引用），再每张照片、每段录音分别发一条 `consult.attachment`（base64），避开中继单条 2 MB 上限。
 - V2-33 的 `homeHerbs` 随远程问诊包加密传送，并在老师端与问诊包并存；它不属于签名病历内容。起草和核对页按病历 id 读取库存快照。
 - `flushIntakeOutbox(store, send)`：M1-05 接通后把 `intake-outbox` 里的替身待发件真实发出，成功后才删除。
-- `completeConsultSigning`：签字 → 发送 → 成功提示：`signEncounter(final)` 后把 `record.signed` 发给问诊包发件人；发送成功后把**完整签名病历**存进 `teacher-records`，并删除老师本机的录音字节与引用；有 AI 草稿时顺带更新老师的改稿习惯摘要；再按需记一笔 `charge`（`recordHash` 为签名事件 id）。问诊包的文字与照片仍按老师设定的保留期限删除。
+- `completeConsultSigning`：签字 → 发送 → 成功提示：`signEncounter(final)` 后把 `record.signed` 发给问诊包发件人；发送成功后把**完整签名病历**存进 `teacher-records`，并删除老师本机的录音字节、引用、逐句原话、追问原答和临时整理；已清理的问诊包拒绝中继重放恢复原话。照片与签字病历按老师设定的保留期限删除。有 AI 草稿时更新改稿习惯摘要，再按需记一笔 `charge`。
 
 ## 学生病历页
 
