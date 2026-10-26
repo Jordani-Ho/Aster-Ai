@@ -205,6 +205,14 @@ export interface AdherenceReport {
   practiceDays: number
   scheduled: number
   done: number
+  /** 当前仍有作业；旧报告没有此字段时老师不能据此请出。 */
+  hasHomework?: boolean
+  /** 当前作业的最早生效日，作为从未打卡者的起点。 */
+  homeworkSince?: string | null
+  /** 全部当前作业都有固定到期日时，最后一个有效日。 */
+  homeworkUntil?: string | null
+  /** 全部有效打卡中最后一天，按子时归日。 */
+  lastCheckinDay?: string | null
 }
 
 // 学生端把这份小结发给老师（不知道对方界面的还原方式也能直接显示/排序），也用于本机展示。
@@ -219,7 +227,17 @@ export function adherenceReport(assignments: Assignment[], checkins: Checkin[], 
     done += entry.done
     if (entry.done > 0) practiceDays += 1
   }
-  return { weekStart: start, weeklyRate: scheduled === 0 ? null : done / scheduled, streak: currentStreak(assignments, checkins, today), practiceDays, scheduled, done }
+  const active = assignments.filter(row => assignmentHomework(row) && row.startsOn <= today
+    && (row.homework.durationDays === undefined || (Date.parse(today + 'T00:00:00Z') - Date.parse(row.startsOn + 'T00:00:00Z')) / 86_400_000 < row.homework.durationDays)
+    && !(row.homework.schedule.kind === 'once' && checkins.some(checkin => checkin.homeworkId === row.homework.id && Number.isFinite(Date.parse(checkin.at)) && checkinDay(new Date(checkin.at)) <= today)))
+  const homeworkSince = active.map(row => row.startsOn).sort()[0] ?? null
+  const homeworkUntil = active.length > 0 && active.every(row => Number.isSafeInteger(row.homework.durationDays) && (row.homework.durationDays ?? 0) > 0)
+    ? active.map(row => localDay(addDays(parseDay(row.startsOn), (row.homework.durationDays ?? 1) - 1))).sort().at(-1) ?? null : null
+  const ids = new Set(active.map(row => row.homework.id))
+  const lastCheckinDay = checkins.filter(row => ids.has(row.homeworkId) && Number.isFinite(Date.parse(row.at)))
+    .map(row => checkinDay(new Date(row.at))).filter(day => day <= today).sort().at(-1) ?? null
+  return { weekStart: start, weeklyRate: scheduled === 0 ? null : done / scheduled, streak: currentStreak(assignments, checkins, today), practiceDays, scheduled, done,
+    hasHomework: active.length > 0, homeworkSince, homeworkUntil, lastCheckinDay }
 }
 
 // 老师端“今天”页排序：同一周的报告里，坚持率低于一半的排前面（升序），无作业（null）不参与排序、排最后。

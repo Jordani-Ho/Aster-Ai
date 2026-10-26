@@ -42,7 +42,7 @@ it('基础工作逐项确认、重开续做，默认不过目自动邀约；保�
   const store = await openStore(createIdentity(), { factory: new IDBFactory() })
   try {
     const initial = await loadGroundwork(store)
-    expect(initial.invitation).toEqual({ mode: 'review', afterDays: 14 })
+    expect(initial.invitation).toEqual({ mode: 'review', afterDays: 14, leaveAfterDays: null })
     expect(initial.herbs).toBe('none')
     expect(await hasAppointmentSchedule(store)).toBe(false)
     expect(groundworkMissing(initial)).toContain('排班')
@@ -54,6 +54,8 @@ it('基础工作逐项确认、重开续做，默认不过目自动邀约；保�
     for (const invitation of [{ mode: 'wrong', afterDays: 14 }, { mode: 'review', afterDays: 0 }, { mode: 'auto', afterDays: 1.5 }]) {
       await expect(saveGroundwork(store, { ...next, invitation } as never)).rejects.toThrow()
     }
+    for (const leaveAfterDays of [13, 366, 30.5, '30']) await expect(saveGroundwork(store,
+      { ...next, invitation: { ...next.invitation, leaveAfterDays } } as never)).rejects.toThrow('请出天数')
     for (const patch of [{ checked: ['bad'] }, { checked: ['toString'] }, { checked: ['model', 'model'] }, { herbs: 'bad' }, { invitation: { mode: 'auto', afterDays: 3651 } }]) await expect(saveGroundwork(store, { ...next, ...patch } as never)).rejects.toThrow()
     await expect(saveGroundwork({ ...store, put: async () => { throw Error('SYNTHETIC_DISK') } }, next)).rejects.toThrow('没保存成功')
     expect(await loadGroundwork(store)).toEqual(next)

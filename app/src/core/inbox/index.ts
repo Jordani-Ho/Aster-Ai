@@ -36,6 +36,8 @@ import {
 import { saveReceivedStorefront, STOREFRONT_TYPE, verifyStorefrontEvent } from '../storefront'
 import { emptyOrganizedIntake, validOriginals, validOrganizationPair, validateOrganizedIntake } from '../intake/organization'
 import { MAX_AUDIO_SEGMENT_BYTES, MAX_AUDIO_SEGMENT_MS, validateAudioLimits } from '../intake/audio'
+import { isRemovedStudent, receiveRosterMessage } from '../roster'
+import { validDate } from '../hall/groundwork'
 
 // M1-15a 串联：一个 createTransport 实例收到的信封按 type 分发给各模块。
 // - consult.package / consult.attachment：老师端问诊箱与附件（照片单独一条，避免 2 MB 单条上限）。
@@ -349,6 +351,11 @@ export interface StudentAdherence {
   practiceDays: number
   scheduled: number
   done: number
+  hasHomework?: boolean
+  homeworkSince?: string | null
+  homeworkUntil?: string | null
+  lastCheckinDay?: string | null
+  sentAt?: number
   forMember?: string
   receivedAt: string
 }
@@ -364,6 +371,7 @@ export function adherenceEnvelope(report: AdherenceReport): Envelope {
       practiceDays: report.practiceDays,
       scheduled: report.scheduled,
       done: report.done,
+      ...(report.hasHomework === undefined ? {} : { hasHomework: report.hasHomework, homeworkSince: report.homeworkSince ?? null, homeworkUntil: report.homeworkUntil ?? null, lastCheckinDay: report.lastCheckinDay ?? null }),
     },
   }
 }
@@ -382,6 +390,11 @@ function parseAdherence(payload: Record<string, unknown>): Omit<StudentAdherence
   }
   if ((payload.done as number) > (payload.scheduled as number)) return null
   if ((payload.practiceDays as number) > 7) return null
+  if (payload.hasHomework !== undefined && (typeof payload.hasHomework !== 'boolean'
+    || (payload.homeworkSince !== null && !validDate(payload.homeworkSince))
+    || (payload.homeworkUntil !== null && !validDate(payload.homeworkUntil))
+    || (payload.lastCheckinDay !== null && !validDate(payload.lastCheckinDay)))) return null
+  if (payload.hasHomework === true && payload.homeworkSince === null) return null
   const forMember = payload.forMember
   if (forMember !== undefined && (typeof forMember !== 'string' || forMember.trim() === '' || forMember.length > 12 || /[\u0000-\u001f\u007f]/.test(forMember))) return null
   return {
@@ -391,17 +404,20 @@ function parseAdherence(payload: Record<string, unknown>): Omit<StudentAdherence
     practiceDays: payload.practiceDays as number,
     scheduled: payload.scheduled as number,
     done: payload.done as number,
+    ...(payload.hasHomework === undefined ? {} : { hasHomework: payload.hasHomework as boolean,
+      homeworkSince: payload.homeworkSince as string | null, homeworkUntil: payload.homeworkUntil as string | null, lastCheckinDay: payload.lastCheckinDay as string | null }),
     ...(forMember === undefined ? {} : { forMember }),
   }
 }
 
 async function receiveAdherence(store: LocalStore, message: Message, payload: Record<string, unknown>): Promise<void> {
+  if (await isRemovedStudent(store, message.sender)) return
   const report = parseAdherence(payload)
   if (!report) return
   const existing = await store.get(ADHERENCE_COLLECTION, message.sender) as unknown as StudentAdherence | undefined
   // 旧周小结迟到时不要覆盖新周。
-  if (existing && existing.weekStart > report.weekStart) return
-  const stored: StudentAdherence = { student: message.sender, ...report, receivedAt: new Date().toISOString() }
+  if (existing && (existing.weekStart > report.weekStart || Number.isSafeInteger(existing.sentAt) && existing.sentAt! >= message.at)) return
+  const stored: StudentAdherence = { student: message.sender, ...report, receivedAt: new Date().toISOString(), sentAt: message.at }
   await store.put(ADHERENCE_COLLECTION, message.sender, stored as unknown as StoreValue)
   // V2-12：学生连上社区就会发这条数值小结；老师因此认得这位学生，钱账页才能列出来首次记账。
   if (await loadRole(store) === 'teacher') await rememberTeacherStudent(store, message.sender)
@@ -416,7 +432,7 @@ export async function listStudentAdherence(store: LocalStore): Promise<StudentAd
     if (typeof value.student !== 'string' || !HEX64.test(value.student)) continue
     const parsed = parseAdherence(value as unknown as Record<string, unknown>)
     if (!parsed || typeof value.receivedAt !== 'string') continue
-    result.push({ student: value.student, ...parsed, receivedAt: value.receivedAt })
+    result.push({ student: value.student, ...parsed, receivedAt: value.receivedAt, ...(Number.isSafeInteger(value.sentAt) ? { sentAt: value.sentAt } : {}) })
   }
   return result
 }
@@ -425,6 +441,7 @@ export async function listStudentAdherence(store: LocalStore): Promise<StudentAd
 // 全部发送成功后，把这位老师加入“我的老师”白名单（发送失败不加入）。
 export async function sendConsultPackage(send: SendEnvelope, pkg: ConsultPackage, options: { store?: LocalStore } = {}): Promise<void> {
   const teacher = pkg.encounter.teacher
+  if (options.store && await options.store.get('student-roster-leaves', teacher)) throw Error('请先请老师重新邀请你')
   await send(teacher, consultEnvelope(pkg))
   for (const item of pkg.attachments) await send(teacher, attachmentEnvelope(pkg.encounter.id, item.ref, item.data))
   if (options.store) await addTeacher(options.store, teacher)
@@ -547,6 +564,7 @@ function validAudioReferences(refs: readonly AttachmentRef[], requireV226: boole
 }
 
 async function receiveConsult(identity: Identity, store: LocalStore, message: Message, payload: Record<string, unknown>): Promise<void> {
+  if (await isRemovedStudent(store, message.sender)) return
   const value = payload as unknown as ConsultEnvelopePayload
   if (!isEncounter(value.encounter)) return
   if (value.encounter.teacher !== identity.publicKey) return
@@ -914,6 +932,7 @@ export function createInbox(options: InboxOptions) {
       if (!message || !message.envelope || message.sender === identity.publicKey) return
       const { type, version, payload } = message.envelope
       if (version !== 1) return
+      if (type === 'roster.join' || type === 'roster.leave') { await receiveRosterMessage(store, identity, message); return }
       if (type === CONSULT_TYPES.package) {
         if (object(payload)) await receiveConsult(identity, store, message, payload)
         return
@@ -1024,7 +1043,7 @@ async function receiveRecordsBackup(identity: Identity, store: LocalStore, messa
 // 学生端病历页：只显示验签通过、且签名人在“我的老师”名单里的病历（旧数据也按名单过滤）；
 // 按同一 encounter.id 归组版本。
 export async function listReceivedRecords(store: LocalStore, identity: Identity): Promise<ReceivedRecord[]> {
-  const teachers = await historyTeachers(store)
+  const teachers = [...new Set([...(await historyTeachers(store)), ...(await store.list('student-roster-leaves')).map(row => row.key)])]
   const students = await studentKeys(store, identity)
   const rows = await store.list(INBOX_COLLECTIONS.records)
   const records: ReceivedRecord[] = []

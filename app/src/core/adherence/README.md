@@ -19,6 +19,8 @@ export function rankStudentAdherence(reports, today): reports[] // 老师端“�
 
 `AdherenceReport = { weekStart, weeklyRate, streak, practiceDays, scheduled, done }`，学生端通过 `homework.adherence` 信封发给老师，只含数值、不含原文/身份字段；老师端按发件人覆盖保存最新一周，旧周小结迟到不会覆盖新周。
 
+V2-36 追加 `hasHomework`、`homeworkSince`、`homeworkUntil`、`lastCheckinDay`，仍只传事实日期与数值。当前没有作业、已做完的单次作业和到期作业不算未打卡；旧报告缺字段时老师不能用它请出学生。老师端也按消息时刻拒收迟到的旧小结。
+
 ## 规则
 
 1. **某天有作业** = 这一天按 M1-13 的 `schedule()` 至少有一条作业（生效日期、`durationDays`、时辰、节气、单次都由 `schedule()` 处理，这里不重复实现）。

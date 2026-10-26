@@ -147,6 +147,8 @@ export function HallGroundwork({ store, identity, send, onDone }: { store: Local
     {item === 'invitation' && <>
       <label>邀约怎么发<select value={value.invitation.mode} onChange={e => patch({ invitation: { ...value.invitation, mode: e.target.value as 'auto' | 'review' } })}><option value="review">老师过目后再发</option><option value="auto">自动邀约</option></select></label>
       <label>多久没来该请了（天）<input type="number" min="1" max="3650" value={value.invitation.afterDays} onChange={e => patch({ invitation: { ...value.invitation, afterDays: Number(e.target.value) } })} /></label>
+      <label>学生连续多少天不打卡，就请出名单<input type="number" min="14" max="365" placeholder="不设就不请出" value={value.invitation.leaveAfterDays ?? ''} onChange={e => patch({ invitation: { ...value.invitation, leaveAfterDays: e.target.value === '' ? null : Number(e.target.value) } })} /></label>
+      <p className="nl-quiet">不设置就不会请出学生；没有作业的学生也不会请出。已确认的面诊照常进行。</p>
       <p className="nl-quiet">老师智能体每天按这个方式准备面诊邀约；排班和预约变更会在发出前核对。</p>
     </>}
     {item === 'herbs' && <>

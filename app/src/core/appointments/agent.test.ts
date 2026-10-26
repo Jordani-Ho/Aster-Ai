@@ -22,6 +22,18 @@ async function addSignedVisit(store: Awaited<ReturnType<typeof openStore>>, teac
 }
 
 describe('老师智能体预约邀约', () => {
+  it('V2-36 已请出的学生即使留有签字病历也不进入新邀约草稿', async () => {
+    const teacher = createIdentity(), student = createIdentity(), store = await openStore(teacher, { factory: new IDBFactory() })
+    try {
+      const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'
+      await store.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: ['schedule'] } as unknown as StoreValue)
+      await addSignedVisit(store, teacher, student.publicKey, new Date(+now - 30 * 86_400_000), '合成学生')
+      await store.put('teacher-roster-leaves', student.publicKey, { student: student.publicKey, at: now.toISOString(), day: '2026-10-25' })
+      await store.delete('teacher-students', student.publicKey)
+      const run = await runDailyAppointmentInvitations(store, teacher, undefined, now)
+      expect(run.output.candidates).toEqual([])
+    } finally { store.close() }
+  })
   it('未设排班不产生邀约；只设排班后维持过目模式', async () => {
     expect(planAppointmentInvitations(materials({ scheduleEnabled: false, visits: [{ student: 'a'.repeat(64), alias: '合成学生', at: '2026-09-01T12:00:00Z' }] })).slot).toBeNull()
     const teacher = createIdentity(), store = await openStore(teacher, { factory: new IDBFactory() })

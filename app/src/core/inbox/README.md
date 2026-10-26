@@ -11,12 +11,14 @@
 - `ledger.*` → `createLedgerSync().receive`；不认识的类型丢弃。
 - `appointment.*` → V2-25 的 `createAppointmentInbox()`：端到端加密传递邀约/回复/确认，按 offerId 幂等写入双方本机。
 - `student.city` / `teacher.city`（V2-34）→ 只接受已有师生关系发送的单城市字段，按消息时间拒收过期更新；学生现居城市写在老师端学生名单，老师城市只在学生本机缓存。
+- `roster.leave` / `roster.join`（V2-36）→ 老师固定通知学生已请出；学生新进馆时回送老师签名邀请，老师验证后才恢复名单资格。已请出的学生发来的新问诊和坚持小结不入老师端。
 
 ## 我的老师白名单
 
 - 存储：`settings` 集合，键 `teachers`，值为 64 位十六进制公钥数组（校验 + 去重）。`loadTeachers` / `saveTeachers` / `addTeacher` / `removeTeacher` 是唯一读写入口。
 - 收件：`receiveSignedRecord` 只在发件人属于名单时才验签入库，陌生成员签发的病历与作业都不会落库。
 - 展示：`listReceivedRecords` 显示前再按名单过滤，白名单之前写进本机的旧数据同样不显示；重新登记老师后会恢复显示。V2-07 起，学生确认过的旧老师公钥（`identity-links` 的 teacher 关系）也算名单内，旧签名病历照常显示；老师确认过的旧学生公钥用来验旧学生名下的病历。
+- V2-36 请出例外：旧病历已在学生本机时仍可验签回看；只是不能接收新病历或发新远程问诊。普通手动移除老师仍沿用上述白名单展示规则。
 - 自动加入：`sendConsultPackage` 全部消息发送成功后把 `pkg.encounter.teacher` 加入名单（发送失败不加入）；`flushIntakeOutbox` 同样。
 - 手动登记：App“设置 → 我的老师”里添加/移除（`TeacherListSettings`）。
 
