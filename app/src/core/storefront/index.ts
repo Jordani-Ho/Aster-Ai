@@ -112,15 +112,16 @@ export function inviteTitle(storefront: Storefront | null | undefined, key?: str
   return displayTeacherName(displayName, key) + '邀请你'
 }
 
-function contentOf(storefront: Storefront): string {
-  return JSON.stringify({ type: 'aster.storefront', version: 1, storefront })
+function contentOf(storefront: Storefront, receiveRecordings: boolean): string {
+  return JSON.stringify({ type: 'aster.storefront', version: 1, storefront, receiveRecordings })
 }
 
-export function makeStorefrontEvent(identity: Identity, storefront: Storefront, now = Math.floor(Date.now() / 1000)): StorefrontEvent {
+export function makeStorefrontEvent(identity: Identity, storefront: Storefront, now = Math.floor(Date.now() / 1000), receiveRecordings = true): StorefrontEvent {
   const clean = normalizeStorefront(storefront)
   if (!clean) throw new Error('门面配置无效')
   if (!Number.isSafeInteger(now) || now <= 0) throw new Error('门面时间无效')
-  const event = finalizeEvent({ kind: STOREFRONT_KIND, created_at: now, tags: [], content: contentOf(clean) }, identity.privateKey)
+  if (typeof receiveRecordings !== 'boolean') throw new Error('接收录音设置无效')
+  const event = finalizeEvent({ kind: STOREFRONT_KIND, created_at: now, tags: [], content: contentOf(clean, receiveRecordings) }, identity.privateKey)
   // JSON 往返去掉 verify 缓存 Symbol，签名事件才能安全落盘/进信封。
   return JSON.parse(JSON.stringify(event)) as StorefrontEvent
 }
@@ -139,6 +140,7 @@ function eventShape(value: unknown): StorefrontEvent | null {
 export interface VerifiedStorefront {
   event: StorefrontEvent
   storefront: Storefront
+  receiveRecordings: boolean
 }
 
 /** 结构 + 内容 + 签名都通过才算有效；expectedTeacher 给出时还要求签名人就是这位老师。 */
@@ -149,15 +151,16 @@ export function verifyStorefrontEvent(value: unknown, expectedTeacher?: string):
   let content: unknown
   try { content = JSON.parse(event.content) } catch { return null }
   if (!content || typeof content !== 'object' || Array.isArray(content)) return null
-  const fields = content as { type?: unknown; version?: unknown; storefront?: unknown }
+  const fields = content as { type?: unknown; version?: unknown; storefront?: unknown; receiveRecordings?: unknown }
   if (fields.type !== 'aster.storefront' || fields.version !== 1) return null
+  if (fields.receiveRecordings !== undefined && typeof fields.receiveRecordings !== 'boolean') return null
   const storefront = normalizeStorefront(fields.storefront)
   if (!storefront) return null
   let idMatches = false
   try { idMatches = getEventHash(event) === event.id } catch { idMatches = false }
   if (!idMatches) return null
   try { if (!verifyEvent(event as Event)) return null } catch { return null }
-  return { event, storefront }
+  return { event, storefront, receiveRecordings: fields.receiveRecordings !== false }
 }
 
 // ---- 学生端缓存 ----
@@ -170,6 +173,12 @@ async function cachedEvent(store: Pick<LocalStore, 'get'>, teacher: string): Pro
 export async function loadCachedStorefront(store: Pick<LocalStore, 'get'>, teacher: string): Promise<Storefront | null> {
   const event = await cachedEvent(store, teacher)
   return event ? verifyStorefrontEvent(event, teacher)?.storefront ?? null : null
+}
+
+/** 旧签名门面没有该偏好时按默认值开启。 */
+export async function loadCachedReceiveRecordings(store: Pick<LocalStore, 'get'>, teacher: string): Promise<boolean> {
+  const event = await cachedEvent(store, teacher)
+  return event ? verifyStorefrontEvent(event, teacher)?.receiveRecordings ?? true : true
 }
 
 export async function loadCachedStorefronts(store: Pick<LocalStore, 'list'>): Promise<Record<string, Storefront>> {
@@ -226,13 +235,16 @@ export async function publishStorefront(options: {
   store: Pick<LocalStore, 'get' | 'put'>
   identity: Identity
   storefront: Storefront
+  receiveRecordings?: boolean
   now?: Date
 }): Promise<{ event: StorefrontEvent; own: OwnStorefront }> {
   const { store, identity } = options
   const clean = normalizeStorefront(options.storefront)
   if (!clean) throw new Error('门面配置无效')
   const own = await loadOwnStorefront(store, identity)
-  const event = makeStorefrontEvent(identity, clean, Math.floor((options.now ?? new Date()).getTime() / 1000))
+  const priorPreference = own.current ? verifyStorefrontEvent(own.current, identity.publicKey)?.receiveRecordings : undefined
+  const preference = options.receiveRecordings ?? priorPreference ?? true
+  const event = makeStorefrontEvent(identity, clean, Math.floor((options.now ?? new Date()).getTime() / 1000), preference)
   const next: OwnStorefront = { current: event, previous: own.current }
   await saveOwn(store, next)
   return { event, own: next }
@@ -247,9 +259,10 @@ export async function restoreStorefront(options: {
   const { store, identity } = options
   const own = await loadOwnStorefront(store, identity)
   if (!own.previous) return null
-  const storefront = verifyStorefrontEvent(own.previous, identity.publicKey)?.storefront
+  const previous = verifyStorefrontEvent(own.previous, identity.publicKey)
+  const storefront = previous?.storefront
   if (!storefront) return null
-  const event = makeStorefrontEvent(identity, storefront, Math.floor((options.now ?? new Date()).getTime() / 1000))
+  const event = makeStorefrontEvent(identity, storefront, Math.floor((options.now ?? new Date()).getTime() / 1000), previous.receiveRecordings)
   await saveOwn(store, { current: event, previous: own.current })
   return { event, storefront }
 }

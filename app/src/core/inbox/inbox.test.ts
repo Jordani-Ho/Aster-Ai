@@ -22,6 +22,8 @@ import {
   startSession,
   type IntakeSession,
 } from '../intake/session'
+import { createAudioAttachment } from '../intake/audio'
+import { INTAKE_COLLECTIONS, loadOrganizationPairs } from '../intake/session'
 import type { PhotoResult } from '../intake/photo'
 import { localDay } from '../homework/schedule'
 import {
@@ -521,6 +523,60 @@ it('signed consultation keeps teacher raw package for V2-05 retention; replay do
   await teacher.inbox.receive({ id:crypto.randomUUID(),sender:studentPub,at:Math.floor(Date.now()/1000),envelope:{type:'consult.attachment',version:1,payload:{encounterId:pkg.encounter.id,ref:pkg.attachments[0].ref,data:toBase64(pkg.attachments[0].data)}} })
   expect(await teacherStore.list('consult-package')).toHaveLength(1)
   expect(await teacherStore.get('attachments', pkg.attachments[0].ref.id)).toEqual(pkg.attachments[0].data)
+})
+
+it('V2-26 收件老师能播放原始录音；签字后老师和学生都清除录音，并保存整理对照', async () => {
+  const { teacher, student, teacherStore, studentStore } = await nodes()
+  const pkg = await syntheticPackage(0)
+  const clip = await createAudioAttachment(new Uint8Array([4, 5, 6, 7]), 'audio/mp4', 1800)
+  const studentOrg = {
+    chiefComplaint: { text: '睡眠不佳', citations: [1] }, presentIllness: { text: null, citations: [] },
+    history: { text: null, citations: [] }, medsAllergies: { text: null, citations: [] },
+  } satisfies NonNullable<ConsultPackage['organized']>
+  const teacherOrg = {
+    chiefComplaint: { text: '近来睡眠欠佳', citations: [1] }, presentIllness: { text: null, citations: [] },
+    history: { text: null, citations: [] }, medsAllergies: { text: null, citations: [] },
+  } satisfies NonNullable<ConsultPackage['organized']>
+  pkg.originals = [{ id: 1, text: '呢排瞓得唔好。', source: 'spoken' }]
+  pkg.organized = studentOrg
+  pkg.qa = []
+  pkg.attachments.push({ ref: clip.ref, data: clip.data })
+  await studentStore.put(INTAKE_COLLECTIONS.sent, pkg.encounter.id, {
+    encounter: pkg.encounter, history: pkg.history, attachments: [], originals: pkg.originals, organized: studentOrg, qa: [],
+  } as unknown as StoreValue)
+
+  await student.sendConsult(pkg)
+  const consult = await waitFor(async () => {
+    const item = (await listConsults(teacherStore)).find(value => value.encounter.id === pkg.encounter.id)
+    return item && (await consultReadiness(teacherStore, pkg.encounter.id)).ready ? item : null
+  })
+  const audioRef = consult.attachments.find(ref => ref.type === 'audio')!
+  expect(await teacherStore.get('attachments', audioRef.id)).toEqual(clip.data)
+
+  const invalidTeacherOrg = {
+    ...teacherOrg, chiefComplaint: { text: '引用不存在的原话', citations: [99] },
+  }
+  const blockedSend = vi.fn()
+  await expect(completeConsultSigning({
+    identity: teacherId, store: teacherStore, consult,
+    final: { ...consult.encounter, teacherOrganized: invalidTeacherOrg }, send: blockedSend,
+  })).rejects.toThrow('有效原话依据')
+  expect(blockedSend).not.toHaveBeenCalled()
+  expect(await teacherStore.get('attachments', audioRef.id)).toEqual(clip.data)
+
+  await completeConsultSigning({
+    identity: teacherId, store: teacherStore, consult,
+    final: { ...consult.encounter, teacherOrganized: teacherOrg }, send: teacher.send,
+  })
+  expect(await teacherStore.get('attachments', audioRef.id)).toBeUndefined()
+  const storedConsult = await teacherStore.get('consult-package', pkg.encounter.id) as { attachments: { type: string }[] }
+  expect(storedConsult.attachments.some(ref => ref.type === 'audio')).toBe(false)
+  const pairs = await waitFor(async () => {
+    const found = await loadOrganizationPairs(studentStore, teacherPub)
+    return found.length ? found : null
+  })
+  expect(pairs[0]).toEqual({ student: studentOrg, teacher: teacherOrg })
+  expect(await studentStore.get(INTAKE_COLLECTIONS.sent, pkg.encounter.id)).toBeUndefined()
 })
 
 it('invited student opens only their book; teacher first signing opens empty counterpart before existing charge rules',async()=>{

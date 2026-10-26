@@ -13,6 +13,8 @@ import { appointmentsAffectedBySchedule, cancelAppointment, type Appointment } f
 import { listTeacherRecords } from './core/records/teacher'
 import type { Identity } from './core/identity'
 import type { SendEnvelope } from './core/inbox'
+import { loadOwnStorefront, publishStorefront, sendStorefrontTo, verifyStorefrontEvent } from './core/storefront'
+import { teacherStudentCandidates } from './core/reidentify'
 
 type Item = keyof typeof GROUNDWORK_ITEMS
 const keys = Object.keys(GROUNDWORK_ITEMS) as Item[]
@@ -74,6 +76,19 @@ export function HallGroundwork({ store, identity, send, onReady, onDone }: { sto
       if (key === 'herbs' && next.herbs === 'pending') throw Error('先录入至少一味药材，或选择“不备药”')
       const checked = [...new Set([...next.checked, key])]
       await saveGroundwork(store, { ...next, checked })
+      if (key === 'templates' && identity) {
+        try {
+          const own = await loadOwnStorefront(store, identity)
+          const current = own.current ? verifyStorefrontEvent(own.current, identity.publicKey)?.storefront ?? null : null
+          if (current) {
+            await publishStorefront({ store, identity, storefront: current, receiveRecordings: next.receiveRecordings })
+            if (send) {
+              const students = (await teacherStudentCandidates(store)).map(candidate => candidate.student)
+              await sendStorefrontTo({ store, identity, recipients: students, send })
+            }
+          }
+        } catch { /* 本机设置已保存；已有学生下次从邀请链接读取签名偏好。 */ }
+      }
       setScheduleConflicts(null); await refresh(true); setEdited(false); setNotice('已保存。'); window.dispatchEvent(new Event('aster:data-changed'))
     } catch (cause) { setError(`没保存成功：${cause instanceof Error ? cause.message : '本机存储不可用'}`); onReady?.(false) }
     finally { setBusy(false) }
@@ -90,6 +105,8 @@ export function HallGroundwork({ store, identity, send, onReady, onDone }: { sto
     <h3>{GROUNDWORK_ITEMS[item]}</h3>
     {item === 'templates' && <>
       <p>问诊、病历、施治、开方各有一套默认骨架。先用默认就能开馆，以后随时改。</p>
+      <label><input type="checkbox" checked={value.receiveRecordings} onChange={event => patch({ receiveRecordings: event.target.checked })} />接收问诊录音（默认开启）</label>
+      <p className="nl-quiet">学生可以选择发录音。送达后，学生端清除录音；老师签字后，老师端也清除录音。</p>
       <details><summary>看看或修改四类模板</summary><TemplateStudio store={store} onSaved={() => void refresh().catch(cause => setError(cause.message))} /></details>
     </>}
     {item === 'schedule' && <>

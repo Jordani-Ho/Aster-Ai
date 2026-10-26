@@ -20,11 +20,20 @@ V2-32（B 类，已批）：`Encounter.postures` 扩展为**远程问诊也可�
 
 V2-33（B 类）：`ConsultPackage` 新增可选 `homeHerbs: SharedHomeHerb[]`，仅用于远程问诊传输老师本机所需的家中药材快照。它是问诊包元数据，不属于 `Encounter`，不进入签名病历；老师端另按 `encounter.id` 保存侧车，按问诊包与签名病历的保留期限清理。学生库存数量只从本机根库存读取，家人共用，不实时同步。
 
+V2-26（B 类，待技术合伙人审核）：`Encounter` 增加可选 `teacherOrganized?: OrganizedIntake`，记录老师智能体按本馆模板整理的文字及其原话序号引用，随老师签字病历返回学生；学生整理本身不签入 `Encounter`。`ConsultPackage` 增加可选 `originals`、`organized`、`qa` 元数据；非空整理栏必须引用实际存在的原话序号，问答答案必须对应 `source:'followup'` 的同一句原话。`AttachmentRef` 的录音增加可选 MIME（仅 `audio/mp4|audio/webm|audio/ogg`）和 `durationMs`；旧包字段缺失时照常读。录音在两端分别于送达、签字成功后删除，发送副本不留音频引用。学生端按老师公钥只保留最近五对“学生整理/老师签字整理”，不给下一次整理模型发送往次原话。没有数据迁移。
+
 下面的定义已经放在 `app/src/core/record/types.ts`（由技术合伙人建立，与本文逐字一致）。各任务卡直接引用，不要重复定义；发现问题在合并请求里提出。
 
 ```ts
 /** 每个字段的来源。界面用颜色区分；AI 推测永远不能显示成事实。 */
 export type Source = 'student' | 'teacher' | 'ai_draft' | 'external' | 'unknown'
+
+export interface IntakeOriginal { id: number; text: string; source: 'spoken' | 'followup' }
+export type OrganizedIntakeKey = 'chiefComplaint' | 'presentIllness' | 'history' | 'medsAllergies'
+export interface OrganizedIntakeField { text: string | null; citations: number[] }
+export type OrganizedIntake = Record<OrganizedIntakeKey, OrganizedIntakeField>
+export interface IntakeQuestionAnswer { focus: string; question: string; answer: string; originalId: number }
+export interface OrganizationPair { student: OrganizedIntake; teacher: OrganizedIntake }
 
 /** value 为 null 表示“未知”；AI 不得悄悄补全。 */
 export interface Field<T> { value: T | null; source: Source; note?: string }
@@ -53,6 +62,7 @@ export interface Encounter {
     medsAllergies: Field<string>
     attachments: AttachmentRef[]
   }
+  teacherOrganized?: OrganizedIntake // V2-26：老师智能体整理原话，引用序号与老师本机问诊包的 originals 对应
   fourExams: { look: Field<string>; listenSmell: Field<string>; ask: Field<string>; pulse: Field<string> }
   judgment: {
     symptomSummary: Field<string>  // 症状的抽象描述，不含原话；签字后老师端保留的就是这一项
@@ -92,7 +102,14 @@ export interface Homework {
   note?: string                    // 老师接受 AI 草稿时写 'ai_accepted'；按老师意见改稿写 'teacher_directed'
 }
 
-export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: string; bytes: number }
+export interface AttachmentRef {
+  id: string
+  type: 'photo' | 'audio'
+  sha256: string
+  bytes: number
+  mimeType?: 'audio/mp4' | 'audio/webm' | 'audio/ogg'
+  durationMs?: number
+}
 ```
 
 > 修订记录：2026-10-16 给 `Homework` 补上 `source` 和 `note`（M1-10 审核时发现遗漏）。
@@ -128,6 +145,9 @@ export interface ConsultPackage {
   managerProof?: FamilyProof    // M1-22 代管证明：代管人私钥签的 kind 2732，content 'aster.family.v1'，tags [['p', 家人公钥]]；老师端验过才认 manager
   history: string[]             // 学生授权附带的历史病历（签名事件 JSON 字符串），默认同一位老师的近 3 次
   attachments: { ref: AttachmentRef; data: Uint8Array }[]
+  originals?: IntakeOriginal[]   // V2-26：逐句原话，带稳定序号，保留原样
+  organized?: OrganizedIntake    // V2-26：学生智能体整理与原话序号引用
+  qa?: IntakeQuestionAnswer[]    // V2-26：追问与回答成对保存，不混入现病史
   postures?: PostureRecord[]    // V2-32：学生在家拍的体态骨架（最多两条；只有关键点/视角/时间/感觉，不带图片字节与指标数值）
   homeHerbs?: SharedHomeHerb[]  // V2-33：远程问诊家中库存快照，只在问诊包传输，不属于 Encounter 或签名内容
 }

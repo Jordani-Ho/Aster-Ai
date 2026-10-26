@@ -91,8 +91,12 @@ try {
       await page.waitForTimeout(400)
     }
     await expect(page.getByRole('heading', { name: '看一眼，再发出', exact: true })).toBeVisible({ timeout: 15000 })
+    // V2-26：追问的回答单独成对保存在“本次原话与问答”里，不混进问诊卡片的现病史。
     const cardText = await page.getByRole('region', { name: '问诊卡片' }).innerText()
-    expect(cardText).toContain('夜里容易出汗')
+    expect(cardText).not.toContain('夜里容易出汗')
+    const originals = page.getByRole('group', { name: '本次原话和追问回答' })
+    await originals.locator('summary').click()
+    expect(await originals.innerText()).toContain('夜里容易出汗')
     expect(errors).toEqual([])
     await context.close()
   }

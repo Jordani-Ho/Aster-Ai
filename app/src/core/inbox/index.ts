@@ -4,11 +4,11 @@ import type { LocalStore, StoreValue } from '../store'
 import type { Envelope, Message } from '../transport'
 import type { ChainEventDraft } from '../ledger/types'
 import { signEncounter, verifySignedEncounter, type SignedEncounterEvent } from '../record/sign'
-import type { AttachmentRef, ConsultPackage, Encounter, Homework } from '../record/types'
+import type { AttachmentRef, ConsultPackage, Encounter, Homework, IntakeQuestionAnswer } from '../record/types'
 import { CARE_PLAN_TYPE, parseSignedCarePlanEvent, storeCarePlan, verifySignedCarePlan } from '../careplan'
 import { verifyFamilyProof } from '../family/proof'
 import type { AdherenceReport } from '../adherence'
-import { INTAKE_COLLECTIONS, type StoredPackage } from '../intake/session'
+import { INTAKE_COLLECTIONS, rememberOrganizationPair, type StoredPackage } from '../intake/session'
 import { localDay } from '../homework/schedule'
 import { isHeavenStamp } from '../heaven/stamp'
 import type { HeavenStamp } from '../heaven/stamp'
@@ -33,6 +33,8 @@ import {
   RECORDS_BACKUP, RECORDS_PULL, RECORDS_REQUEST,
 } from '../records/backup'
 import { saveReceivedStorefront, STOREFRONT_TYPE, verifyStorefrontEvent } from '../storefront'
+import { emptyOrganizedIntake, validOriginals, validOrganizationPair, validateOrganizedIntake } from '../intake/organization'
+import { MAX_AUDIO_SEGMENT_BYTES, MAX_AUDIO_SEGMENT_MS, validateAudioLimits } from '../intake/audio'
 
 // M1-15a 串联：一个 createTransport 实例收到的信封按 type 分发给各模块。
 // - consult.package / consult.attachment：老师端问诊箱与附件（照片单独一条，避免 2 MB 单条上限）。
@@ -58,8 +60,8 @@ const HEX32 = /^[0-9a-f]{32}$/
 const HEX64 = /^[0-9a-f]{64}$/
 const REF_ID = /^[A-Za-z0-9_-]{1,64}$/
 const MAX_PHOTOS = 4
-// V2-08：问诊包里除最多 4 张照片，还可能有最多 4 张舌象裁剪图（每份舌象一张）。
-const MAX_ATTACHMENTS = MAX_PHOTOS + 4
+// V2-26：4 张照片、4 张舌象裁剪图、最多 10 段录音；总时长/总字节另行校验。
+const MAX_ATTACHMENTS = MAX_PHOTOS + 4 + 10
 
 export interface ConsultEnvelopePayload {
   encounter: Encounter
@@ -79,6 +81,9 @@ export interface ConsultEnvelopePayload {
   postures?: unknown
   /** V2-33：学生远程问诊时自动附带的药材库存快照；V2-24 旧包仍可只带状态。 */
   homeHerbs?: unknown
+  originals?: unknown
+  organized?: unknown
+  qa?: unknown
 }
 
 export interface AttachmentEnvelopePayload {
@@ -108,6 +113,9 @@ export interface StoredConsult {
   /** V2-32：学生自己拍的体态骨架；收包时已清洗成只有关键点与感觉。 */
   postures?: PostureRecord[]
   homeHerbs?: SharedHomeHerb[]
+  originals?: ConsultPackage['originals']
+  organized?: ConsultPackage['organized']
+  qa?: IntakeQuestionAnswer[]
 }
 
 export interface ConsultReadiness {
@@ -162,11 +170,17 @@ function isRef(value: unknown): value is AttachmentRef {
     && (value.type === 'photo' || value.type === 'audio')
     && typeof value.sha256 === 'string' && HEX64.test(value.sha256)
     && Number.isSafeInteger(value.bytes) && (value.bytes as number) > 0
+    && (value.mimeType === undefined || value.mimeType === 'audio/mp4' || value.mimeType === 'audio/webm' || value.mimeType === 'audio/ogg')
+    && (value.durationMs === undefined || (Number.isSafeInteger(value.durationMs) && (value.durationMs as number) > 0))
+    && (value.type !== 'audio' || (value.mimeType === undefined && value.durationMs === undefined)
+      || (value.mimeType !== undefined && value.durationMs !== undefined && (value.bytes as number) <= MAX_AUDIO_SEGMENT_BYTES && (value.durationMs as number) <= MAX_AUDIO_SEGMENT_MS))
+    && (value.type !== 'photo' || (value.mimeType === undefined && value.durationMs === undefined))
 }
 
 function isEncounter(value: unknown): value is Encounter {
   if (!object(value) || !object(value.intake) || !object(value.plan) || !object(value.judgment) || !object(value.fourExams)) return false
   if (value.heaven !== undefined && !isHeavenStamp(value.heaven)) return false
+  if (value.teacherOrganized !== undefined && !validOrganizationPair({ student: emptyOrganizedIntake(), teacher: value.teacherOrganized })) return false
   if(value.intake.tongues!==undefined) {
     if(!Array.isArray(value.intake.tongues)||value.intake.tongues.length>4)return false
     try {value.intake.tongues.forEach(parseTongueAbstract)} catch {return false}
@@ -280,6 +294,9 @@ export function draftPackage(consult: StoredConsult, homeHerbs: SharedHomeHerb[]
     encounter: structuredClone(consult.encounter),
     history: [...consult.history],
     attachments: [],
+    ...(consult.originals ? { originals: structuredClone(consult.originals) } : {}),
+    ...(consult.organized ? { organized: structuredClone(consult.organized) } : {}),
+    ...(consult.qa ? { qa: structuredClone(consult.qa) } : {}),
     ...(heaven ? { heaven: { ...heaven } } : {}),
     ...(homeHerbs ? { homeHerbs: structuredClone(homeHerbs) } : {}),
   }
@@ -308,6 +325,9 @@ export function consultEnvelope(pkg: ConsultPackage): Envelope {
       ...(pkg.observation ? { observation: structuredClone(pkg.observation) } : {}),
       ...(pkg.postures && pkg.postures.length > 0 ? { postures: structuredClone(pkg.postures) } : {}),
       ...(pkg.homeHerbs?.length ? { homeHerbs: structuredClone(pkg.homeHerbs) } : {}),
+      ...(pkg.originals ? { originals: structuredClone(pkg.originals) } : {}),
+      ...(pkg.organized ? { organized: structuredClone(pkg.organized) } : {}),
+      ...(pkg.qa ? { qa: structuredClone(pkg.qa) } : {}),
     } satisfies ConsultEnvelopePayload,
   }
 }
@@ -494,6 +514,35 @@ async function importHomework(store: LocalStore, encounter: Encounter, now: () =
   }
 }
 
+function validQa(value: unknown, originals: readonly NonNullable<ConsultPackage['originals']>[number][]): value is IntakeQuestionAnswer[] {
+  if (!Array.isArray(value) || value.length > 30) return false
+  return value.every(item => {
+    if (!object(item) || typeof item.focus !== 'string' || item.focus.trim() === '' || item.focus.length > 80
+      || typeof item.question !== 'string' || item.question.trim() === '' || item.question.length > 200
+      || typeof item.answer !== 'string' || item.answer.trim() === '' || item.answer.length > 2000
+      || !Number.isSafeInteger(item.originalId)) return false
+    const line = originals.find(original => original.id === item.originalId)
+    return line?.source === 'followup' && line.text === item.answer
+  })
+}
+
+function validAudioReferences(refs: readonly AttachmentRef[], requireV226: boolean): boolean {
+  const audio = refs.filter(ref => ref.type === 'audio')
+  if (audio.length > 10) return false
+  if (requireV226 && audio.some(ref => !ref.mimeType || !ref.durationMs)) return false
+  if (audio.length === 0 || audio.every(ref => ref.mimeType === undefined && ref.durationMs === undefined)) return true
+  if (audio.some(ref => !ref.mimeType || !ref.durationMs)) return false
+  let durationMs = 0, bytes = 0
+  try {
+    for (const ref of audio) {
+      validateAudioLimits(ref.mimeType!, ref.durationMs!, ref.bytes, { durationMs, bytes })
+      durationMs += ref.durationMs!
+      bytes += ref.bytes
+    }
+  } catch { return false }
+  return true
+}
+
 async function receiveConsult(identity: Identity, store: LocalStore, message: Message, payload: Record<string, unknown>): Promise<void> {
   const value = payload as unknown as ConsultEnvelopePayload
   if (!isEncounter(value.encounter)) return
@@ -513,6 +562,11 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
   }
   // 已交还的问诊包不再从老师端删除；中继重放同一问诊包只会覆盖为相同内容。
   if (!Array.isArray(value.attachments) || value.attachments.length > MAX_ATTACHMENTS || !value.attachments.every(isRef)) return
+  const hasIntakeMetadata = value.originals !== undefined || value.organized !== undefined || value.qa !== undefined
+  if (hasIntakeMetadata && (!validOriginals(value.originals)
+    || !validateOrganizedIntake(value.organized, value.originals)
+    || !validQa(value.qa, value.originals))) return
+  if (!validAudioReferences(value.attachments, hasIntakeMetadata)) return
   const history = Array.isArray(value.history) ? value.history : []
   const checked = validHistory({ ...value, history }, identity)
   // V2-18：旧版本问诊包可能还带着旧标记字段；照常收下，忽略它，不写入本机也不展示。
@@ -556,6 +610,11 @@ async function receiveConsult(identity: Identity, store: LocalStore, message: Me
     ...(observation ? { observation } : {}),
     ...(postures ? { postures } : {}),
     ...(homeHerbs?.length ? { homeHerbs } : {}),
+    ...(hasIntakeMetadata ? {
+      originals: structuredClone(value.originals as NonNullable<ConsultPackage['originals']>),
+      organized: structuredClone(value.organized as NonNullable<ConsultPackage['organized']>),
+      qa: structuredClone(value.qa as IntakeQuestionAnswer[]),
+    } : {}),
   }
   await store.put(INBOX_COLLECTIONS.consult, value.encounter.id, stored as unknown as StoreValue)
   // V2-33：库存快照单独按 encounter id 旁车保存，不进入 Encounter/签名内容。
@@ -572,7 +631,8 @@ async function receiveAttachment(store: LocalStore, message: Message, payload: R
   const expected = stored.attachments.find(ref => ref.id === value.ref.id)
   if (!expected) return
   // 按 id + sha256 核对；再现场重算一遍，内容不符就丢弃。
-  if (expected.sha256 !== value.ref.sha256 || expected.bytes !== value.ref.bytes || expected.type !== value.ref.type) return
+  if (expected.sha256 !== value.ref.sha256 || expected.bytes !== value.ref.bytes || expected.type !== value.ref.type
+    || expected.mimeType !== value.ref.mimeType || expected.durationMs !== value.ref.durationMs) return
   let data: Uint8Array
   try { data = fromBase64(value.data) } catch { return }
   if (data.length !== expected.bytes) return
@@ -594,6 +654,9 @@ async function receiveSignedRecord(identity: Identity, store: LocalStore, messag
     } catch { /* 试下一个换机前的旧学生公钥 */ }
   }
   if (!encounter) return
+  const sent = await store.get(INTAKE_COLLECTIONS.sent, encounter.id) as unknown as StoredPackage | undefined
+  if (encounter.teacherOrganized !== undefined && sent
+    && (!validOriginals(sent.originals) || !validateOrganizedIntake(encounter.teacherOrganized, sent.originals))) return
   const existing = await store.get(INBOX_COLLECTIONS.records, event.id)
   if (existing === undefined) {
     await store.put(INBOX_COLLECTIONS.records, event.id, {
@@ -604,6 +667,12 @@ async function receiveSignedRecord(identity: Identity, store: LocalStore, messag
       version: encounter.version,
     })
   }
+  if (sent && validOriginals(sent.originals) && validateOrganizedIntake(sent.organized, sent.originals)) {
+    try { await rememberOrganizationPair(store, message.sender, encounter.id, sent.organized, encounter.teacherOrganized) }
+    catch { /* 对照记忆写入失败不阻止病历入库或清除临时原话。 */ }
+  }
+  // 原话只为本次病历整理与引用核对暂存；签字回件后只保留最近五对整理，不留原话/问答副本。
+  if (sent) await store.delete(INTAKE_COLLECTIONS.sent, encounter.id)
   await importHomework(store, encounter, now)
 }
 
@@ -1022,10 +1091,22 @@ export async function completeConsultSigning(options: ConsultSigningOptions): Pr
   if (options.chargeBook?.student !== undefined && (typeof options.chargeBook.student !== 'string' || !HEX64.test(options.chargeBook.student))) throw new Error('代管人公钥格式无效')
   // V2-06：签字病历沿用问诊包里的天地人，不重新取；草稿里没有就补上包里那份。
   const heaven = options.final.heaven ?? options.consult.heaven ?? options.consult.encounter.heaven
+  if (options.final.teacherOrganized !== undefined
+    && (!options.consult.originals || !validateOrganizedIntake(options.final.teacherOrganized, options.consult.originals))) {
+    throw new Error('老师整理缺少有效原话依据，不能签字')
+  }
   const final: Encounter = heaven && !options.final.heaven ? { ...options.final, heaven: { ...heaven } } : options.final
   const signed = signEncounter(final, options.identity.privateKey)
   await options.send(options.consult.sender, { type: 'record.signed', version: 1, payload: signed })
   await saveTeacherRecord(options.store, signed)
+  // V2-26：方案签字并成功交还后，老师本机清除这次问诊的录音字节。
+  for (const ref of options.consult.attachments) if (ref.type === 'audio') await options.store.delete(INBOX_COLLECTIONS.attachments, ref.id)
+  const storedConsult = await options.store.get(INBOX_COLLECTIONS.consult, final.id) as unknown as StoredConsult | undefined
+  if (storedConsult && Array.isArray(storedConsult.attachments)) {
+    await options.store.put(INBOX_COLLECTIONS.consult, final.id, {
+      ...storedConsult, attachments: storedConsult.attachments.filter(ref => ref.type !== 'audio'),
+    } as unknown as StoreValue)
+  }
   if (options.draft) await updateFingerprint(options.store, options.final.teacher, options.draft, final)
   const chargeError = await recordCharge(options.ledger, options.final.teacher, bookStudent, signed.id, options.charge, options.chargeBook?.forMember, options.currency)
   return { signed, chargeError }

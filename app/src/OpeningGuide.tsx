@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toDataURL } from 'qrcode'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
+import type { SendEnvelope } from './core/inbox'
 import {
   connectionError, normalizeModel, providers, savePersonalModel, testConnection,
   type ModelGateway, type PersonalModel,
@@ -29,6 +30,7 @@ import { groundworkStatus } from './core/hall/groundwork'
 export interface OpeningGuideProps {
   identity: Identity
   store: LocalStore
+  send?: SendEnvelope
   gateway: string
   modelGateway: ModelGateway | null
   modelConfig: PersonalModel | null | undefined
@@ -57,7 +59,7 @@ function clockLabel(at: number): string {
   return `${hours}:${minutes}`
 }
 
-export function OpeningGuide({ identity, store, gateway, modelGateway, modelConfig, onModelSaved, onDone }: OpeningGuideProps) {
+export function OpeningGuide({ identity, store, gateway, send, modelGateway, modelConfig, onModelSaved, onDone }: OpeningGuideProps) {
   const [loaded, setLoaded] = useState(false)
   const [groundReady, setGroundReady] = useState(false)
   const [step, setStep] = useState<GuideStep>(1)
@@ -340,7 +342,7 @@ export function OpeningGuide({ identity, store, gateway, modelGateway, modelConf
         </div>
         <p className="nl-quiet op-open-note">先定好基础工作，就能邀请第一位学生。名字和门面以后还可以改。</p>
       </section>
-      <HallGroundwork store={store} onReady={setGroundReady} />
+      <HallGroundwork store={store} identity={identity} send={send} onReady={setGroundReady} />
       <footer className={`op-foot${groundReady ? '' : ' ground-footer'}`}><button type="button" className={groundReady ? 'nl-primary' : 'ground-open'} disabled={busy || !groundReady} onClick={() => void openHall()}>开馆</button></footer>
     </main>
   }
