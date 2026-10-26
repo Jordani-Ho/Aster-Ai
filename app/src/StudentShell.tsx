@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
@@ -123,9 +123,12 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
       } catch { /* 上报不是打卡成功条件。 */ }
     })()
   }
+  // 刚保存完基础信息时，先前那次（读到空资料的）核对可能才返回；用序号丢掉过期的结果，免得又跳回基础信息页。
+  const gateSeq = useRef(0)
   useEffect(() => {
     let live = true
-    void consultGate(pagesStore).then(gate => { if (live) { setBasicsMissing(gate.missing); setMustFill(!gate.allowed) } }).catch(() => {})
+    const seq = ++gateSeq.current
+    void consultGate(pagesStore).then(gate => { if (live && seq === gateSeq.current) { setBasicsMissing(gate.missing); setMustFill(!gate.allowed) } }).catch(() => {})
     return () => { live = false }
   }, [pagesStore, active, sub])
 
@@ -143,7 +146,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   if (mustFill) {
     return <StudentBasicsPage key={'join-' + active} store={pagesStore} identity={pagesIdentity} settingsStore={store} sendEnvelope={sendEnvelope ?? stack?.send} title={activeMember ? `${activeMember.alias}的基础信息` : '进馆：先填基础信息'}
       note="老师邀请您进馆。这是一件健康工具，请认真填好下面的基础信息，填完就能开始用了。"
-      onSaved={missing => { setBasicsMissing(missing); if (missing.length === 0) setMustFill(false) }} />
+      onSaved={missing => { gateSeq.current += 1; setBasicsMissing(missing); if (missing.length === 0) setMustFill(false) }} />
   }
   if (sub === 'basics') {
     return <StudentBasicsPage key={active} store={pagesStore} identity={pagesIdentity} settingsStore={store} sendEnvelope={sendEnvelope ?? stack?.send} title={activeMember ? `${activeMember.alias}的基础信息` : '基础信息'} note={basicsNote}
