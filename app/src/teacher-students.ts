@@ -20,6 +20,8 @@ export interface StudentRowInput {
   /** 最近一次问诊/病历时间；没有就 null。 */
   lastAt: string | null
   report: StudentWeekSummary | null
+  city?: string | null
+  remote?: boolean
 }
 
 export interface StudentRow extends StudentRowInput {

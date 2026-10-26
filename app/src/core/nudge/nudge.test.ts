@@ -106,6 +106,16 @@ describe('V2-27 固定话术与真实输入', () => {
     expect(chooseNudges(input(now, { assignments: [], visits: [{ ...visits[0], kind: 'in_person', next: null }], revisitDays: 14 }), []).some(row => row.kind === 'revisit')).toBe(true)
   })
 
+  it('异地复诊用远程问诊话术，同城仍说去约时间；所有新增话术也过禁词校验', () => {
+    const now = new Date(2026, 9, 25, 11, 0)
+    const visit = { id: 'enc-remote', at: new Date(2026, 9, 10, 11).toISOString(), kind: 'remote_async' as const, next: '14天后复诊' }
+    const remote = chooseNudges(input(now, { assignments: [], visits: [visit], revisitDays: 14, remote: true } as Partial<NudgeInputs>), [])[0]
+    expect(renderNudge(remote)).toContain('远程问诊')
+    expect(renderNudge(remote)).not.toContain('约个时间')
+    expect(() => validateNudgeTemplates({ ...NUDGE_TEMPLATES, 'revisit.remote.first': '危险的复诊提示' })).toThrow('禁用词')
+    expect(NUDGE_TEMPLATES).toHaveProperty('revisit.remote.first')
+  })
+
   it('本机只记一次提醒，后续真实打卡标成已行动；重复打开不重复推送', async () => {
     const identity = createIdentity(), store = await openStore(identity, { factory: new IDBFactory() })
     await store.put('homework', 'daily-1', assignment() as unknown as StoreValue)

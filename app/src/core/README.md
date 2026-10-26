@@ -18,6 +18,7 @@ app/src/CareReminder.tsx：问诊三步顶端常驻的就医提醒，文案只�
 homework/：本机作业排程、打卡和近 7 天完成统计，领域历法由 domain/tcm/calendar 提供。
 push/：标准网页推送（Web Push + VAPID）的 Service Worker 注册、订阅/注销与提醒客户端。
 nudge/：V2-27 学生智能体固定话术督促；本机按时段取事实、分级记录、睡前静默，只向已订阅的本人发无内容推送。
+city.ts：V2-34 只按两边填写的城市名判断同城；城市变化信封只带一个城市字段。
 不包含中医逻辑或中继通信。
 
 transport/：社区中继NIP-42连接、NIP-17/44/59私信、过期及会话内重连去重。

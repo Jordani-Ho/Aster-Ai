@@ -9,7 +9,7 @@ import { addTeacher, createInbox } from '../inbox'
 import {
   ACTIVE_TEACHER_SETTING, DEFAULT_STOREFRONT, EMBLEMS, STOREFRONT_COLLECTION, STOREFRONT_KIND,
   THEMES, displayTeacherName, inviteTitle, inviteWelcome, loadCachedStorefront, loadCachedStorefronts,
-  loadCachedReceiveRecordings, loadCachedRevisitDays, loadOwnStorefront, loadStorefrontDraft, makeStorefrontEvent, normalizeStorefront, publishStorefront,
+  loadCachedReceiveRecordings, loadCachedRevisitDays, loadCachedTeacherCity, loadOwnStorefront, loadStorefrontDraft, makeStorefrontEvent, normalizeStorefront, publishStorefront,
   restoreStorefront, sameStorefront, saveReceivedStorefront, saveStorefrontDraft,
   sendStorefrontTo, storefrontEnvelope, themeOf, verifyStorefrontEvent,
   type Storefront,
@@ -17,6 +17,7 @@ import {
 import { readStorefrontLink, storefrontInviteLink } from './invite'
 import { booksForTeacher, loadTeacherVenue, pickActiveTeacher, saveActiveTeacher, teacherCall, venueHeading } from './active'
 import { parseStorefrontInstruction, reviseStorefront } from './instruction'
+import { emptyProfile, saveProfile } from '../intake/session'
 
 // 只用合成身份、合成馆名，不连真实中继、不调用真实模型。
 const aci = createIdentity()
@@ -94,6 +95,17 @@ describe('V2-09 门面配置与签名', () => {
     expect(() => makeStorefrontEvent(aci, ACI, 9000, true, 0)).toThrow('复诊间隔')
     const legacy = makeStorefrontEvent(aci, ACI, 9001)
     expect(verifyStorefrontEvent(legacy, aci.publicKey)?.revisitDays).toBeNull()
+    teacher.close(); cache.close()
+  })
+
+  it('学生端只从老师本人签名门面读取城市', async () => {
+    const teacher = await storeOf(aci), cache = await storeOf(student)
+    const profile = emptyProfile(); profile.city = { value: '广州市', source: 'teacher' }
+    await saveProfile(teacher, profile)
+    const published = await publishStorefront({ store: teacher, identity: aci, storefront: ACI, now: now() })
+    expect(verifyStorefrontEvent(published.event, aci.publicKey)?.city).toBe('广州市')
+    expect(await saveReceivedStorefront(cache, published.event, aci.publicKey)).toBe(true)
+    expect(await loadCachedTeacherCity(cache, aci.publicKey)).toBe('广州市')
     teacher.close(); cache.close()
   })
 
