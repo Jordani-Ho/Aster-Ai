@@ -41,6 +41,8 @@ export interface Encounter {
     attachments: AttachmentRef[]
     tongues?: TongueAbstract[]
   }
+  /** V2-26：老师智能体按本馆模板整理原话的草稿，经老师本人核对后随签字病历交还。 */
+  teacherOrganized?: OrganizedIntake
   fourExams: { look: Field<string>; listenSmell: Field<string>; ask: Field<string>; pulse: Field<string> }
   judgment: {
     symptomSummary: Field<string>  // 症状的抽象描述，不含原话；签字后老师端保留的就是这一项
@@ -83,12 +85,32 @@ export interface Homework {
   note?: string                    // 老师接受 AI 草稿时写 'ai_accepted'；按老师意见改稿写 'teacher_directed'
 }
 
-export interface AttachmentRef { id: string; type: 'photo' | 'audio'; sha256: string; bytes: number }
+export interface AttachmentRef {
+  id: string
+  type: 'photo' | 'audio'
+  sha256: string
+  bytes: number
+  /** V2-26：新录音的白名单 MIME 类型和录制时长；旧附件引用可没有。 */
+  mimeType?: 'audio/mp4' | 'audio/webm' | 'audio/ogg'
+  durationMs?: number
+}
+
+/** 问诊包里的逐句原话索引。序号从 1 开始，组织结果只引用序号，不复制来源文本。 */
+export interface IntakeOriginal { id: number; text: string; source: 'spoken' | 'followup' }
+export type OrganizedIntakeKey = 'chiefComplaint' | 'presentIllness' | 'history' | 'medsAllergies'
+export interface OrganizedIntakeField { text: string | null; citations: number[] }
+export type OrganizedIntake = Record<OrganizedIntakeKey, OrganizedIntakeField>
+export interface IntakeQuestionAnswer { focus: string; question: string; answer: string; originalId: number }
+export interface OrganizationPair { student: OrganizedIntake; teacher: OrganizedIntake }
 
 export interface ConsultPackage {
   encounter: Encounter          // 只填了 profile 和 intake，来源都是 'student'
   history: string[]             // 学生授权附带的历史病历（签名事件 JSON 字符串），默认同一位老师的近 3 次
   attachments: { ref: AttachmentRef; data: Uint8Array }[]
+  /** V2-26：学生逐句原话、整理及问答；旧问诊包没有这些字段时照常收。 */
+  originals?: IntakeOriginal[]
+  organized?: OrganizedIntake
+  qa?: IntakeQuestionAnswer[]
   /** V2-06：发送那一刻学生那边的天地人（时辰、节气、城市）；签字病历原样沿用，不重新取。 */
   heaven?: HeavenStamp
   /** 最近 14 天状态与压力走势（M1-19）：只随传输信封给老师端看，不进 Encounter schema。 */

@@ -1,3 +1,6 @@
 export * from './followup'
 export * from './photo'
+export * from './audio'
+export * from './organization'
+export * from './teacher-organization'
 export * from './session'

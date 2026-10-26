@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { finalizeEvent } from 'nostr-tools/pure'
 import { IDBFactory } from 'fake-indexeddb'
 import { createIdentity } from '../identity'
 import { openStore, type LocalStore } from '../store'
@@ -8,7 +9,7 @@ import { addTeacher, createInbox } from '../inbox'
 import {
   ACTIVE_TEACHER_SETTING, DEFAULT_STOREFRONT, EMBLEMS, STOREFRONT_COLLECTION, STOREFRONT_KIND,
   THEMES, displayTeacherName, inviteTitle, inviteWelcome, loadCachedStorefront, loadCachedStorefronts,
-  loadOwnStorefront, loadStorefrontDraft, makeStorefrontEvent, normalizeStorefront, publishStorefront,
+  loadCachedReceiveRecordings, loadOwnStorefront, loadStorefrontDraft, makeStorefrontEvent, normalizeStorefront, publishStorefront,
   restoreStorefront, sameStorefront, saveReceivedStorefront, saveStorefrontDraft,
   sendStorefrontTo, storefrontEnvelope, themeOf, verifyStorefrontEvent,
   type Storefront,
@@ -59,6 +60,23 @@ describe('V2-09 门面配置与签名', () => {
     // 陌生身份签的“阿慈养生馆”同样不认
     const forged = makeStorefrontEvent(stranger, ACI, 1000)
     expect(verifyStorefrontEvent(forged, aci.publicKey)).toBeNull()
+  })
+
+  it('老师关闭接收录音的偏好随签名门面传递；旧门面默认开启', async () => {
+    const cache = await storeOf()
+    const disabled = makeStorefrontEvent(aci, ACI, 3000, false)
+    expect(verifyStorefrontEvent(disabled, aci.publicKey)?.receiveRecordings).toBe(false)
+    expect(await saveReceivedStorefront(cache, disabled, aci.publicKey)).toBe(true)
+    expect(await loadCachedReceiveRecordings(cache, aci.publicKey)).toBe(false)
+
+    const legacySigned = finalizeEvent({
+      kind: STOREFRONT_KIND, created_at: 4001, tags: [],
+      content: JSON.stringify({ type: 'aster.storefront', version: 1, storefront: ACI }),
+    }, aci.privateKey)
+    expect(verifyStorefrontEvent(legacySigned, aci.publicKey)?.receiveRecordings).toBe(true)
+    expect(await saveReceivedStorefront(cache, legacySigned, aci.publicKey)).toBe(true)
+    expect(await loadCachedReceiveRecordings(cache, aci.publicKey)).toBe(true)
+    cache.close()
   })
 
   it('配置只有六项、限长；介绍写什么都进不了状态类字段', () => {

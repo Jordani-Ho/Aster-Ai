@@ -240,7 +240,11 @@ try {
     await expect(page.getByText(FIRST_AID, { exact: true })).toBeVisible()
     for (const label of ['主诉', '现病史', '既往史', '在用药']) await expect(page.locator('.cf-field dt').filter({ hasText: label })).toBeVisible()
     await expect(page.locator('.cf-field').filter({ hasText: '主诉' })).toContainText('最近睡不好')
-    await expect(page.locator('.cf-field').filter({ hasText: '现病史' })).toContainText('白天也没精神')
+    // V2-26：追问的回答单独成对，不混进现病史；在“本次原话与问答”里能看到。
+    await expect(page.locator('.cf-field').filter({ hasText: '现病史' })).not.toContainText('白天也没精神')
+    const originals = page.getByRole('group', { name: '本次原话和追问回答' })
+    await originals.locator('summary').click()
+    await expect(originals).toContainText('白天也没精神')
     await expect(page.getByRole('region', { name: '这次的舌象' })).toBeVisible()
     await layout(page)
     await shot(page, 'phone-student-consult-card')

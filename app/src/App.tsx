@@ -18,7 +18,7 @@ import { sendDailyStats } from './core/dashboard/stats'
 
 import type { Identity } from './core/identity'
 import { bootstrapIdentity, readInviteLink, acceptInvite, gatewayBase, INVITE_ERROR, validateInvite } from './core/onboarding'
-import { loadTeachers } from './core/inbox'
+import { loadTeachers, type SendEnvelope } from './core/inbox'
 import { readReidentifyLink } from './core/reidentify'
 import { StudentReidentifyRequestPage, TeacherReidentifyPrompt } from './ReidentifyPages'
 import { inviteWelcome, loadCachedStorefront, saveReceivedStorefront, type Storefront } from './core/storefront'
@@ -346,7 +346,7 @@ export function App() {
     return <main style={{ fontFamily: 'system-ui', padding: 16, maxWidth: 480, margin: '0 auto' }}><h1>知衡</h1><p>正在准备…</p></main>
   }
   if (role === 'teacher' && store && identity && hallOpened === false) {
-    return <OpeningGuide identity={identity} store={store} gateway={gateway} modelGateway={modelGateway} modelConfig={modelConfig} onModelSaved={saveOwnModel} onDone={() => setHallOpened(true)} />
+    return <OpeningGuide identity={identity} store={store} gateway={gateway} send={stack?.send as SendEnvelope | undefined} modelGateway={modelGateway} modelConfig={modelConfig} onModelSaved={saveOwnModel} onDone={() => setHallOpened(true)} />
   }
   if(identity&&role&&store&&!modelConfig&&!communityConfig){
     if(modelConfig===undefined||communityConfig===undefined)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1><p>正在读取接入设置…</p></main>

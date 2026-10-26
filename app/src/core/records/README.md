@@ -17,7 +17,7 @@
 - 随调养方案发给学生：`retention.setting` 信封，载荷 `{ teacher, days, updatedAt }`；学生端按老师公钥存在 `teacher-retention`。学生可能有多位老师，取最短的期限（最保守）。
 - `runRetention(store, role, { now, days })`：时间可注入，不依赖真实时钟。
   - 老师端：删超过期限的 `teacher-records`、`consult-package`、`in-person-draft`，再删不再被这些记录引用的 `attachments`（V2-08 起包括病历里引用的舌头裁剪图）。V2-33 的 `teacher-herb-snapshots` 在同一病历既无保留中的签名记录、也无保留中的问诊包后清除；快照只按关联病历 id 留存，不写进签名记录。
-  - 学生端：删超过期限的 `self-ratings`、`self-stress`、`tongue-records`、`tongue-crops`（V2-08 镜子只留最新裁剪图，按保留期限删）、`checkins`、`intake-sent`、`intake-draft`、不再被引用的 `intake-attachments`（含问诊舌象裁剪图），以及收到的签名病历 `student-records` 与随它的面诊照片索引/字节（`record-photo-index`/`record-photos`）。
+  - 学生端：删超过期限的 `self-ratings`、`self-stress`、`tongue-records`、`tongue-crops`（V2-08 镜子只留最新裁剪图，按保留期限删）、`checkins`、`intake-sent`、`intake-draft`、不再被引用的 `intake-attachments`（含问诊舌象裁剪图），以及收到的签名病历 `student-records` 与随它的面诊照片索引/字节（`record-photo-index`/`record-photos`）。V2-26 学生收到签字病历后会立即删除本次 `intake-sent` 临时问诊包，只留下最近五对整理参照；未签字的问诊仍按保留期限清理。
 - `runRetentionOnce`：打开应用时每天只跑一次（`settings/last-retention-day` 去重），不做后台任务。
 - 长期保留的沉淀：`care-plans`（最新一版）、`homework`（作业规则）、`teacher-fingerprint`（改稿习惯摘要）、`kangbi-observations`（康币观察记录，只有计数与评分、没有内容，是将来给康币定值的依据）与 `kangbi-events`，都登记在 `LONG_TERM_COLLECTIONS`，不在删除范围。
 - 钱账与康币账的长期数据一律不碰：保留期只清医案、问诊包、照片与本机记录类集合。

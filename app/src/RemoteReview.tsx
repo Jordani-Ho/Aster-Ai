@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { Identity } from './core/identity'
 import type { LocalStore } from './core/store'
 import type { LlmClient } from './core/llm'
-import type { Encounter, Prescription } from './core/record/types'
+import type { Encounter, OrganizedIntake, OrganizedIntakeKey, Prescription } from './core/record/types'
 import {
   assertConsultReady, completeConsultSigning, consultChargeBook, consultReadiness, draftPackage, INBOX_COLLECTIONS,
-  listStudentAdherence, type ConsultReadiness, type LedgerRecorder, type SendEnvelope, type StoredConsult, type StudentAdherence,
+  listStudentAdherence, sha256Hex, type ConsultReadiness, type LedgerRecorder, type SendEnvelope, type StoredConsult, type StudentAdherence,
 } from './core/inbox'
 import { toMinor, moneyCurrencyFor } from './core/ledger/money'
 import { recordSignedObservation, type ObservationNote } from './core/kangbi'
@@ -26,6 +26,8 @@ import { managedLabel } from './core/family'
 import { weekStart } from './core/adherence'
 import { localDay } from './core/homework/schedule'
 import { uiError } from './core/onboarding/ui'
+import { emptyOrganizedIntake, ORGANIZED_KEYS } from './core/intake/organization'
+import { organizeForTeacher } from './core/intake/teacher-organization'
 import { SignReview } from './SignReview'
 import './newui.css'
 
@@ -54,6 +56,8 @@ function MiniTrend({ trend }: { trend: { days: string[]; scores: (number | null)
 export function RemoteReview({ identity, store, consult, llm, send, ledger, onExit }: RemoteReviewProps) {
   const startedAt = useRef(Date.now()), signedAt = useRef<number | null>(null), metricKey = useRef('')
   const [draft, setDraft] = useState<Encounter | null>(null)
+  const [teacherOrganized, setTeacherOrganized] = useState<OrganizedIntake | null>(null)
+  const [audioUrls, setAudioUrls] = useState<Record<string, string>>({})
   const [materialNote, setMaterialNote] = useState<string[]>([])
   const [previous, setPrevious] = useState<LoadedTeacherRecord | null>(null)
   const [tongues, setTongues] = useState<TongueAbstract[] | null>(null)
@@ -78,6 +82,19 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
     void loadPostureMetrics(store).then(metrics => { if (active) setPostureMetrics(metrics) }).catch(() => {})
     return () => { active = false }
   }, [store, consult.postures])
+
+  useEffect(() => {
+    let active = true
+    const urls: string[] = []
+    void Promise.all(consult.attachments.filter(ref => ref.type === 'audio').map(async ref => {
+      const data = await store.get(INBOX_COLLECTIONS.attachments, ref.id)
+      if (!(data instanceof Uint8Array) || data.length !== ref.bytes || await sha256Hex(data) !== ref.sha256 || !active) return null
+      const url = URL.createObjectURL(new Blob([data.slice().buffer as ArrayBuffer], { type: ref.mimeType }))
+      urls.push(url)
+      return [ref.id, url] as const
+    })).then(items => { if (active) setAudioUrls(Object.fromEntries(items.filter((item): item is readonly [string, string] => item !== null))) })
+    return () => { active = false; urls.forEach(url => URL.revokeObjectURL(url)) }
+  }, [store, consult.attachments])
 
   useEffect(() => {
     let active = true
@@ -106,13 +123,16 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
         setPrevious(rows.at(0) ?? null)
         setCurrency(currentCurrency ?? '')
         const pkg = draftPackage(ready, snapshot)
+        const teacherTemplate = await loadTeacherTemplate(store)
+        const organized = await organizeForTeacher(llm, ready.originals, teacherTemplate)
+        if (active) setTeacherOrganized(organized)
         let next: Encounter
         if (llm) {
           setStatus('正在整理草稿，老师看过整张卡片后签字发出。')
           let draftError = ''
           // V2-19：只带这位学生、这件事的材料；旧病历可减，模板与问诊包不可减。
           const result = await draftWithAgent(store, pkg, {
-            template: await loadTeacherTemplate(store),
+            template: teacherTemplate,
             prior: priorMaterials(rows),
             cases: await teacherCases(store, { forStudent: consult.encounter.student }),
           }, llm, { level: 'prescription', onError: text => { draftError = text } })
@@ -126,6 +146,7 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
           if (active) setMaterialNote([])
           next = structuredClone(ready.encounter)
         }
+        if (organized) next = { ...next, teacherOrganized: organized }
         const heaven = ready.heaven ?? ready.encounter.heaven
         if (heaven && !next.heaven) next = { ...next, heaven: { ...heaven } }
         if (!active) return
@@ -153,9 +174,10 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
       const withPostures: Encounter = consult.postures?.length
         ? { ...final, postures: consult.postures.map(record => applyPostureMetrics({ ...record, capturedBy: 'student' as const }, postureMetrics)) }
         : final
-      const signedFinal: Encounter = tongues && withPostures.intake.tongues
+      let signedFinal: Encounter = tongues && withPostures.intake.tongues
         ? { ...withPostures, intake: { ...withPostures.intake, tongues: tongues.map(record => parseTongueAbstract(record)) } }
         : withPostures
+      if (teacherOrganized) signedFinal = { ...signedFinal, teacherOrganized: structuredClone(teacherOrganized) }
       const amount = charge.trim() === '' ? undefined : toMinor(charge.trim(), currency)
       signedAt.current ??= Date.now()
       const metric = calculateMetric(draft, signedFinal, startedAt.current, signedAt.current, currentReport()?.weeklyRate ?? null)
@@ -165,7 +187,7 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
         charge: amount, currency, ...(chargeBook ? { chargeBook } : {}),
       })
       if (result.chargeError) setStatus('已签字交还；扣费没有记上：' + result.chargeError)
-      else setStatus('已签字交还。')
+      else setStatus('已签字交还。录音已从老师手机清除。')
       try { await saveMetric(store, metricKey.current, metric); setRatingKey(metricKey.current) }
       catch { setStatus(previousText => previousText + ' 试点指标未能保存，不影响已交还病历。') }
       try {
@@ -186,7 +208,7 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
     return <div className="nl-shell"><div className="nl-page nl-signed">
       <h1>已签字交还</h1>
       <p className="nl-quiet">学生已收到这份签名病历；作业会自动进入学生的“今日作业”。</p>
-      <p className="nl-quiet">问诊包与附件仍在本机；记录删除按老师设定的保留期限统一处理。</p>
+      <p className="nl-quiet">问诊包与照片仍按保留期限留在本机；录音签字后已清除。</p>
       {status && <p role="status" className="nl-quiet">{status}</p>}
       {error && <p role="alert" className="nl-danger-strong">{error}</p>}
       {ratingKey && <section role="dialog" aria-label="像不像我评分" className="nl-card">
@@ -219,9 +241,54 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
   const previousPrescription: Prescription | null = previous?.encounter.plan.prescription.value ?? null
   const homeHerbs = herbSnapshot ?? []
   const herbLabels = draft.plan.prescription.value ? assessPrescriptionStock(draft.plan.prescription.value.items, homeHerbs, herbUnits) : []
+  const organizedLabels: Record<OrganizedIntakeKey, string> = { chiefComplaint: '主诉', presentIllness: '现病史', history: '既往史', medsAllergies: '在用药与过敏' }
+  const updateTeacherField = (key: OrganizedIntakeKey, text: string) => setTeacherOrganized(current => {
+    const base = current ?? emptyOrganizedIntake()
+    return { ...base, [key]: { text: text.trim() === '' ? null : text, citations: text.trim() === '' ? [] : base[key].citations } }
+  })
+  const toggleTeacherCitation = (key: OrganizedIntakeKey, id: number, checked: boolean) => setTeacherOrganized(current => {
+    const base = current ?? emptyOrganizedIntake()
+    const citations = new Set(base[key].citations)
+    if (checked) citations.add(id); else citations.delete(id)
+    return { ...base, [key]: { ...base[key], citations: [...citations].sort((a, b) => a - b) } }
+  })
   const extras = <>
     {status && <p role="status" className="nl-quiet">{status}</p>}
     {error && <p role="alert" className="nl-danger-strong">{error}</p>}
+    {(consult.originals || consult.organized || consult.qa || consult.attachments.some(ref => ref.type === 'audio')) && <section className="nl-card" aria-label="问诊原话与两次整理">
+      <h3>问诊原话与两次整理</h3>
+      {consult.organized && <section aria-label="学生智能体整理">
+        <h4>学生智能体整理 · 学生已核对</h4>
+        {ORGANIZED_KEYS.map(key => {
+          const field = consult.organized![key]
+          return <p key={key}><strong>{organizedLabels[key]}：</strong>{field.text ?? '未提供'}{field.citations.length ? <small> · 依据原话 {field.citations.map(id => `#${id}`).join('、')}</small> : null}</p>
+        })}
+      </section>}
+      {consult.originals?.length ? <details><summary>逐句原话 · {consult.originals.length} 句</summary>
+        <ol>{consult.originals.map(line => <li key={line.id}><small>#{line.id}</small> {line.text}</li>)}</ol>
+      </details> : null}
+      {consult.qa?.length ? <section aria-label="问答对"><h4>追问问答</h4>{consult.qa.map((item, index) => <p key={`${item.originalId}-${index}`}><strong>{item.question}</strong><br />{item.answer} <small>· 原话 #{item.originalId}</small></p>)}</section> : null}
+      {consult.attachments.filter(ref => ref.type === 'audio').map((ref, index) => <section key={ref.id} aria-label={`录音第 ${index + 1} 段`}>
+        <h4>原话录音 · 第 {index + 1} 段</h4>
+        {audioUrls[ref.id] ? <audio controls preload="none" src={audioUrls[ref.id]}>浏览器不支持播放。</audio> : <p className="nl-quiet">录音还未到齐或无法读取。</p>}
+        <p className="nl-quiet">老师签字交还后，这段录音会从本机删除。</p>
+      </section>)}
+      {teacherOrganized && <section className="teacher-organized" aria-label="老师智能体整理草稿">
+        <h4>老师智能体整理 · 待老师核对</h4>
+        {ORGANIZED_KEYS.map(key => {
+          const field = teacherOrganized[key]
+          return <fieldset key={key}>
+            <legend>{organizedLabels[key]}</legend>
+            <textarea rows={2} value={field.text ?? ''} onChange={event => updateTeacherField(key, event.target.value)} />
+            <p className="nl-quiet">依据哪些原话</p>
+            {consult.originals?.map(line => <label key={line.id}>
+              <input type="checkbox" disabled={!field.text} checked={field.citations.includes(line.id)} onChange={event => toggleTeacherCitation(key, line.id, event.target.checked)} />
+              #{line.id} {line.text}
+            </label>)}
+          </fieldset>
+        })}
+      </section>}
+    </section>}
     {homeHerbs.length ? <section className="nl-card" aria-label="学生家里的药材">
       <h3>学生家里的药</h3>
       <ul>{homeHerbs.map(item => <li key={item.name}>{item.name} · {'quantity' in item ? `${item.quantity}${item.unit}` : item.status}</li>)}</ul>

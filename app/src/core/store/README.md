@@ -33,10 +33,11 @@ V2-24 新增：`herbs`（本机药材与整数最小单位库存）、`herb-ledg
 
 | 集合 | 用途与字段 | 备注 |
 | :-- | :-- | :-- |
-| `intake-draft` | 未发送的采集草稿（键为病历 id）；V2-32 起可含学生在家拍的体态骨架 `posture`（只有关键点，无图片字节） | 确认发送或替换后删除 |
-| `intake-sent` | 已发送问诊包的本机副本 `{encounter,history,attachments}` | 附件字节在 `intake-attachments` |
+| `intake-draft` | 未发送的采集草稿（键为病历 id）；V2-26 起含逐句原话、整理引用、问答与录音引用；V2-32 起可含学生在家拍的体态骨架 `posture`（只有关键点，无图片字节） | 确认发送或替换后删除 |
+| `intake-sent` | 等待老师签字回件时的问诊包本机副本 `{encounter,history,attachments,originals,organized,qa}` | 录音引用与字节不保留；签字回件后删掉整个临时包，整理对照另存最近五对；照片等其余附件字节在 `intake-attachments` |
 | `intake-outbox` | 中继未接通时暂存的问诊包 | `flushIntakeOutbox` 发送成功即删除 |
-| `intake-attachments` | 采集照片处理后的 JPEG 字节（长边 ≤1600、≤500 KB）与问诊舌象的舌头裁剪图（长边 ≤512，V2-08） | 键为附件 id |
+| `intake-attachments` | 采集照片处理后的 JPEG 字节（长边 ≤1600、≤500 KB）、问诊舌象裁剪图（长边 ≤512，V2-08）与暂存录音字节 | 录音只在送达前留存；确认送达即删；键为附件 id |
+| `student-organization-pairs` | 学生本机按老师公钥保存最近 5 对学生整理/老师签字整理 | 下次整理只作表达参照；不存往次原话 |
 | `profile` | 学生本机档案：称呼、性别、年龄、八字、城市（键 `self`） | 城市用于天气与真太阳时/时区 |
 | `basics` | V2-23 学生基础信息（键 `self`）：称呼、性别、出生日期、时辰、出生地、西医诊断、既往史、用药、过敏、作息；城市以 `profile.city` 为准 | 只留本机；老师端只经 `profile` 收到五项，西医诊断不进问诊包 |
 | `basics-history` | V2-23 出生日期/时辰的修改记录（何时、旧值→新值），键为随机 id | 只留本机 |
@@ -45,7 +46,7 @@ V2-24 新增：`herbs`（本机药材与整数最小单位库存）、`herb-ledg
 | `homework` | 作业 `{homework, startsOn}` | M1-13；保留期限不删作业规则 |
 | `checkins` | 打卡 `{homeworkId, at, note?, shichen?, jieqi?, city?}` | 当日 00:00–00:59 的打卡算前一天（M1-23a 子时归日）；后三项为 V2-02 天时 |
 | `consult-package` | 老师端收到的问诊包（临时资料） | 按老师设定的保留期限删除 |
-| `attachments` | 问诊包照片/语音字节、面诊照片、V2-08 问诊附的舌头裁剪图 | 同上；只留仍被记录引用的 |
+| `attachments` | 问诊包照片、签字前的问诊录音字节、面诊照片、V2-08 问诊附的舌头裁剪图 | 录音签字交还后立即删除；其余只留仍被记录引用的 |
 | `in-person-draft` | 老师端进行中的面诊草稿 | 同上 |
 | `teacher-records` | 老师端完整签名病历 `{eventId, encounterId, version, student, createdAt, eventJson}` | V2-05；不在则整块不存在，保留期限删除 |
 | `teacher-students` | 老师认得的学生的公钥名单 `{student}` | V2-05；换手机后逐个要回病历用，不含病历内容 |
