@@ -298,7 +298,7 @@ try {
     await expect(page.getByRole('heading', { name: '记录', exact: true })).toBeVisible()
     await expect(page.getByRole('region', { name: '我的病历' })).toContainText('全部 2 次')
     await expect(page.getByRole('region', { name: '舌象的变化' })).toBeVisible()
-    expect(await page.locator('.rc-tongue').count()).toBe(3)
+    await expect(page.locator('.rc-tongue')).toHaveCount(3)
     await expect(page.getByRole('region', { name: '坚持的趋势' })).toContainText('近四周')
     await expect(page.locator('.rc-trend svg')).toBeVisible()
     await layout(page)
