@@ -16,7 +16,8 @@ import { seasonalTexts } from '../../domain/tcm/seasonal'
 import { loadTeachers } from './core/inbox'
 import { listIdentityLinks, oldKeysFor } from './core/identity/links'
 import { MemberSwitcher } from './MemberSwitcher'
-import { listAppointments, replyToAppointment, requestAppointment, type Appointment } from './core/appointments'
+import { cancelOwnAppointment, listAppointments, replyToAppointment, requestAppointment, type Appointment } from './core/appointments'
+import { isSameCity } from './core/city'
 import type { SendEnvelope } from './core/inbox'
 import { formatAppointmentTime } from './core/schedule/appointments'
 import { TongueCapture } from './TongueCapture'
@@ -34,6 +35,7 @@ export interface StudentTodayProps {
   teacher: string | null
   teacherCall: string
   teacherName: string
+  teacherCity: string | null
   member?: Pick<FamilyMember, 'account' | 'alias'> | null
   family?: readonly Pick<FamilyMember, 'account' | 'alias'>[]
   active?: number
@@ -56,13 +58,14 @@ function greeting(now: Date): string {
 }
 
 export function StudentToday({
-  store, modelStore, settingsStore, identity, llm, teacher, teacherCall, teacherName,
+  store, modelStore, settingsStore, identity, llm, teacher, teacherCall, teacherName, teacherCity,
   member, family = [], active = 0, onSwitch, onConsult, onHomework, onCheckedIn, sendEnvelope,
 }: StudentTodayProps) {
   const [now, setNow] = useState(() => new Date())
   const [heaven, setHeaven] = useState<HeavenTime | null>(null)
   const [plan, setPlan] = useState<CarePlan | null>(null)
   const [alias, setAlias] = useState('')
+  const [studentCity, setStudentCity] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [checkins, setCheckins] = useState<Checkin[]>([])
   const [record, setRecord] = useState<TongueAbstract | null>(null)
@@ -77,6 +80,8 @@ export function StudentToday({
   const [appointmentBusy, setAppointmentBusy] = useState(false)
   const [requestOpen, setRequestOpen] = useState(false)
   const [requestSlots, setRequestSlots] = useState([''])
+  const [cityPromptDismissed, setCityPromptDismissed] = useState('')
+  const [cityPromptBusy, setCityPromptBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   // 刚拍完的舌象不能被“读本机旧记录”的异步结果覆盖（CI 上两者会抢）。
   const captured = useRef(false)
@@ -150,6 +155,14 @@ export function StudentToday({
     return () => { cancelled = true }
   }, [store, member])
 
+  useEffect(() => {
+    let cancelled = false
+    const refreshCity = () => { void loadProfile(store).then(profile => { if (!cancelled) setStudentCity(profile.city.value ?? null) }).catch(() => {}) }
+    refreshCity()
+    window.addEventListener('focus', refreshCity); window.addEventListener('aster:data-changed', refreshCity)
+    return () => { cancelled = true; window.removeEventListener('focus', refreshCity); window.removeEventListener('aster:data-changed', refreshCity) }
+  }, [store, member])
+
   useEffect(() => () => { if (cropUrl) URL.revokeObjectURL(cropUrl) }, [cropUrl])
 
   useEffect(() => {
@@ -185,6 +198,10 @@ export function StudentToday({
       ? (row.status === 'offered' ? row.expiresAt > +now : Date.parse(row.slotStart) > +now)
       : row.status === 'cancelled' && +now - Date.parse(row.createdAt) < 14 * 86_400_000))
   const hasFutureAppointment = ownAppointments.some(row => ['offered', 'requested', 'accepted', 'confirmed'].includes(row.status) && Date.parse(row.slotStart) > +now)
+  const sameCity = isSameCity(studentCity, teacherCity)
+  const cityChangedBooking = ownAppointments.find(row => row.status === 'confirmed' && Date.parse(row.slotStart) > +now
+    && !isSameCity(studentCity, teacherCity ?? row.teacherCity))
+  const cityPromptKey = cityChangedBooking ? `${cityChangedBooking.offerId}:${studentCity ?? ''}` : ''
 
   const submitAppointmentRequest = async () => {
     if (!teacher || !sendEnvelope || appointmentBusy) return
@@ -192,7 +209,7 @@ export function StudentToday({
     setAppointmentBusy(true); setError('')
     try {
       await requestAppointment({ store, identity, teacher, startsAt: selected,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', send: sendEnvelope })
+        settingsStore, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', send: sendEnvelope })
       setAppointments(await listAppointments(store))
       setRequestOpen(false); setRequestSlots([''])
       setAppointmentNote('预约请求已发给老师，确认后会在这里显示。')
@@ -233,7 +250,7 @@ export function StudentToday({
         <strong>{item.status === 'confirmed' ? '已确认面诊' : item.status === 'accepted' ? '已回复，等老师确认' : item.status === 'requested' ? '预约请求已发出' : item.status === 'cancelled' ? '预约有变动' : '老师请您来面诊'}</strong>
         <p>{item.status === 'requested' || (item.status === 'cancelled' && ['slot_full', 'unavailable'].includes(item.reason ?? '')) ? '您选的时间：' + formatAppointmentTime(item.slotStart, item.timezone) : formatAppointmentTime(item.slotStart, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', item.teacherCity, item.timezone)} · {item.minutes} 分钟</p>
         {item.status === 'requested' && <p className="nl-quiet">等老师按排班确认一个时间。</p>}
-        {item.status === 'cancelled' && <p className="nl-quiet">{item.reason === 'slot_full' ? '老师选的时段约满了，请换几个时间再试。' : item.reason === 'schedule_changed' ? '老师调整了排班，这次预约已取消。' : item.reason === 'already_booked' ? '您已有待回复邀约、预约请求或未来预约。' : '老师暂时无法确认这些时间，可以重新预约。'}</p>}
+        {item.status === 'cancelled' && <p className="nl-quiet">{item.reason === 'slot_full' ? '老师选的时段约满了，请换几个时间再试。' : item.reason === 'schedule_changed' ? '老师调整了排班，这次预约已取消。' : item.reason === 'already_booked' ? '您已有待回复邀约、预约请求或未来预约。' : item.reason === 'different_city' ? '你现在不在老师所在城市，请从远程问诊联系老师。' : '老师暂时无法确认这些时间，可以重新预约。'}</p>}
         {item.status === 'offered' && <>
           <p className="nl-quiet">还剩 {Math.max(0, Math.ceil((item.expiresAt - +now) / 60_000))} 分钟回复</p>
           <div className="nl-actions">
@@ -251,7 +268,22 @@ export function StudentToday({
         </>}
         {item.status === 'accepted' && <p className="nl-quiet">老师正在确认时段容量。</p>}
       </div>)}
-      {teacher && <>
+      {cityChangedBooking && cityPromptDismissed !== cityPromptKey && <div className="nl-card" role="alertdialog" aria-label="确认是否保留面诊">
+        <p>你现在不在老师所在城市，这次面诊要保留吗？</p>
+        <div className="nl-actions">
+          <button type="button" className="nl-primary" disabled={cityPromptBusy} onClick={() => {
+            if (!sendEnvelope) return
+            setCityPromptBusy(true)
+            void cancelOwnAppointment(store, identity, cityChangedBooking.offerId, new Date(), sendEnvelope)
+              .then(() => listAppointments(store).then(setAppointments))
+              .then(() => { setCityPromptDismissed(cityPromptKey); setAppointmentNote('已取消面诊，并通知老师。'); window.dispatchEvent(new Event('aster:data-changed')) })
+              .catch(cause => setError(cause instanceof Error ? cause.message : '取消没有发出，请重试。'))
+              .finally(() => setCityPromptBusy(false))
+          }}>取消并通知老师</button>
+          <button type="button" className="nl-link-button" disabled={cityPromptBusy} onClick={() => setCityPromptDismissed(cityPromptKey)}>保留</button>
+        </div>
+      </div>}
+      {teacher && sameCity && <>
         {!requestOpen && <button type="button" className="nl-link-button" disabled={!sendEnvelope || hasFutureAppointment} onClick={() => setRequestOpen(true)}>{hasFutureAppointment ? '已有待回复邀约、预约请求或未来预约' : '想预约？选几个方便的时间'}</button>}
         {requestOpen && <div className="nl-request-slots">
           <p className="nl-quiet">最多选三个时间，老师会按排班自动确认其中一个。请选择两小时后、60 天内的整分时间。</p>
@@ -266,6 +298,7 @@ export function StudentToday({
             <button type="button" className="nl-link-button" disabled={appointmentBusy} onClick={() => { setRequestOpen(false); setRequestSlots(['']) }}>先不约</button></div>
         </div>}
       </>}
+      {teacher && !sameCity && <button type="button" className="nl-link-button" onClick={onConsult}>远程问诊</button>}
       {appointmentNote && <p role="status" className="nl-quiet">{appointmentNote}</p>}
       {error && <p role="alert" className="nl-danger-strong">{error}</p>}
     </section>

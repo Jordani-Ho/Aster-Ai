@@ -10,6 +10,7 @@
 - `reidentify.request` / `reidentify.confirm` / `reidentify.reject`（V2-07 换手机认回）→ 见 `core/reidentify/README.md`：请求只进老师端待确认区；确认只写“旧公钥 → 新公钥”关系，不改其它；拒绝只发作废通知、不发记录。
 - `ledger.*` → `createLedgerSync().receive`；不认识的类型丢弃。
 - `appointment.*` → V2-25 的 `createAppointmentInbox()`：端到端加密传递邀约/回复/确认，按 offerId 幂等写入双方本机。
+- `student.city` / `teacher.city`（V2-34）→ 只接受已有师生关系发送的单城市字段，按消息时间拒收过期更新；学生现居城市写在老师端学生名单，老师城市只在学生本机缓存。
 
 ## 我的老师白名单
 

@@ -12,7 +12,7 @@ import { confirmDailyAppointmentInvitations, planAppointmentInvitations, process
 const now = new Date('2026-10-25T12:00:00Z')
 function materials(patch: Partial<InviteMaterials> = {}): InviteMaterials {
   const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'
-  return { now: now.toISOString(), timezone: 'Asia/Shanghai', city: '上海', afterDays: 14, schedule, visits: [], appointments: [], ...patch }
+  return { now: now.toISOString(), timezone: 'Asia/Shanghai', city: '上海市', afterDays: 14, schedule, visits: [], appointments: [], ...patch }
 }
 
 async function addSignedVisit(store: Awaited<ReturnType<typeof openStore>>, teacher: ReturnType<typeof createIdentity>, student: string, at: Date, alias: string) {
@@ -41,6 +41,16 @@ describe('老师智能体预约邀约', () => {
       { student: exact, alias: '小青', lastVisit: '2026-10-11T12:00:00Z' },
     ])
     expect(result.slot?.timezone).toBe('Asia/Shanghai')
+  })
+
+  it('自动邀约候选只包含同城学生；城市缺失按同城处理', () => {
+    const local = 'a'.repeat(64), remote = 'b'.repeat(64), unknown = 'c'.repeat(64)
+    const result = planAppointmentInvitations(materials({ visits: [
+      { student: local, alias: '同城学生', at: '2026-09-01T12:00:00Z', city: '上海市' },
+      { student: remote, alias: '异地学生', at: '2026-09-01T12:00:00Z', city: '旧金山' },
+      { student: unknown, alias: '未填城市', at: '2026-09-01T12:00:00Z', city: null },
+    ] }))
+    expect(result.candidates.map(row => row.student)).toEqual([local, unknown])
   })
 
   it('中继未连接时仍能在复核模式准备本地草稿', async () => {

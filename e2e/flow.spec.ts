@@ -325,6 +325,64 @@ test('V2-25b 学生主动预约经真实中继确认，排班取消后收到通�
   await expect.poll(async () => (await stored(teacher, 'appointments')).find((row: any) => row.key === requestId)?.value.status, { timeout: 30000 }).toBe('cancelled')
 })
 
+test('V2-34 学生改城市经真实中继同步，异地入口切为同城预约', async ({ people }) => {
+  test.setTimeout(120000)
+  const teacher = people.teacher.page, student = people.student.page
+  await role(teacher, '老师'); await role(student, '学生')
+  await Promise.all([
+    teacher.evaluate(async studentKey => {
+      const storePath = '/src/core/store/index.ts', profilePath = '/src/core/intake/session.ts'
+      const { resumeStore } = await import(storePath)
+      const { saveProfile, loadProfile } = await import(profilePath)
+      const session = await resumeStore()
+      try {
+        await session.store.put('teacher-students', studentKey, { student: studentKey })
+        const profile = await loadProfile(session.store)
+        profile.city = { value: '广州市', source: 'teacher' }
+        await saveProfile(session.store, profile)
+      } finally { session.store.close(); session.identity.privateKey.fill(0) }
+    }, actors.student.pubkey),
+    student.evaluate(async () => {
+      const storePath = '/src/core/store/index.ts', profilePath = '/src/core/intake/session.ts'
+      const { resumeStore } = await import(storePath)
+      const { saveProfile, loadProfile } = await import(profilePath)
+      const session = await resumeStore()
+      try {
+        const profile = await loadProfile(session.store)
+        profile.city = { value: '旧金山', source: 'student' }
+        await saveProfile(session.store, profile)
+      } finally { session.store.close(); session.identity.privateKey.fill(0) }
+    }),
+  ])
+  await student.reload(); await role(student, '学生')
+  await teacher.evaluate(async ({ studentKey, relayUrl }) => {
+    const storePath = '/src/core/store/index.ts', transportPath = '/src/core/transport/index.ts'
+    const { resumeStore } = await import(storePath)
+    const { createTransport } = await import(transportPath)
+    const session = await resumeStore()
+    let readyResolve!: () => void, readyReject!: (reason: Error) => void
+    const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject })
+    const timeout = setTimeout(() => readyReject(new Error('teacher city relay did not connect')), 20000)
+    const transport = createTransport({ privateKey: session.identity.privateKey, relays: [relayUrl], onMessage: () => {},
+      onStatus: (status: string) => { if (status === 'ready') readyResolve(); if (status === 'rejected') readyReject(new Error('teacher city relay rejected')) } })
+    transport.start()
+    try {
+      await ready; clearTimeout(timeout)
+      await transport.send(studentKey, { type: 'teacher.city', version: 1, payload: { city: '广州市' } })
+    } finally { clearTimeout(timeout); transport.close(); session.store.close(); session.identity.privateKey.fill(0) }
+  }, { studentKey: actors.student.pubkey, relayUrl: runtime.relayUrl })
+  await expect(student.getByRole('button', { name: '远程问诊', exact: true })).toBeVisible({ timeout: 30000 })
+  await studentTab(student, '我')
+  await student.locator('.me-setting-row').click()
+  await student.getByLabel('居住城市').selectOption('广州市')
+  await expect.poll(async () => (await stored(student, 'profile')).find((row: any) => row.key === 'self')?.value.city?.value, { timeout: 10000 }).toBe('广州市')
+  // 改完城市回到“今天”，老师邀约那一栏才在页面上。
+  await studentTab(student, '今天')
+  await expect(student.locator('[aria-label="老师邀约"]').getByRole('button', { name: /想预约/ })).toBeVisible({ timeout: 30000 })
+  await expect(student.getByRole('button', { name: '远程问诊', exact: true })).toHaveCount(0)
+  await expect.poll(async () => (await stored(teacher, 'teacher-students')).find((row: any) => row.key === actors.student.pubkey)?.value.city, { timeout: 30000 }).toBe('广州市')
+})
+
 test('V2-27 本机真实作业到点后显示督促，打卡后记录已行动且老师端没有督促日志', async ({ people }) => {
   const student = people.student.page, teacher = people.teacher.page
   await role(student, '学生')

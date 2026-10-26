@@ -71,7 +71,7 @@ export function StudentMe({ store, identity, family, onSwitch, venue, ledger, st
   if (view === 'settings') return <SubPage title="设置" onBack={close}>
     <details className="nl-section" open><summary>模型、我的时间、通知</summary>
       {modelSettings}
-      <TimeSettings store={store} />
+      <TimeSettings store={store} identity={identity} sendEnvelope={sendEnvelope} />
       <PushSettings identity={identity} />
     </details>
     <SelfCheck store={store} identity={identity} teacher={venue.active} />

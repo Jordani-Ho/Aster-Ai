@@ -128,12 +128,12 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   useEffect(() => { if (stackStatus === 'ready') reportAdherence() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pagesStore, stackStatus, active, venue.active])
 
   if (mustFill) {
-    return <StudentBasicsPage key={'join-' + active} store={pagesStore} title={activeMember ? `${activeMember.alias}的基础信息` : '进馆：先填基础信息'}
+    return <StudentBasicsPage key={'join-' + active} store={pagesStore} identity={pagesIdentity} settingsStore={store} sendEnvelope={sendEnvelope ?? stack?.send} title={activeMember ? `${activeMember.alias}的基础信息` : '进馆：先填基础信息'}
       note="老师邀请您进馆。这是一件健康工具，请认真填好下面的基础信息，填完就能开始用了。"
       onSaved={missing => { setBasicsMissing(missing); if (missing.length === 0) setMustFill(false) }} />
   }
   if (sub === 'basics') {
-    return <StudentBasicsPage key={active} store={pagesStore} title={activeMember ? `${activeMember.alias}的基础信息` : '基础信息'} note={basicsNote}
+    return <StudentBasicsPage key={active} store={pagesStore} identity={pagesIdentity} settingsStore={store} sendEnvelope={sendEnvelope ?? stack?.send} title={activeMember ? `${activeMember.alias}的基础信息` : '基础信息'} note={basicsNote}
       onBack={() => { setBasicsNote(''); setSub(null) }}
       onSaved={missing => { setBasicsMissing(missing); if (missing.length === 0 && basicsNote) { setBasicsNote(''); setSub('consult') } }} />
   }
@@ -169,6 +169,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
     {tab === 'today' && <StudentToday
       store={pagesStore} modelStore={store} settingsStore={store} identity={pagesIdentity} llm={llm}
       teacher={venue.active} teacherCall={venue.call} teacherName={venue.name}
+      teacherCity={venue.active ? venue.cities[venue.active] ?? null : null}
       member={activeMember} family={family} active={active} onSwitch={onSwitch}
       onConsult={openConsult} onHomework={() => setSub('homework')} onCheckedIn={reportAdherence} sendEnvelope={sendEnvelope ?? stack?.send} />}
     {tab === 'records' && <StudentRecordsHome store={pagesStore} identity={pagesIdentity} onOpenAllRecords={() => setSub('records')} />}

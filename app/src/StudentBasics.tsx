@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { LocalStore } from './core/store'
+import type { Identity } from './core/identity'
+import type { SendEnvelope } from './core/inbox'
+import { notifyTeachersOfCityChange } from './core/city'
 import { cities } from '../../domain/tcm/bazi'
 import {
   BirthChangeNeedsConfirm, REQUIRED_LABELS, SHICHEN_NAMES, loadBasics, missingLabels, saveBasics,
@@ -9,13 +12,16 @@ import './newui.css'
 
 // V2-23 进馆基础信息：必填四项（称呼、性别、出生日期、居住城市）填完才能第一次问诊；
 // 其余可以写“无”或以后补。资料只留在本机；老师端只收到称呼、性别、年龄、八字、城市。
-export function StudentBasicsPage({ store, title = '基础信息', note, onBack, onSaved }: {
+export function StudentBasicsPage({ store, title = '基础信息', note, onBack, onSaved, identity, settingsStore, sendEnvelope }: {
   store: LocalStore
   title?: string
   note?: string
   /** 不给就没有返回键（进馆时必须先填好）。 */
   onBack?: () => void
   onSaved?: (missing: string[]) => void
+  identity?: Identity
+  settingsStore?: LocalStore
+  sendEnvelope?: SendEnvelope
 }) {
   const [loaded, setLoaded] = useState(false)
   const [alias, setAlias] = useState('')
@@ -60,6 +66,7 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
     if (busy) return
     setBusy(true); setError(''); setStatus('')
     try {
+      const previousCity = (await loadBasics(store)).city ?? null
       const result = await saveBasics(store, {
         alias, gender: gender === '' ? undefined : gender, birthDate: birthDate === '' ? undefined : birthDate,
         birthShichen: shichen === '' ? undefined : shichen === 'unknown' ? null : shichen, birthPlace: birthPlace || null, city: city || undefined,
@@ -68,6 +75,16 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
       setConfirmBirth(false)
       fill(result.basics); setMissing(result.missing)
       setStatus(result.missing.length === 0 ? '已保存。' : `已保存。还差：${result.missing.join('、')}`)
+      const nextCity = result.basics.city ?? null
+      if (identity && settingsStore && previousCity !== nextCity) {
+        try {
+          if (!sendEnvelope) throw new Error('offline')
+          const teachers = await settingsStore.get('settings', 'teachers')
+          await notifyTeachersOfCityChange({ identity: identity.publicKey, previous: previousCity, city: nextCity,
+            teachers: Array.isArray(teachers) ? teachers.filter((item): item is string => typeof item === 'string') : [], send: sendEnvelope })
+        } catch { setStatus('已保存。城市更新暂时没发给老师，连接中继后请再改一次城市。') }
+      }
+      if (previousCity !== nextCity) window.dispatchEvent(new Event('aster:data-changed'))
       onSaved?.(result.missing)
     } catch (cause) {
       if (cause instanceof BirthChangeNeedsConfirm) setConfirmBirth(true)

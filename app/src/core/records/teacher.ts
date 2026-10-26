@@ -33,6 +33,7 @@ export interface RecordReader {
 /** 精简写入接口：面诊测试用内存 store 也能落医案。 */
 export interface RecordWriter {
   put(collection: string, key: string, value: unknown): Promise<void>
+  get?(collection: string, key: string): Promise<unknown>
 }
 
 export interface RecordStoreLike extends RecordReader, RecordWriter {
@@ -98,9 +99,23 @@ export async function saveTeacherRecord(store: RecordReader & RecordWriter & Pic
 }
 
 /** 老师认得的学生的名单（只存公钥，不含病历）；收到问诊或签字医案时自动登记。 */
-export async function rememberTeacherStudent(store: RecordWriter, student: string): Promise<void> {
+export async function rememberTeacherStudent(store: RecordWriter, student: string, city?: string | null, cityUpdatedAt?: number): Promise<void> {
   if (typeof student !== 'string' || !HEX64.test(student)) return
-  await store.put(TEACHER_STUDENTS, student, { student })
+  const prior = await store.get?.(TEACHER_STUDENTS, student)
+  const base = object(prior) ? prior : {}
+  await store.put(TEACHER_STUDENTS, student, {
+    ...base, student,
+    ...(city !== undefined ? { city, ...(cityUpdatedAt === undefined ? {} : { cityUpdatedAt }) } : {}),
+  })
+}
+
+export async function rememberTeacherStudentCity(store: RecordStoreLike, student: string, city: string | null, at: number): Promise<boolean> {
+  if (!HEX64.test(student) || (city !== null && typeof city !== 'string') || !Number.isSafeInteger(at) || at <= 0) return false
+  const value = await store.get(TEACHER_STUDENTS, student)
+  if (!object(value) || value.student !== student) return false
+  if (typeof value.cityUpdatedAt === 'number' && value.cityUpdatedAt >= at) return false
+  await store.put(TEACHER_STUDENTS, student, { ...value, city, cityUpdatedAt: at })
+  return true
 }
 
 export interface LoadedTeacherRecord extends TeacherRecord {

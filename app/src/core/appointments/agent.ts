@@ -6,12 +6,14 @@ import { listTeacherRecords } from '../records/teacher'
 import { loadGroundwork } from '../hall/groundwork'
 import { heavenNow } from '../heaven'
 import { appointmentSlots } from '../schedule/appointments'
+import { isSameCity } from '../city'
+import { TEACHER_STUDENTS } from '../records/teacher'
 import { APPOINTMENTS, listAppointments, notifyAppointmentExpired, sendAppointmentOffer, type Appointment, type SendAppointmentEnvelope } from './index'
 
 const CAMPAIGNS = 'appointment-campaigns'
 const DAY = 86_400_000
 
-interface Visit { student: string; at: string; alias: string }
+interface Visit { student: string; at: string; alias: string; city?: string | null }
 export interface InviteMaterials {
   now: string
   timezone: string
@@ -36,21 +38,28 @@ function localDate(at: Date, timezone: string): string {
 }
 
 async function gather(store: LocalStore, now: Date): Promise<InviteMaterials> {
-  const [groundwork, records, appointments, heaven] = await Promise.all([
-    loadGroundwork(store), listTeacherRecords(store), listAppointments(store), heavenNow(store, now),
+  const [groundwork, records, appointments, heaven, roster] = await Promise.all([
+    loadGroundwork(store), listTeacherRecords(store), listAppointments(store), heavenNow(store, now), store.list(TEACHER_STUDENTS),
   ])
+  const rosterCities = new Map(roster.filter(row => row.value && typeof row.value === 'object' && 'student' in row.value && (row.value as { student: unknown }).student === row.key)
+    .map(row => [row.key, row.value as { city?: string | null }]))
   const visits = new Map<string, Visit>()
   for (const record of records) {
     const alias = record.encounter.profile.alias.value
     const current = visits.get(record.student)
-    if (!current || Date.parse(record.createdAt) > Date.parse(current.at)) visits.set(record.student, {
-      student: record.student, at: record.createdAt, alias: typeof alias === 'string' && alias.trim() ? alias.trim() : `学生 ${record.student.slice(0, 4)}`,
-    })
+    if (!current || Date.parse(record.createdAt) > Date.parse(current.at)) {
+      const rosterEntry = rosterCities.get(record.student)
+      const savedCity = rosterEntry && Object.hasOwn(rosterEntry, 'city') ? rosterEntry.city : record.encounter.profile.city.value
+      visits.set(record.student, {
+        student: record.student, at: record.createdAt, alias: typeof alias === 'string' && alias.trim() ? alias.trim() : `学生 ${record.student.slice(0, 4)}`,
+        city: typeof savedCity === 'string' ? savedCity : null,
+      })
+    }
   }
   for (const appointment of appointments) if (appointment.status === 'done') {
     const current = visits.get(appointment.student)
     if (!current || Date.parse(appointment.slotStart) > Date.parse(current.at)) visits.set(appointment.student, {
-      student: appointment.student, at: appointment.slotStart, alias: current?.alias ?? `学生 ${appointment.student.slice(0, 4)}`,
+      student: appointment.student, at: appointment.slotStart, alias: current?.alias ?? `学生 ${appointment.student.slice(0, 4)}`, city: current?.city ?? null,
     })
   }
   return {
@@ -68,6 +77,7 @@ export function planAppointmentInvitations(materials: InviteMaterials): Appointm
   const candidates = materials.visits.filter(row => +now - Date.parse(row.at) >= materials.afterDays * DAY
     && !recentlyInvited.has(row.student) && !futureBooked.has(row.student))
     .sort((left, right) => Date.parse(left.at) - Date.parse(right.at) || left.student.localeCompare(right.student))
+    .filter(row => isSameCity(row.city, materials.city))
     .map(row => ({ student: row.student, alias: row.alias, lastVisit: row.at }))
   const bookings = materials.appointments.map(row => ({ slotStart: row.slotStart, status: row.status }))
   const slot = appointmentSlots(materials.schedule, { now, days: 60, bookings })[0]
@@ -96,7 +106,7 @@ async function sendCampaignBatch(store: LocalStore, identity: Identity, campaign
       sent += 1
     } catch (cause) {
       // The candidate may have become ineligible since the plan was made; keep the queue moving.
-      if (!(cause instanceof Error) || !/未来预约|24 小时内|约满|排班内/.test(cause.message)) throw cause
+      if (!(cause instanceof Error) || !/未来预约|24 小时内|约满|排班内|所在城市/.test(cause.message)) throw cause
     }
   }
   return { sent, campaign: current }

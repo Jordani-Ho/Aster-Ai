@@ -5,6 +5,8 @@ import type { Envelope } from '../transport'
 import { appointmentSlots, slotStartInZone } from '../schedule/appointments'
 import { loadGroundwork, type Schedule } from '../hall/groundwork'
 import { loadProfile } from '../intake/session'
+import { isSameCity } from '../city'
+import { loadCachedTeacherCity } from '../storefront'
 
 export const APPOINTMENTS = 'appointments'
 export type AppointmentStatus = 'offered' | 'requested' | 'accepted' | 'confirmed' | 'declined' | 'expired' | 'done' | 'no_show' | 'cancelled'
@@ -23,6 +25,7 @@ export interface Appointment {
   campaignId?: string
   replacementFor?: string
   teacherCity?: string
+  studentCity?: string
   reason?: string
 }
 export interface AppointmentMessage { id: string; sender: string; at: number; envelope: { type: string; version: 1; payload: unknown } }
@@ -56,6 +59,7 @@ function validAppointment(value: unknown): value is Appointment {
     && (value.campaignId === undefined || (typeof value.campaignId === 'string' && ID.test(value.campaignId)))
     && (value.replacementFor === undefined || (typeof value.replacementFor === 'string' && ID.test(value.replacementFor)))
     && (value.teacherCity === undefined || validCity(value.teacherCity))
+    && (value.studentCity === undefined || validCity(value.studentCity))
     && (value.reason === undefined || (typeof value.reason === 'string' && value.reason.length <= 128))
 }
 function valueAt(row: { value: unknown }): Appointment | null { return validAppointment(row.value) ? row.value : null }
@@ -94,6 +98,10 @@ export async function sendAppointmentOffer(options: CreateAppointmentOfferOption
     || !(now instanceof Date) || !Number.isFinite(+now) || Date.parse(slot.slotStart) < +now + 2 * HOUR
     || (options.campaignId !== undefined && !ID.test(options.campaignId))) throw new Error('预约邀约输入无效')
   if (!(await teacherRelation(store, student))) throw new Error('不能向没有师生关系的人邀约')
+  const studentRow = await store.get('teacher-students', student)
+  const studentCity = object(studentRow) && (studentRow.city === null || validCity(studentRow.city)) ? studentRow.city as string | null : null
+  const city = await teacherCity(store)
+  if (!isSameCity(studentCity, city)) throw new Error('这位学生目前不在老师所在城市，不能发面诊邀约')
   const prior = (await store.list(APPOINTMENTS)).map(valueAt).filter((row): row is Appointment => !!row)
   let replacement: Appointment | undefined
   if (options.replacementFor !== undefined) {
@@ -108,7 +116,6 @@ export async function sendAppointmentOffer(options: CreateAppointmentOfferOption
   if (concurrent >= slot.capacity + 1) throw new Error('这个时段的邀约人数已到上限')
   if (prior.some(row => row.student === student && ['accepted', 'confirmed'].includes(row.status) && Date.parse(row.slotStart) > +now)) throw new Error('这位学生已有未来预约')
   if (prior.some(row => row !== replacement && row.student === student && +now - Date.parse(row.createdAt) < DAY)) throw new Error('这位学生 24 小时内已收到邀约')
-  const city = await teacherCity(store)
   const offerId = crypto.randomUUID()
   const appointment: Appointment = {
     offerId, student, teacher: identity.publicKey, slotStart: slot.slotStart, minutes: slot.minutes as Appointment['minutes'],
@@ -116,6 +123,7 @@ export async function sendAppointmentOffer(options: CreateAppointmentOfferOption
     ...(options.campaignId ? { campaignId: options.campaignId } : {}),
     ...(replacement ? { replacementFor: replacement.offerId } : {}),
     ...(city ? { teacherCity: city } : {}),
+    ...(studentCity ? { studentCity } : {}),
   }
   await store.put(APPOINTMENTS, offerId, appointment as unknown as StoreValue)
   await guardedSend(store, 'teacher', offerId, student, envelope('appointment.offer', {
@@ -146,7 +154,7 @@ export async function replyToAppointment(options: ReplyAppointmentOptions): Prom
 }
 
 export interface RequestAppointmentOptions {
-  store: LocalStore; identity: Identity; teacher: string; startsAt: readonly number[]; timezone?: string; now?: Date; send: SendAppointmentEnvelope
+  store: LocalStore; settingsStore?: LocalStore; identity: Identity; teacher: string; startsAt: readonly number[]; timezone?: string; now?: Date; send: SendAppointmentEnvelope
 }
 /** 学生提交 1–3 个本地时间；老师按自己的排班和剩余容量自动确认一个。 */
 export async function requestAppointment(options: RequestAppointmentOptions): Promise<Appointment> {
@@ -157,6 +165,9 @@ export async function requestAppointment(options: RequestAppointmentOptions): Pr
     || startsAt.some(at => !Number.isSafeInteger(at) || at % 60_000 !== 0 || at < +now + 2 * HOUR || at > +now + 60 * DAY)
     || new Set(startsAt).size !== startsAt.length) throw new Error('预约请求无效：请选 1–3 个两小时后、60 天内的不同时间')
   if (!(await roleIs(store, 'student')) || !(await studentRelation(store, teacher))) throw new Error('这位老师不在“我的老师”里')
+  const profile = await loadProfile(store)
+  const currentTeacherCity = await loadCachedTeacherCity(options.settingsStore ?? store, teacher)
+  if (!isSameCity(profile.city.value, currentTeacherCity)) throw new Error('你现在不在老师所在城市，不能请求面诊')
   const existing = await listAppointments(store)
   if (existing.some(row => row.student === identity.publicKey && row.teacher === teacher
     && ['offered', 'requested', 'accepted', 'confirmed'].includes(row.status) && Date.parse(row.slotStart) > +now)) throw new Error('您已有待回复邀约、预约请求或未来预约')
@@ -241,26 +252,30 @@ export function createAppointmentInbox(options: AppointmentInboxOptions) {
     const payload = message.envelope.payload
     if (await store.get(APPOINTMENTS, payload.requestId) !== undefined) return
     const receivedAt = new Date(message.at * 1000)
+    const studentRow = await store.get('teacher-students', message.sender)
+    const studentCity = object(studentRow) && (studentRow.city === null || validCity(studentRow.city)) ? studentRow.city as string | null : null
+    const city = await teacherCity(store)
+    const sameCity = isSameCity(studentCity, city)
     const groundwork = await loadGroundwork(store)
     const existing = await listAppointments(store)
     const alreadyBooked = existing.some(row => row.student === message.sender && ['offered', 'requested', 'accepted', 'confirmed'].includes(row.status) && Date.parse(row.slotStart) > +receivedAt)
     const bookings = existing.map(row => ({ slotStart: row.slotStart, status: row.status }))
     const allSlots = appointmentSlots(groundwork.schedule, { now: receivedAt, days: 61 })
     const openSlots = appointmentSlots(groundwork.schedule, { now: receivedAt, days: 61, bookings })
-    const selected = alreadyBooked ? undefined : payload.startsAt.map(at => openSlots.find(slot => Date.parse(slot.slotStart) === at))
+    const selected = !sameCity || alreadyBooked ? undefined : payload.startsAt.map(at => openSlots.find(slot => Date.parse(slot.slotStart) === at))
       .find((slot): slot is NonNullable<typeof slot> => !!slot)
     const scheduled = new Set(allSlots.map(slot => Date.parse(slot.slotStart)))
     const isFull = payload.startsAt.some(at => scheduled.has(at))
-    const city = await teacherCity(store)
     const appointment: Appointment = selected ? {
       offerId: payload.requestId, student: message.sender, teacher: options.identity.publicKey, slotStart: selected.slotStart,
       minutes: selected.minutes as Appointment['minutes'], timezone: selected.timezone, capacity: selected.capacity,
-      expiresAt: 0, createdAt: receivedAt.toISOString(), status: 'confirmed', ...(city ? { teacherCity: city } : {}),
+      expiresAt: 0, createdAt: receivedAt.toISOString(), status: 'confirmed', ...(city ? { teacherCity: city } : {}), ...(studentCity ? { studentCity } : {}),
     } : {
       offerId: payload.requestId, student: message.sender, teacher: options.identity.publicKey,
       slotStart: slotStartInZone(payload.startsAt[0], payload.timezone), minutes: groundwork.schedule.duration,
       timezone: payload.timezone, capacity: groundwork.schedule.capacity, expiresAt: 0, createdAt: receivedAt.toISOString(),
-      status: 'cancelled', reason: alreadyBooked ? 'already_booked' : isFull ? 'slot_full' : 'unavailable', ...(city ? { teacherCity: city } : {}),
+      status: 'cancelled', reason: !sameCity ? 'different_city' : alreadyBooked ? 'already_booked' : isFull ? 'slot_full' : 'unavailable',
+      ...(city ? { teacherCity: city } : {}), ...(studentCity ? { studentCity } : {}),
     }
     await store.put(APPOINTMENTS, appointment.offerId, appointment as unknown as StoreValue)
     if (options.send) await sendStatus(store, appointment, selected ? 'appointment.confirmed' : 'appointment.cancel', now(), options.send, selected ? undefined : appointment.reason)
@@ -322,6 +337,16 @@ export function createAppointmentInbox(options: AppointmentInboxOptions) {
       ...(typeof payload.teacherCity === 'string' ? { teacherCity: payload.teacherCity } : {}), ...(reason ? { reason } : {}) }
     await store.put(APPOINTMENTS, offerId, next as unknown as StoreValue)
   }
+  const receiveStudentCancel = async (message: AppointmentMessage) => {
+    if (!(await roleIs(store, 'teacher')) || !(await teacherRelation(store, message.sender)) || !object(message.envelope.payload)) return
+    const { offerId, reason } = message.envelope.payload
+    if (Object.keys(message.envelope.payload).some(key => !['offerId', 'reason'].includes(key))
+      || typeof offerId !== 'string' || !ID.test(offerId) || reason !== 'student_city_changed') return
+    const current = valueAt({ value: await store.get(APPOINTMENTS, offerId) })
+    if (!current || current.student !== message.sender || current.teacher !== options.identity.publicKey || current.status !== 'confirmed') return
+    const next = { ...current, status: 'cancelled' as const, reason }
+    await store.put(APPOINTMENTS, offerId, next as unknown as StoreValue)
+  }
   return {
     async receive(message: AppointmentMessage): Promise<void> {
       if (!message || !object(message.envelope) || message.envelope.version !== 1 || !Number.isSafeInteger(message.at) || !HEX64.test(message.sender)) return
@@ -329,7 +354,8 @@ export function createAppointmentInbox(options: AppointmentInboxOptions) {
       if (type === 'appointment.offer') return receiveOffer(message)
       if (type === 'appointment.reply') return receiveReply(message)
       if (type === 'appointment.request') return receiveRequest(message)
-      if (type === 'appointment.confirmed' || type === 'appointment.cancel') return receiveStatus(message)
+      if (type === 'appointment.confirmed') return receiveStatus(message)
+      if (type === 'appointment.cancel') { await receiveStatus(message); return receiveStudentCancel(message) }
     },
   }
 }
@@ -344,8 +370,12 @@ export async function markAppointmentAttendance(store: LocalStore, offerId: stri
 }
 
 /** 供排班保存前核对：旧排班下已占位、将被新规则移除或超过新容量的预约。 */
-export async function appointmentsAffectedBySchedule(store: Pick<LocalStore, 'list'>, schedule: Schedule, now = new Date()): Promise<Appointment[]> {
-  const bookings = (await listAppointments(store)).filter(row => ['accepted', 'confirmed'].includes(row.status) && Date.parse(row.slotStart) > +now)
+export async function appointmentsAffectedBySchedule(store: LocalStore, schedule: Schedule, now = new Date()): Promise<Appointment[]> {
+  const roster = new Map((await store.list('teacher-students')).map(row => [row.key, row.value]))
+  const currentTeacherCity = await teacherCity(store)
+  const bookings = (await listAppointments(store)).filter(row => ['accepted', 'confirmed'].includes(row.status) && Date.parse(row.slotStart) > +now
+    && isSameCity(object(roster.get(row.student)) && Object.hasOwn(roster.get(row.student) as object, 'city')
+      ? (roster.get(row.student) as { city?: string | null }).city : row.studentCity, currentTeacherCity ?? row.teacherCity))
   const groups = new Map<number, Appointment[]>()
   for (const row of bookings) { const key = Date.parse(row.slotStart); groups.set(key, [...(groups.get(key) ?? []), row]) }
   const affected = new Set<string>()
@@ -357,6 +387,15 @@ export async function appointmentsAffectedBySchedule(store: Pick<LocalStore, 'li
     for (const row of ordered) if (!exists || ordered.indexOf(row) >= capacity) affected.add(row.offerId)
   }
   return bookings.filter(row => affected.has(row.offerId))
+}
+
+/** 学生确认城市变化导致异地时，可自行取消未来面诊并通知老师。 */
+export async function cancelOwnAppointment(store: LocalStore, identity: Identity, offerId: string, now: Date, send: SendAppointmentEnvelope): Promise<void> {
+  const current = valueAt({ value: await store.get(APPOINTMENTS, offerId) })
+  if (!current || current.student !== identity.publicKey || current.status !== 'confirmed' || Date.parse(current.slotStart) <= +now) throw new Error('这条预约不能取消')
+  await guardedSend(store, 'student', crypto.randomUUID(), current.teacher,
+    envelope('appointment.cancel', { offerId, reason: 'student_city_changed' }), now, send)
+  await store.put(APPOINTMENTS, offerId, { ...current, status: 'cancelled', reason: 'student_city_changed' } as unknown as StoreValue)
 }
 
 export async function cancelAppointment(store: LocalStore, identity: Identity, offerId: string, reason: string, now: Date, send: SendAppointmentEnvelope): Promise<void> {

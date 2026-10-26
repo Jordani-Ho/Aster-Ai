@@ -3,8 +3,9 @@ import { IDBFactory } from 'fake-indexeddb'
 import { createIdentity } from '../identity'
 import { openStore, type StoreValue } from '../store'
 import { defaultSchedule, type Schedule } from '../hall/groundwork'
-import { appointmentsAffectedBySchedule, cancelAppointment, createAppointmentInbox, listAppointments, markAppointmentAttendance, replyToAppointment, requestAppointment, sendAppointmentOffer, type AppointmentMessage } from './index'
+import { appointmentsAffectedBySchedule, cancelAppointment, cancelOwnAppointment, createAppointmentInbox, listAppointments, markAppointmentAttendance, replyToAppointment, requestAppointment, sendAppointmentOffer, type AppointmentMessage } from './index'
 import { emptyProfile, saveProfile } from '../intake/session'
+import { DEFAULT_STOREFRONT, makeStorefrontEvent, saveReceivedStorefront } from '../storefront'
 
 const now = new Date('2026-10-25T12:00:00Z')
 const slot = { slotStart: '2026-10-26T09:00:00+08:00', minutes: 30, timezone: 'Asia/Shanghai', capacity: 3 }
@@ -29,7 +30,7 @@ async function pair() {
 describe('预约信封和状态机', () => {
   it('学生提交 1–3 个偏好时段，老师按可约时段自动确认，并回传城市和时区', async () => {
     const { teacher, student, teacherStore, studentStore } = await pair()
-    const profile = emptyProfile(); profile.city = { value: '杭州', source: 'teacher' }
+    const profile = emptyProfile(); profile.city = { value: '杭州市', source: 'teacher' }
     await saveProfile(teacherStore, profile)
     const toTeacher: { type: string; version: 1; payload: any }[] = []
     const toStudent: { type: string; version: 1; payload: any }[] = []
@@ -43,16 +44,41 @@ describe('预约信封和状态机', () => {
       expect(request.status).toBe('requested')
       expect(toTeacher[0].type).toBe('appointment.request')
       await teacherInbox.receive(message(student.publicKey, toTeacher[0].type, toTeacher[0].payload))
-      expect((await listAppointments(teacherStore)).find(row => row.offerId === request.offerId)).toMatchObject({ status: 'confirmed', teacherCity: '杭州' })
-      expect(toStudent[0]).toMatchObject({ type: 'appointment.confirmed', payload: { teacherCity: '杭州', timezone: 'Asia/Shanghai' } })
+      expect((await listAppointments(teacherStore)).find(row => row.offerId === request.offerId)).toMatchObject({ status: 'confirmed', teacherCity: '杭州市' })
+      expect(toStudent[0]).toMatchObject({ type: 'appointment.confirmed', payload: { teacherCity: '杭州市', timezone: 'Asia/Shanghai' } })
       await studentInbox.receive(message(teacher.publicKey, toStudent[0].type, toStudent[0].payload))
-      expect((await listAppointments(studentStore)).find(row => row.offerId === request.offerId)).toMatchObject({ status: 'confirmed', teacherCity: '杭州', timezone: 'Asia/Shanghai' })
+      expect((await listAppointments(studentStore)).find(row => row.offerId === request.offerId)).toMatchObject({ status: 'confirmed', teacherCity: '杭州市', timezone: 'Asia/Shanghai' })
       await expect(requestAppointment({ store: studentStore, identity: student, teacher: teacher.publicKey,
         startsAt: [Date.parse(slot.slotStart)], timezone: 'America/Los_Angeles', now,
         send: async () => {} })).rejects.toThrow('已有待回复邀约、预约请求或未来预约')
       await teacherInbox.receive(message(student.publicKey, toTeacher[0].type, toTeacher[0].payload))
       expect((await listAppointments(teacherStore)).filter(row => row.offerId === request.offerId)).toHaveLength(1)
+      await cancelOwnAppointment(studentStore, student, request.offerId, now, async (_recipient, envelope) => { toTeacher.push(envelope) })
+      await teacherInbox.receive(message(student.publicKey, toTeacher.at(-1)!.type, toTeacher.at(-1)!.payload))
+      expect((await listAppointments(studentStore)).find(row => row.offerId === request.offerId)).toMatchObject({ status: 'cancelled', reason: 'student_city_changed' })
+      expect((await listAppointments(teacherStore)).find(row => row.offerId === request.offerId)).toMatchObject({ status: 'cancelled', reason: 'student_city_changed' })
     } finally { teacherStore.close(); studentStore.close() }
+  }, 20000)
+
+  it('异地学生不能请求面诊，老师也不能向异地学生手动邀约', async () => {
+    const { teacher, student, teacherStore, studentStore } = await pair()
+    const settingsStore = await openStore(student, { factory: new IDBFactory() })
+    const teacherProfile = emptyProfile(); teacherProfile.city = { value: '广州市', source: 'teacher' }
+    await saveProfile(teacherStore, teacherProfile)
+    const studentProfile = emptyProfile(); studentProfile.city = { value: '旧金山', source: 'student' }
+    await saveProfile(studentStore, studentProfile)
+    await settingsStore.put('settings', 'role', { role: 'student' })
+    await settingsStore.put('settings', 'teachers', [teacher.publicKey])
+    await teacherStore.put('teacher-students', student.publicKey, { student: student.publicKey, city: '旧金山', cityUpdatedAt: Math.floor(+now / 1000) })
+    await saveReceivedStorefront(settingsStore, makeStorefrontEvent(teacher, DEFAULT_STOREFRONT, Math.floor(+now / 1000), true, null, '广州市'), teacher.publicKey)
+    try {
+      await expect(requestAppointment({ store: studentStore, settingsStore, identity: student, teacher: teacher.publicKey,
+        startsAt: [Date.parse(slot.slotStart)], timezone: slot.timezone, now, send: async () => {} })).rejects.toThrow('所在城市')
+      await expect(sendAppointmentOffer({ store: teacherStore, identity: teacher, student: student.publicKey,
+        slot, now, send: async () => {} })).rejects.toThrow('所在城市')
+      expect(await listAppointments(teacherStore)).toEqual([])
+      expect(await listAppointments(studentStore)).toEqual([])
+    } finally { teacherStore.close(); studentStore.close(); settingsStore.close() }
   }, 20000)
 
   it('学生申请排班外时间时收到不可约回复', async () => {
@@ -199,6 +225,23 @@ describe('预约信封和状态机', () => {
     await expect(markAppointmentAttendance(teacherStore, 'booking-one', 'done')).resolves.toMatchObject({ status: 'done' })
     await expect(markAppointmentAttendance(teacherStore, 'booking-one', 'no_show')).rejects.toThrow()
     teacherStore.close(); studentStore.close()
+  })
+
+  it('排班冲突只列当前同城预约', async () => {
+    const { teacher, student, teacherStore, studentStore } = await pair()
+    const local = createIdentity()
+    const teacherProfile = emptyProfile(); teacherProfile.city = { value: '广州', source: 'teacher' }
+    await saveProfile(teacherStore, teacherProfile)
+    await teacherStore.put('teacher-students', student.publicKey, { student: student.publicKey, city: '旧金山' })
+    await teacherStore.put('teacher-students', local.publicKey, { student: local.publicKey, city: '广州' })
+    const booking = (offerId: string, who: string) => ({ offerId, student: who, teacher: teacher.publicKey, slotStart: slot.slotStart,
+      minutes: 30, timezone: slot.timezone, capacity: 3, expiresAt: 0, createdAt: now.toISOString(), status: 'confirmed',
+      studentCity: who === student.publicKey ? '旧金山' : '广州', teacherCity: '广州' })
+    await teacherStore.put('appointments', 'local-booking', booking('local-booking', local.publicKey) as unknown as StoreValue)
+    await teacherStore.put('appointments', 'remote-booking', booking('remote-booking', student.publicKey) as unknown as StoreValue)
+    const changed = defaultSchedule(); changed.timezone = 'Asia/Shanghai'; changed.week['1'] = []
+    try { expect((await appointmentsAffectedBySchedule(teacherStore, changed as Schedule, now)).map(row => row.offerId)).toEqual(['local-booking']) }
+    finally { teacherStore.close(); studentStore.close() }
   })
 
   it('老师明确取消受排班影响的预约时，先通知学生并保存取消状态', async () => {

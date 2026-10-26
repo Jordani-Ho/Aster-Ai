@@ -158,6 +158,7 @@
 .ts-row-main { flex: 1; min-width: 0; }
 .ts-row-main strong { display: block; font-size: 19px; }
 .ts-row-main span { display: block; font-size: 14px; color: #6b746c; margin-top: 2px; }
+.ts-row-main .ts-remote-city { color: #8a6a1f; font-weight: 600; }
 .ts-chevron { color: #8d968f; font-size: 24px; line-height: 1; }
 .ts-badge { flex: 0 0 auto; border-radius: 999px; padding: 5px 11px; font-size: 13px; white-space: nowrap; }
 .ts-badge.ok { background: #e7efe8; color: #2f5d4a; }

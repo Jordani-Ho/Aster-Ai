@@ -14,6 +14,9 @@
   "revisit.first": "距上次看诊已 {days} 天，复诊间隔是 {interval} 天。去约个时间。",
   "revisit.again": "复诊还没约，今天选几个方便的时间。",
   "revisit.daily": "今天把复诊时间约好。",
+  "revisit.remote.first": "距上次看诊已 {days} 天，可以发一次远程问诊。",
+  "revisit.remote.again": "复诊还没安排，今天可以发一次远程问诊。",
+  "revisit.remote.daily": "今天可以发一次远程问诊，告诉老师最近的变化。",
   "appointment.urgent": "老师的邀约还剩 {minutes} 分钟，请回复。",
   "sleep.first": "到你平时的睡觉时间了，先把手机放下。"
 }

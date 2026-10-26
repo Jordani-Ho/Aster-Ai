@@ -15,6 +15,7 @@ import type { Identity } from './core/identity'
 import type { SendEnvelope } from './core/inbox'
 import { loadOwnStorefront, publishStorefront, sendStorefrontTo, verifyStorefrontEvent } from './core/storefront'
 import { teacherStudentCandidates } from './core/reidentify'
+import { TimeSettings } from './TimeSettings'
 
 type Item = keyof typeof GROUNDWORK_ITEMS
 const keys = Object.keys(GROUNDWORK_ITEMS) as Item[]
@@ -111,6 +112,7 @@ export function HallGroundwork({ store, identity, send, onReady, onDone }: { sto
     </>}
     {item === 'schedule' && <>
       <label>老师所在时区<input value={schedule.timezone} placeholder="Asia/Shanghai" onChange={e => patch({ schedule: { ...schedule, timezone: e.target.value } })} /></label>
+      <TimeSettings store={store} identity={identity} sendEnvelope={send} cityOnly />
       <label>每个时段<select value={schedule.duration} onChange={e => patch({ schedule: { ...schedule, duration: Number(e.target.value) as 15 | 30 | 45 | 60 } })}>{[15, 30, 45, 60].map(minutes => <option key={minutes} value={minutes}>{minutes} 分钟</option>)}</select></label>
       <label>每时段最多接待几位<input type="number" min="1" max="20" value={schedule.capacity} onChange={e => patch({ schedule: { ...schedule, capacity: Number(e.target.value) } })} /></label>
       <details><summary>周一至周日的排班（展开修改）</summary>{['日', '一', '二', '三', '四', '五', '六'].map((day, index) => <fieldset key={day}><legend>周{day}</legend>

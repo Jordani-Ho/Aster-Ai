@@ -14,7 +14,8 @@ import { isHeavenStamp } from '../heaven/stamp'
 import type { HeavenStamp } from '../heaven/stamp'
 import { parsePeriodObservation, type PeriodObservation } from '../../../../domain/tcm/observation'
 import { sanitizeStudentPostures, type PostureRecord } from '../../../../domain/tcm/posture'
-import { latestTeacherRecord, saveTeacherRecord, rememberTeacherStudent } from '../records/teacher'
+import { latestTeacherRecord, saveTeacherRecord, rememberTeacherStudent, rememberTeacherStudentCity } from '../records/teacher'
+import { validCityName } from '../city'
 import { updateFingerprint } from '../records/fingerprint'
 import { cleanSharedHomeHerbs, type SharedHomeHerb } from '../herbs'
 import { saveTeacherHerbSnapshot } from '../herbs/snapshots'
@@ -883,6 +884,28 @@ async function receiveStorefront(store: LocalStore, message: Message, payload: R
   await saveReceivedStorefront(store, verified.event, verified.event.pubkey)
 }
 
+async function receiveStudentCity(store: LocalStore, message: Message): Promise<void> {
+  if (await loadRole(store) !== 'teacher' || !Number.isSafeInteger(message.at) || message.at <= 0) return
+  const payload = message.envelope.payload
+  if (!object(payload) || Object.keys(payload).length !== 1 || !Object.hasOwn(payload, 'city')) return
+  const city = payload.city
+  if (city !== null && !validCityName(city)) return
+  if (!await rememberTeacherStudentCity(store, message.sender, city, message.at)) return
+}
+
+async function receiveTeacherCity(store: LocalStore, message: Message): Promise<void> {
+  if (await loadRole(store) !== 'student' || !Number.isSafeInteger(message.at) || message.at <= 0) return
+  const teachers = await historyTeachers(store)
+  if (!teachers.includes(message.sender)) return
+  const payload = message.envelope.payload
+  if (!object(payload) || Object.keys(payload).length !== 1 || !Object.hasOwn(payload, 'city')) return
+  const city = payload.city
+  if (city !== null && !validCityName(city)) return
+  const prior = await store.get('teacher-city', message.sender) as { at?: unknown } | undefined
+  if (Number.isSafeInteger(prior?.at) && (prior!.at as number) >= message.at) return
+  await store.put('teacher-city', message.sender, { city, at: message.at })
+}
+
 export function createInbox(options: InboxOptions) {
   const { identity, store } = options
   const now = options.now ?? (() => new Date())
@@ -951,6 +974,8 @@ export function createInbox(options: InboxOptions) {
         if (object(payload)) await receiveStorefront(store, message, payload)
         return
       }
+      if (type === 'student.city') { await receiveStudentCity(store, message); return }
+      if (type === 'teacher.city') { await receiveTeacherCity(store, message); return }
       if (type.startsWith('ledger.') && options.ledger) await options.ledger.receive(message)
       if (type.startsWith('appointment.') && options.appointments) await options.appointments.receive(message)
       // 不认识的类型丢弃。
