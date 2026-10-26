@@ -49,5 +49,6 @@
 | [V2-32](V2-32-posture-at-home.md) | 体态：学生在家也能拍 | DeepSeek | V2-30 |
 | [V2-33](V2-33-student-herbs-live.md) | 学生药材库：有数量、老师开方能直接调用、学生智能体来管 | Codex | V2-24 |
 | [V2-34](V2-34-same-city.md) | 面诊邀约只限同城；居住城市随时可改 | Codex | V2-25b、V2-27 |
+| [V2-35](V2-35-groundwork-optional.md) | 开馆准备不做硬性要求 | Codex | V2-34 |
 
 第二批（地基合并后再展开）：自我调整（表层配置化）、门面、物流（本地资源）、观察。
