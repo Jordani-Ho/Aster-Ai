@@ -11,6 +11,7 @@ import { listAppointments, markAppointmentAttendance, type Appointment } from '.
 import { confirmDailyAppointmentInvitations, latestAppointmentInviteRun, processAppointmentCampaigns, runDailyAppointmentInvitations, type AppointmentInvitePlan } from './core/appointments/agent'
 import { formatAppointmentTime } from './core/schedule/appointments'
 import type { SendEnvelope } from './core/inbox'
+import { listRosterLeaves, type RosterLeave } from './core/roster'
 import './newui.css'
 
 // V2-16 老师·今天（01）：最上面“学生到了？”，中间“等您签字”，下面一行“学生动态”。
@@ -49,11 +50,12 @@ export function TeacherToday({ identity, store, status, send, onStartVisit, onOp
   const [inviteRun, setInviteRun] = useState<{ key: string; status: 'draft' | 'delivered'; output: AppointmentInvitePlan } | null>(null)
   const [inviteBusy, setInviteBusy] = useState(false)
   const [error, setError] = useState('')
+  const [leaves, setLeaves] = useState<RosterLeave[]>([])
 
   useEffect(() => {
     let active = true
     const refresh = () => {
-      void Promise.all([listConsults(store), listStudentAdherence(store), listTeacherRecords(store), listAppointments(store)]).then(([rows, reports, records, invites]) => {
+      void Promise.all([listConsults(store), listStudentAdherence(store), listTeacherRecords(store), listAppointments(store), listRosterLeaves(store)]).then(([rows, reports, records, invites, departed]) => {
         if (!active) return
         // V2-18：收件箱只按学生提交问诊的时间排序，不按任何急症/心理判断排先后。
         setConsults(sortConsultsBySubmittedAt(rows))
@@ -67,6 +69,7 @@ export function TeacherToday({ identity, store, status, send, onStartVisit, onOp
         }
         setStudentAliases(aliases)
         setAppointments(invites)
+        setLeaves(departed)
         setError('')
       }).catch(() => { if (active) setError('本机问诊读取失败，请稍后重试。') })
     }
@@ -138,6 +141,11 @@ export function TeacherToday({ identity, store, status, send, onStartVisit, onOp
     </section>
 
     {error && <p role="alert" className="nl-danger-strong">{error}</p>}
+
+    {leaves.some(row => row.day === today) && <section aria-label="今天请出的学生" className="nl-card">
+      <h2>今天请出了谁</h2>
+      {leaves.filter(row => row.day === today).map(row => <p key={row.student}>{nameOf(row.student)} · 已通知，原有面诊预约照常</p>)}
+    </section>}
 
     <section aria-label="等您签字">
       <div className="nl-top"><h2>等您签字</h2><span className="nl-meta">{pending.length} 份远程问诊</span></div>

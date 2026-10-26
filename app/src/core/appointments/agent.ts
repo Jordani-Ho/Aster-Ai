@@ -46,6 +46,7 @@ async function gather(store: LocalStore, now: Date): Promise<InviteMaterials> {
     .map(row => [row.key, row.value as { city?: string | null }]))
   const visits = new Map<string, Visit>()
   for (const record of records) {
+    if (!rosterCities.has(record.student)) continue
     const alias = record.encounter.profile.alias.value
     const current = visits.get(record.student)
     if (!current || Date.parse(record.createdAt) > Date.parse(current.at)) {
@@ -58,6 +59,7 @@ async function gather(store: LocalStore, now: Date): Promise<InviteMaterials> {
     }
   }
   for (const appointment of appointments) if (appointment.status === 'done') {
+    if (!rosterCities.has(appointment.student)) continue
     const current = visits.get(appointment.student)
     if (!current || Date.parse(appointment.slotStart) > Date.parse(current.at)) visits.set(appointment.student, {
       student: appointment.student, at: appointment.slotStart, alias: current?.alias ?? `学生 ${appointment.student.slice(0, 4)}`, city: current?.city ?? null,
@@ -103,6 +105,7 @@ async function sendCampaignBatch(store: LocalStore, identity: Identity, campaign
     const next = { ...current, cursor: cursor + 1 }
     await store.put(CAMPAIGNS, current.id, next as unknown as StoreValue)
     current.cursor = next.cursor; cursor += 1
+    if (!await store.get(TEACHER_STUDENTS, candidate.student)) continue
     try {
       await sendAppointmentOffer({ store, identity, student: candidate.student, slot: current.slot, campaignId: current.id, now, send })
       sent += 1

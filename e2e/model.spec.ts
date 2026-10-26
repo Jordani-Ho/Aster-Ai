@@ -15,7 +15,9 @@ test('M1-21 role then mandatory real account test; 401/402/network plain errors 
  await context.unroute('https://model.synthetic.example/**');await context.route('https://model.synthetic.example/**',fulfillFromModel)
  await page.getByRole('button',{name:'测试连接',exact:true}).click();await expect(page.getByText('✓ 连接成功',{exact:true})).toBeVisible()
  await page.getByLabel('模型名称',{exact:true}).fill('changed');await expect(page.getByRole('button',{name:'进入首页',exact:true})).toHaveCount(0)
- await page.getByRole('button',{name:'测试连接',exact:true}).click();await expect(page.getByText('✓ 连接成功',{exact:true})).toBeVisible();if(!process.env.CI)await page.screenshot({path:'docs/screenshots/model-connect-375.png'});await page.getByRole('button',{name:'进入首页',exact:true}).click();await fillJoinBasics(page);await page.reload();await expect(page.locator('[data-page=student-today]')).toBeVisible()
+ await page.getByRole('button',{name:'测试连接',exact:true}).click();await expect(page.getByText('✓ 连接成功',{exact:true})).toBeVisible();if(!process.env.CI)await page.screenshot({path:'docs/screenshots/model-connect-375.png'});await page.getByRole('button',{name:'进入首页',exact:true}).click();await fillJoinBasics(page);await page.reload()
+ // CI 上偶发：刷新后首页没出来。多等一会儿；仍不出来就把当时页面上的字打出来，便于定位。
+ try{await expect(page.locator('[data-page=student-today]')).toBeVisible({timeout:30000})}catch(cause){throw Error('刷新后没有进学生首页，页面显示：'+(await page.locator('body').innerText()).slice(0,600),{cause})}
  if(!process.env.CI)await page.screenshot({path:'docs/screenshots/model-connected-375.png'})
  }finally{await context.close()}
 })

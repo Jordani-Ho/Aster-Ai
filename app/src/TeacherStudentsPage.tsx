@@ -77,9 +77,10 @@ export function TeacherStudentsPage({ identity, store, llm, send, ledger, onVisi
         const teacherCity = profile.city.value ?? (own.current ? verifyStorefrontEvent(own.current, identity.publicKey)?.city ?? null : null)
         const rosterByStudent = new Map(roster.map(item => [item.key, item.value as { city?: string | null }]))
         const records: Record<string, LoadedTeacherRecord[]> = {}
-        for (const student of people) records[student] = await teacherRecordsOf(store, student)
+        const activePeople = people.filter(student => rosterByStudent.has(student))
+        for (const student of activePeople) records[student] = await teacherRecordsOf(store, student)
         const today = localDay(new Date())
-        const rows = buildStudentRows(people.map(student => {
+        const rows = buildStudentRows(activePeople.map(student => {
           const rows = records[student] ?? []
           const consult = consults.find(item => item.sender === student) ?? consults.map(item => item).find(item => item.encounter.student === student)
           const alias = rows.at(0)?.encounter.profile.alias.value ?? consult?.encounter.profile.alias.value ?? '学生 ' + student.slice(0, 4)

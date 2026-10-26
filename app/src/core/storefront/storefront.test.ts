@@ -9,7 +9,7 @@ import { addTeacher, createInbox } from '../inbox'
 import {
   ACTIVE_TEACHER_SETTING, DEFAULT_STOREFRONT, EMBLEMS, STOREFRONT_COLLECTION, STOREFRONT_KIND,
   THEMES, displayTeacherName, inviteTitle, inviteWelcome, loadCachedStorefront, loadCachedStorefronts,
-  loadCachedReceiveRecordings, loadCachedRevisitDays, loadCachedTeacherCity, loadCachedAppointmentAvailability, loadOwnStorefront, loadStorefrontDraft, makeStorefrontEvent, normalizeStorefront, publishStorefront,
+  loadCachedReceiveRecordings, loadCachedRevisitDays, loadCachedRosterLeaveDays, loadCachedTeacherCity, loadCachedAppointmentAvailability, loadOwnStorefront, loadStorefrontDraft, makeStorefrontEvent, normalizeStorefront, publishStorefront,
   restoreStorefront, sameStorefront, saveReceivedStorefront, saveStorefrontDraft,
   sendStorefrontTo, storefrontEnvelope, themeOf, verifyStorefrontEvent,
   type Storefront,
@@ -97,6 +97,23 @@ describe('V2-09 门面配置与签名', () => {
     const legacy = makeStorefrontEvent(aci, ACI, 9001)
     expect(verifyStorefrontEvent(legacy, aci.publicKey)?.revisitDays).toBeNull()
     teacher.close(); cache.close()
+  })
+
+  it('V2-36 请出天数随签名门面更新；旧门面与撤销设置均为未设', async () => {
+    const teacher = await storeOf(aci), cache = await storeOf(student)
+    try {
+      expect(verifyStorefrontEvent(makeStorefrontEvent(aci, ACI, 1000), aci.publicKey)?.rosterLeaveDays).toBeNull()
+      const groundwork = await loadGroundwork(teacher)
+      await saveGroundwork(teacher, { ...groundwork, invitation: { ...groundwork.invitation, leaveAfterDays: 30 } })
+      const first = await publishStorefront({ store: teacher, identity: aci, storefront: ACI, now: now() })
+      await saveReceivedStorefront(cache, first.event, aci.publicKey)
+      expect(await loadCachedRosterLeaveDays(cache, aci.publicKey)).toBe(30)
+      await saveGroundwork(teacher, { ...groundwork, invitation: { ...groundwork.invitation, leaveAfterDays: null } })
+      const second = await publishStorefront({ store: teacher, identity: aci, storefront: ACI, now: now() })
+      await saveReceivedStorefront(cache, second.event, aci.publicKey)
+      expect(await loadCachedRosterLeaveDays(cache, aci.publicKey)).toBeNull()
+      expect(() => makeStorefrontEvent(aci, ACI, 1000, true, null, null, true, 13)).toThrow('请出天数')
+    } finally { teacher.close(); cache.close() }
   })
 
   it('学生端只从老师本人签名门面读取城市', async () => {

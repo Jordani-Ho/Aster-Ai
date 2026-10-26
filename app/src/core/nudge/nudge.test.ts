@@ -24,6 +24,38 @@ function offer(now: Date): Appointment {
 }
 
 describe('V2-27 固定话术与真实输入', () => {
+  it('V2-36 第 15 天只说一次真实提醒次数，第 23 天退一步；打卡后恢复', () => {
+    const start = '2026-10-01'
+    const firstAt = new Date(2026, 9, 16, 10)
+    const prior = [log(new Date(2026, 9, 3, 10), 'first', { episode: start }), log(new Date(2026, 9, 4, 10), 'daily', { episode: start })]
+    const base = { assignments: [{ ...assignment(), startsOn: start }], activityStartDay: start, rosterLeaveDays: 30 }
+    const fact = chooseNudges(input(firstAt, base), prior)[0]
+    expect(fact).toMatchObject({ kind: 'roster', stage: 'fact', slots: { days: 15, count: 2 } })
+    expect(renderNudge(fact)).toContain('15 天我提醒了你 2 次')
+    const factLog = log(firstAt, 'fact', { kind: 'roster', target: 'self', episode: start })
+    expect(chooseNudges(input(firstAt, base), [...prior, factLog]).some(row => row.kind === 'roster')).toBe(false)
+    const later = new Date(2026, 9, 24, 10)
+    const stepBack = chooseNudges(input(later, base), [...prior, factLog])[0]
+    expect(stepBack).toMatchObject({ kind: 'roster', stage: 'stepback', slots: { days: 23, limit: 30 } })
+    expect(renderNudge(stepBack)).toContain('30 天不打卡')
+    const stepped = log(later, 'stepback', { kind: 'roster', target: 'self', episode: start })
+    expect(chooseNudges(input(new Date(2026, 9, 25, 10), base), [...prior, factLog, stepped])).toEqual([])
+    const checkin = { homeworkId: 'daily-1', at: new Date(2026, 9, 25, 9).toISOString() }
+    expect(chooseNudges(input(new Date(2026, 9, 26, 10), { ...base, checkins: [checkin] }), [...prior, factLog, stepped]).some(row => row.kind === 'homework')).toBe(true)
+    expect(chooseNudges(input(new Date(2026, 9, 26, 10), { ...base, mirrorDays: ['2026-10-25'] }), [...prior, factLog, stepped]).some(row => row.kind === 'homework')).toBe(true)
+    const appointment = { ...offer(new Date(2026, 9, 24, 10)), status: 'accepted' as const, respondedAt: new Date(2026, 9, 25, 9).toISOString() }
+    expect(chooseNudges(input(new Date(2026, 9, 26, 10), { ...base, appointments: [appointment] }), [...prior, factLog, stepped]).some(row => row.kind === 'homework')).toBe(true)
+  })
+
+  it('V2-36 未设天数时第 7/14 天说事实和退一步，不虚构请出期限', () => {
+    const base = { assignments: [{ ...assignment(), startsOn: '2026-10-01' }], activityStartDay: '2026-10-01', rosterLeaveDays: null }
+    const fact = chooseNudges(input(new Date(2026, 9, 8, 10), base), [])[0]
+    expect(fact).toMatchObject({ kind: 'roster', stage: 'fact', slots: { days: 7, count: 0 } })
+    const stepBack = chooseNudges(input(new Date(2026, 9, 15, 10), base), [log(new Date(2026, 9, 8, 10), 'fact', { kind: 'roster', episode: '2026-10-01' })])[0]
+    expect(stepBack.stage).toBe('stepback')
+    expect(renderNudge(stepBack)).not.toContain('请出')
+    expect(() => assertNudgeInputs(input(new Date(2026, 9, 15), { rosterLeaveDays: 13 }))).toThrow('材料')
+  })
   it('禁用词出现在话术里就失败；标题含禁用词或数字缺失则整句不发', () => {
     expect(() => validateNudgeTemplates({ ...NUDGE_TEMPLATES, 'homework.first': '糖尿病会有严重后果' })).toThrow('禁用词')
     expect(renderNudge({ kind: 'homework', target: 'x', episode: '2026-10-25', stage: 'first', slots: { title: '合成练习' } })).toContain('合成练习')

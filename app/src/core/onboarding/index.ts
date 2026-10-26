@@ -22,8 +22,18 @@ export function normalizeSetupToken(value:string):string{return value.replace(/\
 export async function onboardingRequest(identity:Identity,url:string,payload:unknown):Promise<void>{const body=JSON.stringify(payload),authorization=await nip98Authorization(identity.privateKey,url,'POST',body);const res=await fetch(url,{method:'POST',headers:{'content-type':'application/json',authorization},body});if(!res.ok)throw Error(res.status===403?INVITE_ERROR:'暂时未能加入社区，请稍后重试。')}
 export async function acceptInvite(identity:Identity,store:LocalStore,event:Event,url:string){
  if(!validateInvite(event,url))throw Error(INVITE_ERROR)
+ const departed=await store.get('student-roster-leaves',event.pubkey) as {at?:unknown}|undefined
+ if(typeof departed?.at==='string'&&event.created_at<=Math.floor(Date.parse(departed.at)/1000))throw Error(INVITE_ERROR)
  await onboardingRequest(identity,url,{invite:event})
  await addTeacher(store,event.pubkey)
+ await store.put('student-roster-joined',event.pubkey,event.created_at)
+ await store.put('student-roster-pending',event.pubkey,{invite:event} as unknown as import('../store').StoreValue)
+ if(departed){
+  await store.delete('student-roster-leaves',event.pubkey)
+  await store.put('student-nudge-meta','activity-start',new Date().toISOString().slice(0,10))
+  for(const row of await store.list('student-nudges'))await store.delete('student-nudges',row.key)
+  for(const row of await store.list('agent-runs'))if((row.value as {taskId?:unknown})?.taskId==='student-nudge')await store.delete('agent-runs',row.key)
+ }
  // V2-10：第一次加入时记下加入时间，观察周期的第一次从这天算起；再打开邀请不覆盖。
  if(!await store.get('settings','joined-at'))await store.put('settings','joined-at',new Date().toISOString() as unknown as import('../store').StoreValue)
  // Before App starts its shared controller; no second live transport and no coin transaction.

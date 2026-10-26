@@ -59,11 +59,23 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   // 新学生必填项不全时，进馆后第一屏就是基础信息，填好才进首页；老用户不拦，只在首页提示。
   const [mustFill, setMustFill] = useState(false)
   const [nudges, setNudges] = useState<NudgeEvent[]>([])
+  const [leaveNotice, setLeaveNotice] = useState('')
+  const [departedTeacher, setDepartedTeacher] = useState('')
+  const [consultNotice, setConsultNotice] = useState('')
   const pagesStore = scopedStore ?? store
   const pagesIdentity = scopedIdentity ?? identity
   const activeMember = family.find(member => member.account === active) ?? null
   const venue = useTeacherVenue(store)
   const theme = themeOf(venue.active ? venue.venues[venue.active] : null)
+  useEffect(() => {
+    const refresh = () => { void store.list('student-roster-leaves').then(rows => {
+      const latest = rows.map(row => ({ key: row.key, value: row.value as { at?: string; text?: string } })).sort((a, b) => String(b.value.at).localeCompare(String(a.value.at)))[0]
+      setLeaveNotice(typeof latest?.value.text === 'string' ? latest.value.text : '')
+      setDepartedTeacher(latest?.key ?? '')
+    }).catch(() => {}) }
+    refresh(); window.addEventListener('aster:data-changed', refresh)
+    return () => window.removeEventListener('aster:data-changed', refresh)
+  }, [store])
 
   useEffect(() => {
     let live = true, pending = false
@@ -118,6 +130,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   }, [pagesStore, active, sub])
 
   const openConsult = () => {
+    if (leaveNotice && (!venue.active || venue.active === departedTeacher)) { setConsultNotice('请先请老师重新邀请你'); return }
     void consultGate(pagesStore).then(gate => {
       if (gate.allowed) { setSub('consult'); return }
       setBasicsNote(`第一次问诊前，先把基础信息填好。还差：${gate.missing.join('、')}`)
@@ -162,6 +175,8 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
   const style = { '--nl-bg': theme.background, '--nl-accent': theme.primary, '--nl-accent-deep': theme.primary } as CSSProperties
   return <div className="nl-shell" style={style}>
     {modelNotice}
+    {tab === 'today' && leaveNotice && <section className="nl-card" role="status"><h2>与老师的智能体失联</h2><p>{leaveNotice}</p></section>}
+    {tab === 'today' && consultNotice && <p role="status" className="nl-card">{consultNotice}</p>}
     {nudgePanel}
     {tab === 'today' && basicsMissing.length > 0 && <button type="button" className="nl-card basics-banner" onClick={() => { setBasicsNote(''); setSub('basics') }}>
       <strong>基础信息还差：{basicsMissing.join('、')}</strong><span>补齐后老师才看得到您的年龄和八字 ›</span>

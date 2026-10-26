@@ -10,6 +10,8 @@ import { addDays, checkinDay, effectiveDay, localDay, parseDay, schedule } from 
 import { listReceivedRecords } from '../inbox'
 import { listTongueDays } from '../tongue'
 import { loadCachedRevisitDays, loadCachedTeacherCity } from '../storefront'
+import { loadCachedRosterLeaveDays } from '../storefront'
+import { inactivityMilestones, validLeaveDays } from '../roster'
 import { isSameCity } from '../city'
 import { loadProfile } from '../intake/session'
 
@@ -18,9 +20,9 @@ export const BANNED_NUDGE_WORDS = ['诊断', '病', '癌', '高血压', '糖尿'
 const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/
 const DAY_MS = 86_400_000
 const REPEAT_MS = 4 * 60 * 60_000
-const types = ['homework', 'mirror', 'revisit', 'appointment', 'sleep'] as const
+const types = ['homework', 'mirror', 'revisit', 'appointment', 'sleep', 'roster'] as const
 export type NudgeKind = typeof types[number]
-export type NudgeStage = 'first' | 'again' | 'daily' | 'urgent'
+export type NudgeStage = 'first' | 'again' | 'daily' | 'urgent' | 'fact' | 'stepback'
 export interface NudgeEvent { id: string; kind: NudgeKind; target: string; episode: string; stage: NudgeStage; at: string; text: string; actedAt: string | null }
 export interface NudgeVisit { id: string; at: string; kind: 'remote_async' | 'remote_live' | 'in_person'; next: string | null }
 export interface NudgeInputs {
@@ -33,6 +35,8 @@ export interface NudgeInputs {
   visits: NudgeVisit[]
   routine: { wake: string; sleep: string } | null
   revisitDays: number | null
+  rosterLeaveDays?: number | null
+  activityStartDay?: string | null
   remote?: boolean
 }
 export interface NudgeCandidate { kind: NudgeKind; target: string; episode: string; stage: NudgeStage; slots: Record<string, string | number> }
@@ -50,7 +54,7 @@ export function validateNudgeTemplates(value: unknown): Record<string, string> {
     'homework.first', 'homework.again', 'homework.daily', 'homework.daily_progress',
     'mirror.first', 'mirror.again', 'mirror.daily', 'revisit.first', 'revisit.again', 'revisit.daily',
     'revisit.remote.first', 'revisit.remote.again', 'revisit.remote.daily',
-    'appointment.urgent', 'sleep.first',
+    'appointment.urgent', 'sleep.first', 'roster.fact', 'roster.stepback', 'roster.stepback.unset',
   ]
   if (Object.keys(value).length !== required.length || required.some(key => typeof value[key] !== 'string' || !value[key])) throw Error('督促话术缺项')
   for (const [key, line] of Object.entries(value)) {
@@ -64,7 +68,8 @@ export const NUDGE_TEMPLATES = validateNudgeTemplates(JSON.parse(templateBlock[1
 
 /** 数据不足或数据槽含危险词时整句不发；不自行补数字或改写老师标题。 */
 export function renderNudge(candidate: NudgeCandidate): string | null {
-  const key = candidate.kind === 'revisit' && candidate.slots.remote === 1 ? 'revisit.remote.' + candidate.stage : candidate.kind + '.' + (candidate.kind === 'homework' && candidate.stage === 'daily' &&
+  const key = candidate.kind === 'roster' && candidate.stage === 'stepback' && candidate.slots.limit === 0 ? 'roster.stepback.unset'
+    : candidate.kind === 'revisit' && candidate.slots.remote === 1 ? 'revisit.remote.' + candidate.stage : candidate.kind + '.' + (candidate.kind === 'homework' && candidate.stage === 'daily' &&
     ['thisDone', 'thisPlanned', 'lastDone', 'lastPlanned'].every(name => candidate.slots[name] !== undefined) ? 'daily_progress' : candidate.stage)
   const template = NUDGE_TEMPLATES[key]
   if (!template) return null
@@ -83,6 +88,8 @@ export function assertNudgeInputs(input: NudgeInputs): void {
   if (!(input.now instanceof Date) || !Number.isFinite(+input.now) || !Array.isArray(input.assignments) || !Array.isArray(input.checkins)
     || !Array.isArray(input.mirrorDays) || !input.mirrorDays.every(validDay) || (input.mirrorStartDay !== null && !validDay(input.mirrorStartDay)) || !Array.isArray(input.appointments)
     || !Array.isArray(input.visits) || (input.routine !== null && (!object(input.routine) || !CLOCK.test(String(input.routine.wake)) || !CLOCK.test(String(input.routine.sleep))))
+    || (input.rosterLeaveDays !== undefined && input.rosterLeaveDays !== null && !validLeaveDays(input.rosterLeaveDays))
+    || (input.activityStartDay !== undefined && input.activityStartDay !== null && !validDay(input.activityStartDay))
     || (input.revisitDays !== null && !validInterval(input.revisitDays)) || (input.remote !== undefined && typeof input.remote !== 'boolean')) throw Error('督促材料无效')
   if (input.assignments.some(item => {
     if (!object(item) || !object(item.homework) || typeof item.homework.id !== 'string' || !item.homework.id
@@ -93,7 +100,8 @@ export function assertNudgeInputs(input: NudgeInputs): void {
   if (input.appointments.some(item => !object(item) || typeof item.offerId !== 'string' || !item.offerId
     || !['offered', 'requested', 'accepted', 'confirmed', 'declined', 'expired', 'done', 'no_show', 'cancelled'].includes(String(item.status))
     || !Number.isSafeInteger(item.expiresAt) || typeof item.slotStart !== 'string' || !Number.isFinite(Date.parse(item.slotStart))
-    || typeof item.createdAt !== 'string' || !Number.isFinite(Date.parse(item.createdAt)))) throw Error('邀约材料无效')
+    || typeof item.createdAt !== 'string' || !Number.isFinite(Date.parse(item.createdAt))
+    || (item.respondedAt !== undefined && !Number.isFinite(Date.parse(item.respondedAt))))) throw Error('邀约材料无效')
   if (input.visits.some(item => !object(item) || typeof item.id !== 'string' || !['remote_async', 'remote_live', 'in_person'].includes(item.kind) || typeof item.at !== 'string' || !Number.isFinite(Date.parse(item.at)) || (item.next !== null && typeof item.next !== 'string'))) throw Error('病历材料无效')
 }
 
@@ -142,6 +150,26 @@ export function chooseNudges(input: NudgeInputs, logs: readonly NudgeEvent[]): N
   const now = input.now, today = localDay(now), quiet = quietWindow(now, input.routine)
   if (quiet.quiet) return logs.some(row => row.kind === 'sleep' && row.episode === quiet.episode)
     ? [] : [candidate('sleep', 'self', quiet.episode, 'first', {})]
+  const actions = [
+    ...input.checkins.filter(row => Date.parse(row.at) <= +now).map(row => checkinDay(new Date(row.at))),
+    ...input.mirrorDays.filter(day => day <= today),
+    ...input.appointments.flatMap(row => row.respondedAt && Date.parse(row.respondedAt) <= +now ? [localDay(new Date(row.respondedAt))]
+      : row.status === 'requested' && Date.parse(row.createdAt) <= +now ? [localDay(new Date(row.createdAt))] : []),
+  ]
+  const inactivityAnchor = input.activityStartDay ? [input.activityStartDay, ...actions].filter(validDay).sort().at(-1) ?? null : null
+  if (inactivityAnchor) {
+    const days = dayDistance(inactivityAnchor, today)
+    const { fact, stepBack } = inactivityMilestones(input.rosterLeaveDays ?? null)
+    const prior = logs.filter(row => row.kind === 'roster' && row.episode === inactivityAnchor)
+    if (days >= stepBack) {
+      if (!prior.some(row => row.stage === 'stepback')) return [candidate('roster', 'self', inactivityAnchor, 'stepback', { days, limit: input.rosterLeaveDays ?? 0 })]
+      return []
+    }
+    if (days >= fact && !prior.some(row => row.stage === 'fact')) {
+      const count = logs.filter(row => row.kind !== 'roster' && localDay(new Date(row.at)) > inactivityAnchor && Date.parse(row.at) <= +now).length
+      return [candidate('roster', 'self', inactivityAnchor, 'fact', { days, count })]
+    }
+  }
   const result: NudgeCandidate[] = []
   for (const offer of input.appointments) {
     const minutes = Math.ceil((offer.expiresAt - +now) / 60_000)
@@ -190,7 +218,7 @@ export function chooseNudges(input: NudgeInputs, logs: readonly NudgeEvent[]): N
 
 function isNudgeEvent(value: unknown): value is NudgeEvent {
   return object(value) && typeof value.id === 'string' && types.includes(value.kind as NudgeKind)
-    && typeof value.target === 'string' && typeof value.episode === 'string' && ['first', 'again', 'daily', 'urgent'].includes(String(value.stage))
+    && typeof value.target === 'string' && typeof value.episode === 'string' && ['first', 'again', 'daily', 'urgent', 'fact', 'stepback'].includes(String(value.stage))
     && typeof value.at === 'string' && Number.isFinite(Date.parse(value.at)) && typeof value.text === 'string'
     && (value.actedAt === null || typeof value.actedAt === 'string' && Number.isFinite(Date.parse(value.actedAt)))
 }
@@ -214,17 +242,20 @@ export async function reconcileNudges(store: Pick<LocalStore, 'list' | 'put'>, i
 }
 
 export async function collectNudgeInputs(store: LocalStore, settingsStore: LocalStore, identity: Identity, teacher: string | null, now = new Date(), mirrorStartDay: string | null = null): Promise<NudgeInputs> {
-  const [assignmentRows, checkins, mirrorDays, appointments, records, routineRaw, revisitDays, profile, teacherCity] = await Promise.all([
+  const [assignmentRows, checkins, mirrorDays, appointments, records, routineRaw, revisitDays, profile, teacherCity, rosterLeaveDays, joined, rejoined] = await Promise.all([
     store.list('homework'), listCheckins(store), listTongueDays(store), listAppointments(store), listReceivedRecords(store, identity), store.get('settings', 'agent-routine'),
     teacher ? loadCachedRevisitDays(settingsStore, teacher) : Promise.resolve(null),
     loadProfile(store), teacher ? loadCachedTeacherCity(settingsStore, teacher) : Promise.resolve(null),
+    teacher ? loadCachedRosterLeaveDays(settingsStore, teacher) : Promise.resolve(null), settingsStore.get('settings', 'joined-at'), settingsStore.get('student-nudge-meta', 'activity-start'),
   ])
   const routine = object(routineRaw) && typeof routineRaw.wake === 'string' && typeof routineRaw.sleep === 'string' && CLOCK.test(routineRaw.wake) && CLOCK.test(routineRaw.sleep)
     ? { wake: routineRaw.wake, sleep: routineRaw.sleep } : null
   const visits = records.filter(row => !teacher || row.teacher === teacher).map(row => ({
     id: row.encounter.id, at: row.encounter.createdAt, kind: row.encounter.kind, next: row.encounter.outcome?.next.value ?? null,
   }))
-  const input: NudgeInputs = { now, assignments: assignmentRows.map(row => row.value as unknown as Assignment), checkins, mirrorDays, mirrorStartDay, appointments, visits, routine, revisitDays, remote: !isSameCity(profile.city.value, teacherCity) }
+  const input: NudgeInputs = { now, assignments: assignmentRows.map(row => row.value as unknown as Assignment), checkins, mirrorDays, mirrorStartDay, appointments, visits, routine, revisitDays,
+    rosterLeaveDays, activityStartDay: validDay(rejoined) ? rejoined : typeof joined === 'string' && Number.isFinite(Date.parse(joined)) ? localDay(new Date(joined)) : mirrorStartDay,
+    remote: !isSameCity(profile.city.value, teacherCity) }
   assertNudgeInputs(input)
   return input
 }
@@ -234,6 +265,7 @@ export async function runStudentNudges(options: { store: LocalStore; settingsSto
   const { store, settingsStore, identity, teacher } = options
   const now = options.now ?? new Date()
   if (!(now instanceof Date) || !Number.isFinite(+now)) throw Error('督促时间无效')
+  if (!teacher && (await settingsStore.list('student-roster-leaves')).length > 0) return listNudges(store)
   const started = await store.get('student-nudge-meta', 'mirror-start')
   const mirrorStartDay = validDay(started) && started <= localDay(now) ? started : localDay(now)
   if (started !== mirrorStartDay) await store.put('student-nudge-meta', 'mirror-start', mirrorStartDay)

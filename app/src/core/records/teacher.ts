@@ -89,7 +89,7 @@ export async function saveTeacherRecord(store: RecordReader & RecordWriter & Pic
   const record = teacherRecordValue(event)
   if (!record) return null
   await store.put(TEACHER_RECORDS, record.eventId, record as unknown as StoreValue)
-  if (record.student) await store.put(TEACHER_STUDENTS, record.student, { student: record.student })
+  if (record.student && !await store.get?.('teacher-roster-leaves', record.student)) await store.put(TEACHER_STUDENTS, record.student, { student: record.student })
   // 正式病历已保存：删除同一问诊卡各次输入留下的起草副本，不经过智能体执行器。
   for (const row of await store.list('agent-runs')) {
     const value = row.value
@@ -101,6 +101,7 @@ export async function saveTeacherRecord(store: RecordReader & RecordWriter & Pic
 /** 老师认得的学生的名单（只存公钥，不含病历）；收到问诊或签字医案时自动登记。 */
 export async function rememberTeacherStudent(store: RecordWriter, student: string, city?: string | null, cityUpdatedAt?: number): Promise<void> {
   if (typeof student !== 'string' || !HEX64.test(student)) return
+  if (await store.get?.('teacher-roster-leaves', student)) return
   const prior = await store.get?.(TEACHER_STUDENTS, student)
   const base = object(prior) ? prior : {}
   await store.put(TEACHER_STUDENTS, student, {
@@ -184,7 +185,8 @@ export async function teacherStudents(store: RecordReader): Promise<string[]> {
     const student = typeof value?.student === 'string' ? value.student : row.key
     if (typeof student === 'string' && HEX64.test(student)) students.add(student)
   }
-  return canonicalStudents(store, students)
+  const removed = new Set((await store.list('teacher-roster-leaves')).map(row => row.key))
+  return canonicalStudents(store, [...students].filter(student => !removed.has(student)))
 }
 
 // V2-19 只向签字学：同一 encounter 只取最新版本（改过方的那一版才是老师的定稿）。

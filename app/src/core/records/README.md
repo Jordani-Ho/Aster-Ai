@@ -10,6 +10,7 @@
 - V2-19 只向签字学：`teacherCases(store, { forStudent })` 只取老师签了字、且 `judgment`/`plan` 里有老师亲手写过字段（来源 teacher、`note` 不是 `ai_accepted`）的病历；按意见让智能体改过的字段在签字后是 `teacher_directed`，也算“老师改过”。同一 encounter 只取最新版本；当前这位学生自己的病历不重复进医案（它作为旧病历材料带上）；老师亲手改方时写的 `changeReason` 与处方一起给模型。一字未改就签的病历（`ai_accepted`）只计入 `teacherCaseStats(store)` 的「认可」数，不进相似医案，也不接界面。口径来源：`docs/schemas/encounter.md` 第 3 节——接受 AI 草稿时 `note: ai_accepted`，按意见改稿时 `note: teacher_directed`，亲手修改时不写 note。
 - 康币扣费的 `recordHash` 就是这份签名事件 id，账本与医案对得上。
 - 集合 `teacher-students`：老师认得的学生的公钥名单（不含病历内容）；收到问诊或签字医案时自动登记，换手机后靠它逐个向学生要回病历。
+- V2-36：请出学生后只删名单资格并留独立请出记录；签过字的医案仍按原保留期限保管，后续签字或迟到消息不能把旧资格加回来。
 
 ## retention.ts：保留期限
 

@@ -263,6 +263,8 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
 
   const sendPackage = async () => {
     if (!session || busy) return
+    // 请出后这位老师已从“我的老师”移除；以当前可用的老师（外层指定，或本机名单第一位）为准。
+    if (!teacher || session.teacher !== teacher) { setError('请先请老师重新邀请你'); return }
     const allowed = canConfirm(session)
     if (!allowed.ok) { setError(allowed.reason ?? '暂时不能发送'); return }
     setBusy(true); setError('')
@@ -450,7 +452,9 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
         <button type="button" className="nl-primary" disabled={busy || answerText.trim() === ''} onClick={() => void organize()}>补充好了，整理卡片</button>
         <button type="button" className="op-link-button" disabled={busy} onClick={skipToCard}>跳过，直接整理</button>
       </>}
-      {step === 'card' && <button type="button" className="nl-primary" disabled={busy} onClick={() => void sendPackage()}>发给{call}</button>}
+      {step === 'card' && (teacher && teacher === session?.teacher
+        ? <button type="button" className="nl-primary" disabled={busy} onClick={() => void sendPackage()}>发给{call}</button>
+        : <p role="status">请先请老师重新邀请你</p>)}
     </footer>
   </main>
 }

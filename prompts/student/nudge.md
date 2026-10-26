@@ -18,6 +18,9 @@
   "revisit.remote.again": "复诊还没安排，今天可以发一次远程问诊。",
   "revisit.remote.daily": "今天可以发一次远程问诊，告诉老师最近的变化。",
   "appointment.urgent": "老师的邀约还剩 {minutes} 分钟，请回复。",
+  "roster.fact": "这 {days} 天我提醒了你 {count} 次，你还没有行动。",
+  "roster.stepback": "已经 {days} 天没打卡了；老师设的是 {limit} 天不打卡就请出名单。我先不催了，你想好了随时叫我。",
+  "roster.stepback.unset": "已经 {days} 天没有行动了。我先不催了，你想好了随时叫我。",
   "sleep.first": "到你平时的睡觉时间了，先把手机放下。"
 }
 ```

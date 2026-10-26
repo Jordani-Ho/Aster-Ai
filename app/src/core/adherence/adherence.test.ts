@@ -16,6 +16,16 @@ const once = (id: string, date: string): Homework => homework(id, { kind: 'once'
 const assignment = (item: Homework, startsOn: string): Assignment => ({ homework: item, startsOn })
 const check = (homeworkId: string, day: string, time = '09:05:00'): Checkin => ({ homeworkId, at: `${day}T${time}` })
 
+it('V2-36 小结只给当前作业附最后打卡日；没有作业与已完成单次作业不作为请出依据', () => {
+  const active = assignment(daily(), '2026-10-01')
+  expect(adherenceReport([active], [check('h1', '2026-10-03')], '2026-10-31')).toMatchObject({ hasHomework: true, homeworkSince: '2026-10-01', lastCheckinDay: '2026-10-03' })
+  expect(adherenceReport([], [], '2026-10-31')).toMatchObject({ hasHomework: false, homeworkSince: null, lastCheckinDay: null })
+  const finished = assignment(once('once-1', '2026-10-01'), '2026-10-01')
+  expect(adherenceReport([finished], [check('once-1', '2026-10-01')], '2026-10-31')).toMatchObject({ hasHomework: false, homeworkSince: null, lastCheckinDay: null })
+  const short = assignment(daily('short', { durationDays: 3 }), '2026-10-01')
+  expect(adherenceReport([short], [], '2026-10-02')).toMatchObject({ hasHomework: true, homeworkUntil: '2026-10-03' })
+})
+
 it('1: 每天一条作业，连续打卡 5 天 → currentStreak = 5', () => {
   const item = assignment(daily(), '2026-10-01')
   const checkins = ['01', '02', '03', '04', '05'].map(day => check('h1', `2026-10-${day}`))

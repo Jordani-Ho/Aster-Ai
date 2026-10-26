@@ -21,6 +21,7 @@ export interface Appointment {
   capacity: number
   expiresAt: number
   createdAt: string
+  respondedAt?: string
   status: AppointmentStatus
   campaignId?: string
   replacementFor?: string
@@ -55,6 +56,7 @@ function validAppointment(value: unknown): value is Appointment {
     && typeof value.teacher === 'string' && HEX64.test(value.teacher) && validSlot(value.slotStart) && validMinutes(value.minutes)
     && validZone(value.timezone) && Number.isSafeInteger(value.capacity) && (value.capacity as number) >= 1 && (value.capacity as number) <= 20
     && Number.isSafeInteger(value.expiresAt) && typeof value.createdAt === 'string' && Number.isFinite(Date.parse(value.createdAt))
+    && (value.respondedAt === undefined || typeof value.respondedAt === 'string' && Number.isFinite(Date.parse(value.respondedAt)))
     && ['offered', 'requested', 'accepted', 'confirmed', 'declined', 'expired', 'done', 'no_show', 'cancelled'].includes(String(value.status))
     && (value.campaignId === undefined || (typeof value.campaignId === 'string' && ID.test(value.campaignId)))
     && (value.replacementFor === undefined || (typeof value.replacementFor === 'string' && ID.test(value.replacementFor)))
@@ -148,7 +150,7 @@ export async function replyToAppointment(options: ReplyAppointmentOptions): Prom
     throw new Error('这条邀约已过期')
   }
   if (!(await studentRelation(store, current.teacher))) throw new Error('这位老师不在“我的老师”里')
-  const next = { ...current, status: response === 'accept' ? 'accepted' as const : 'declined' as const }
+  const next = { ...current, status: response === 'accept' ? 'accepted' as const : 'declined' as const, respondedAt: now.toISOString() }
   await store.put(APPOINTMENTS, offerId, next as unknown as StoreValue)
   await guardedSend(store, 'student', offerId, current.teacher, envelope('appointment.reply', { offerId, response }), now, options.send)
   return structuredClone(next)

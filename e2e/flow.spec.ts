@@ -251,7 +251,7 @@ test('V2-25 两台设备经真实中继完成邀约、接受、确认并显示�
       groundwork.schedule.duration = 30; groundwork.schedule.capacity = 3
       groundwork.schedule.week = Object.fromEntries(Array.from({ length: 7 }, (_, day) => [String(day), [{ start: '00:00', end: '23:30' }]]))
       groundwork.schedule.exceptions = []
-      groundwork.invitation = { mode: 'review', afterDays: 14 }
+      groundwork.invitation = { mode: 'review', afterDays: 14, leaveAfterDays: null }
       await saveGroundwork(session.store, groundwork)
       const now = new Date()
       const slot = appointmentSlots(groundwork.schedule, { now, days: 1 })[0]
@@ -269,6 +269,73 @@ test('V2-25 两台设备经真实中继完成邀约、接受、确认并显示�
   await expect.poll(async () => (await stored(teacher, 'appointments')).find((row: any) => row.key === offer.offerId)?.value.status, { timeout: 30000 }).toBe('confirmed')
   const todayAppointments = teacher.getByLabel('今天的预约')
   await expect(todayAppointments).toContainText('30 分钟')
+})
+
+test('V2-36 两台设备经真实中继请出、保留原预约、再用新邀请进馆', async ({ people }) => {
+  test.setTimeout(120000)
+  const teacher = people.teacher.page, student = people.student.page
+  await role(teacher, '老师'); await role(student, '学生')
+  await teacher.getByRole('button', { name: '学生', exact: true }).click()
+  await expect(teacher.getByRole('button', { name: '学生', exact: true })).toHaveAttribute('aria-current', 'page')
+  const confirmed = { offerId: 'synthetic-confirmed', student: actors.student.pubkey, teacher: actors.teacher.pubkey,
+    slotStart: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16) + ':00+00:00', minutes: 30, timezone: 'UTC', capacity: 3,
+    expiresAt: Date.now() + 2 * 3600000, createdAt: new Date().toISOString(), status: 'confirmed' }
+  await student.evaluate(async appointment => {
+    const storePath = '/src/core/store/index.ts', { resumeStore } = await import(storePath), session = await resumeStore()
+    try { await session.store.put('appointments', appointment.offerId, appointment) }
+    finally { session.store.close(); session.identity.privateKey.fill(0) }
+  }, confirmed)
+  await teacher.evaluate(async ({ studentKey, appointment }) => {
+    const storePath = '/src/core/store/index.ts', groundworkPath = '/src/core/hall/groundwork.ts', schedulePath = '/src/core/homework/schedule.ts'
+    const { resumeStore } = await import(storePath)
+    const { loadGroundwork, saveGroundwork } = await import(groundworkPath)
+    const { localDay, addDays } = await import(schedulePath)
+    const session = await resumeStore()
+    try {
+      const today = localDay(new Date())
+      const old = localDay(addDays(new Date(), -31))
+      const groundwork = await loadGroundwork(session.store)
+      await session.store.put('appointments', appointment.offerId, appointment)
+      await saveGroundwork(session.store, { ...groundwork, invitation: { ...groundwork.invitation, leaveAfterDays: 30 } })
+      await session.store.put('student-adherence', studentKey, {
+        student: studentKey, weekStart: today, weeklyRate: 0, streak: 0, practiceDays: 0, scheduled: 7, done: 0,
+        hasHomework: true, homeworkSince: old, lastCheckinDay: old, receivedAt: new Date().toISOString(),
+      })
+      window.dispatchEvent(new Event('focus'))
+    } finally { session.store.close(); session.identity.privateKey.fill(0) }
+  }, { studentKey: actors.student.pubkey, appointment: confirmed })
+  await expect.poll(async () => (await stored(teacher, 'teacher-roster-leaves')).length, { timeout: 45000 }).toBe(1)
+  await expect(student.getByRole('heading', { name: '与老师的智能体失联' })).toBeVisible({ timeout: 45000 })
+  await expect(student.getByText('想回来，请老师重新邀请你', { exact: false })).toBeVisible()
+  await expect.poll(async () => (await stored(student, 'settings')).find((row: any) => row.key === 'teachers')?.value ?? [], { timeout: 15000 }).toEqual([])
+  await expect.poll(async () => (await stored(teacher, 'teacher-roster-leaves')).length, { timeout: 15000 }).toBe(1)
+  for (const page of [teacher, student]) expect((await stored(page, 'appointments')).find((row: any) => row.key === confirmed.offerId)?.value.status).toBe('confirmed')
+  await expect(student.locator('.nl-appointment').filter({ hasText: '已确认面诊' })).toBeVisible()
+  await student.getByRole('button', { name: /不舒服？告诉/ }).click()
+  await expect(student.getByText('请先请老师重新邀请你', { exact: true })).toBeVisible()
+  await expect.poll(async () => (await stored(teacher, 'teacher-students')).some((row: any) => row.key === actors.student.pubkey)).toBe(false)
+  await teacher.getByRole('button', { name: '今天', exact: true }).click()
+  await expect(teacher.getByRole('heading', { name: '今天请出了谁' })).toBeVisible()
+  await student.waitForTimeout(1100)
+  const invite = await teacher.evaluate(async base => {
+    const storePath = '/src/core/store/index.ts', onboardingPath = '/src/core/onboarding/index.ts'
+    const { resumeStore } = await import(storePath)
+    const { makeInvite } = await import(onboardingPath)
+    const session = await resumeStore()
+    try { return makeInvite(session.identity, base + '/invite/redeem') }
+    finally { session.store.close(); session.identity.privateKey.fill(0) }
+  }, runtime.baseURL)
+  await student.evaluate(async ({ event, base }) => {
+    const storePath = '/src/core/store/index.ts', onboardingPath = '/src/core/onboarding/index.ts'
+    const { resumeStore } = await import(storePath)
+    const { acceptInvite } = await import(onboardingPath)
+    const session = await resumeStore()
+    try { await acceptInvite(session.identity, session.store, event, base + '/invite/redeem') }
+    finally { session.store.close(); session.identity.privateKey.fill(0) }
+  }, { event: invite, base: runtime.baseURL })
+  await student.reload(); await role(student, '学生')
+  await expect.poll(async () => (await stored(teacher, 'teacher-students')).some((row: any) => row.key === actors.student.pubkey), { timeout: 30000 }).toBe(true)
+  expect((await stored(student, 'student-roster-leaves')).length).toBe(0)
 })
 
 test('V2-25b 学生主动预约经真实中继确认，排班取消后收到通知并显示老师城市', async ({ people }) => {
