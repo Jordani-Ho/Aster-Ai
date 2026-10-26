@@ -16,5 +16,5 @@ export async function fillJoinBasics(page: Page, alias = '合成学生'): Promis
   await page.getByRole('button', { name: '保存', exact: true }).click()
   // CI 偶发：保存后没进首页。失败时把页面上的字打出来，便于定位。
   try { await expect(page.locator('[data-page=student-today]')).toBeVisible({ timeout: 20000 }) }
-  catch (cause) { throw Error('保存基础信息后没有进学生首页，页面显示：' + (await page.locator('body').innerText()).replace(/\s*\n\s*/g, ' | ').slice(0, 1500), { cause }) }
+  catch (cause) { throw Error('保存基础信息后没有进学生首页，页面显示：' + (await page.locator('body').innerText()).replace(/\s*\n\s*/g, ' | ').slice(-700), { cause }) }
 }

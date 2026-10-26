@@ -97,7 +97,6 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
   const updateSession = (next: IntakeSession | null) => { sessionRef.current = next; setSession(next) }
 
   useEffect(() => {
-    void loadTeachers(store).then(setTeachers).catch(() => {})
     void refreshProfile(store).then(setProfile).catch(() => { void loadProfile(store).then(setProfile).catch(() => {}) })
     void intakeDefaults(store).then(setDefaults).catch(() => {})
     void heavenNow(store).then(setHeaven).catch(() => {})
@@ -106,8 +105,17 @@ export function ConsultPage({ store, modelStore, identity, llm, sendConsult, mem
     void loadDraft(store).then(draft => { if (draft && sessionRef.current === null) { updateSession(draft); setStatus(draft.phase === 'confirm' ? '已读回上次未发出的卡片。' : '已读回上次未发送的草稿。') } }).catch(() => {})
   }, [store, herbStore])
 
+  useEffect(() => {
+    let active = true
+    const refresh = () => { void loadTeachers(store).then(rows => { if (active) setTeachers(rows) }).catch(() => {}) }
+    refresh()
+    window.addEventListener('aster:data-changed', refresh)
+    return () => { active = false; window.removeEventListener('aster:data-changed', refresh) }
+  }, [store])
+
   const memberOption = member && profile ? { member: { age: profile.age.value } } : undefined
-  const teacher = venueTeacher ?? teachers[0] ?? ''
+  // undefined 是独立使用问诊页时未指定老师；null 是外层明确没有可用的馆。
+  const teacher = venueTeacher === undefined ? teachers[0] ?? '' : venueTeacher ?? ''
   const call = (teacherName || '').trim() || '老师'
 
   useEffect(() => {
