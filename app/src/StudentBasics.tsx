@@ -105,8 +105,8 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
 
       <section className="nl-card" aria-label="身份与出生">
         <h2>您是谁</h2>
-        <label className={'basics-field' + required('alias')}>称呼<input aria-label="称呼" value={alias} maxLength={30} disabled={busy} onChange={event => setAlias(event.target.value)} placeholder="老师怎么称呼您" /></label>
-        <fieldset className={'basics-field' + required('gender')} disabled={busy}>
+        <label className={'basics-field' + required('alias')}>称呼<input aria-label="称呼" value={alias} maxLength={30} disabled={busy || !loaded} onChange={event => setAlias(event.target.value)} placeholder="老师怎么称呼您" /></label>
+        <fieldset className={'basics-field' + required('gender')} disabled={busy || !loaded}>
           <legend>性别</legend>
           <div className="basics-choices">
             {(['male', 'female', 'other'] as const).map(value => <label key={value} className="basics-choice">
@@ -114,18 +114,18 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
             </label>)}
           </div>
         </fieldset>
-        <label className={'basics-field' + required('birthDate')}>出生日期<input aria-label="出生日期" type="date" value={birthDate} disabled={busy} onChange={event => setBirthDate(event.target.value)} /></label>
-        <label className={'basics-field' + required('birthShichen')}>出生时辰<select aria-label="出生时辰" value={shichen} disabled={busy} onChange={event => setShichen(event.target.value as Shichen | '' | 'unknown')}>
+        <label className={'basics-field' + required('birthDate')}>出生日期<input aria-label="出生日期" type="date" value={birthDate} disabled={busy || !loaded} onChange={event => setBirthDate(event.target.value)} /></label>
+        <label className={'basics-field' + required('birthShichen')}>出生时辰<select aria-label="出生时辰" value={shichen} disabled={busy || !loaded} onChange={event => setShichen(event.target.value as Shichen | '' | 'unknown')}>
           <option value="">请选择</option>
           {SHICHEN_NAMES.map(name => <option key={name} value={name}>{name}时</option>)}
           <option value="unknown">实在不知道</option>
         </select></label>
-        <label className={'basics-field' + required('birthPlace')}>出生地<select aria-label="出生地" value={birthPlace} disabled={busy} onChange={event => setBirthPlace(event.target.value)}>
+        <label className={'basics-field' + required('birthPlace')}>出生地<select aria-label="出生地" value={birthPlace} disabled={busy || !loaded} onChange={event => setBirthPlace(event.target.value)}>
           <option value="">请选择</option>
           {cities.map(item => <option key={item.nameZh} value={item.nameZh}>{item.nameZh}</option>)}
         </select></label>
         <p className="basics-why">出生日期、时辰和出生地只留在这部手机上，老师<strong>看不到具体的日子和时辰</strong>。我们会把它们换算成你的“健康八字”，老师看到的只是年龄和八字。八字是老师辨证施治的关键参考，填得准，对调理你的身体、帮你康复更有帮助。</p>
-        <label className={'basics-field' + required('city')}>现在住在哪个城市<select aria-label="居住城市" value={city} disabled={busy} onChange={event => setCity(event.target.value)}>
+        <label className={'basics-field' + required('city')}>现在住在哪个城市<select aria-label="居住城市" value={city} disabled={busy || !loaded} onChange={event => setCity(event.target.value)}>
           <option value="">请选择</option>
           {cities.map(item => <option key={item.nameZh} value={item.nameZh}>{item.nameZh}</option>)}
         </select></label>
@@ -134,21 +134,21 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
       <section className="nl-card" aria-label="健康与作息">
         <h2>身体和作息</h2>
         <div className={'basics-routine' + required('routine')}>
-          <label className="basics-field">平时几点起<input aria-label="平时几点起" type="time" value={wake} disabled={busy} onChange={event => setWake(event.target.value)} /></label>
-          <label className="basics-field">平时几点睡<input aria-label="平时几点睡" type="time" value={sleep} disabled={busy} onChange={event => setSleep(event.target.value)} /></label>
+          <label className="basics-field">平时几点起<input aria-label="平时几点起" type="time" value={wake} disabled={busy || !loaded} onChange={event => setWake(event.target.value)} /></label>
+          <label className="basics-field">平时几点睡<input aria-label="平时几点睡" type="time" value={sleep} disabled={busy || !loaded} onChange={event => setSleep(event.target.value)} /></label>
         </div>
         <p className="nl-quiet">下面几项有就填，没有可以空着。填了的既往病史、在用药、过敏会在问诊时带进卡片，您可以改。</p>
-        <label className="basics-field">既往病史（有就填）<textarea aria-label="既往病史" rows={2} value={history} disabled={busy} onChange={event => setHistory(event.target.value)} placeholder="以前得过什么病" /></label>
-        <label className="basics-field">在用药（有就填）<textarea aria-label="在用药" rows={2} value={meds} disabled={busy} onChange={event => setMeds(event.target.value)} placeholder="正在吃的药" /></label>
-        <label className="basics-field">过敏（有就填）<textarea aria-label="过敏" rows={2} value={allergies} disabled={busy} onChange={event => setAllergies(event.target.value)} placeholder="对什么过敏" /></label>
-        <label className="basics-field">西医诊断（有就填）<textarea aria-label="西医诊断" rows={2} value={diagnoses} disabled={busy} onChange={event => setDiagnoses(event.target.value)} placeholder="医院给过的诊断，一行一条；只留在本机" /></label>
+        <label className="basics-field">既往病史（有就填）<textarea aria-label="既往病史" rows={2} value={history} disabled={busy || !loaded} onChange={event => setHistory(event.target.value)} placeholder="以前得过什么病" /></label>
+        <label className="basics-field">在用药（有就填）<textarea aria-label="在用药" rows={2} value={meds} disabled={busy || !loaded} onChange={event => setMeds(event.target.value)} placeholder="正在吃的药" /></label>
+        <label className="basics-field">过敏（有就填）<textarea aria-label="过敏" rows={2} value={allergies} disabled={busy || !loaded} onChange={event => setAllergies(event.target.value)} placeholder="对什么过敏" /></label>
+        <label className="basics-field">西医诊断（有就填）<textarea aria-label="西医诊断" rows={2} value={diagnoses} disabled={busy || !loaded} onChange={event => setDiagnoses(event.target.value)} placeholder="医院给过的诊断，一行一条；只留在本机" /></label>
       </section>
 
       {confirmBirth && <div className="nl-card basics-confirm" role="alertdialog" aria-label="确认修改出生信息">
         <p>改出生日期或时辰会影响八字推算。确定要改吗？</p>
         <div className="basics-confirm-actions">
-          <button type="button" disabled={busy} onClick={() => setConfirmBirth(false)}>先不改</button>
-          <button type="button" className="nl-primary" disabled={busy} onClick={() => void save(true)}>确定修改</button>
+          <button type="button" disabled={busy || !loaded} onClick={() => setConfirmBirth(false)}>先不改</button>
+          <button type="button" className="nl-primary" disabled={busy || !loaded} onClick={() => void save(true)}>确定修改</button>
         </div>
       </div>}
       {error && <p role="alert" className="nl-danger-strong">{error}</p>}
