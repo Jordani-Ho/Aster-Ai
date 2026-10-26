@@ -1,5 +1,5 @@
 import { MemberStore } from './members.js'
-import { INVITE_ROUTES, validInvite, seedAllowed, cleanupSetupFiles } from './invite.js'
+import { INVITE_ROUTES, ONBOARDING_ROUTES, validInvite, seedAllowed, coreSeedAllowed, redeemTeacherRecommendation, redeemCorePromotion, cleanupSetupFiles, cleanupCoreSetupFiles } from './invite.js'
 import { createPushService, PUSH_ROUTES } from './push/index.js'
 import { createServer } from 'node:http'
 import { appendFileSync, readFileSync } from 'node:fs'
@@ -20,6 +20,11 @@ function loadConfig(path) {
 
 export function createGateway(config, { fetchUpstream = fetch } = {}) {
   const members = new MemberStore(config.membersFile)
+  // V2-37：旧名单不做迁移；只从已认领部署口令识别那位历史老师，其他成员不推断角色。
+  try {
+    const seed = JSON.parse(readFileSync(config.seedTokenFile, 'utf8'))
+    if (typeof seed.usedFor === 'string') members.recognizeLegacyTeacher(seed.usedFor)
+  } catch { /* 新部署或无种子时没有旧老师身份可导入。 */ }
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
   const upstreamTimeoutMs = config.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS
   const push = config.push ? createPushService({ file: config.push.subscriptionsFile ?? './push-subscriptions.json', endpointHosts: config.push.endpointHosts, send: config.push.send }) : null
@@ -189,7 +194,7 @@ export function createGateway(config, { fetchUpstream = fetch } = {}) {
         } else if (read.aborted) {
           status = 499
         } else {
-          const auth = authenticate(req, read.body, INVITE_ROUTES.includes(req.url))
+          const auth = authenticate(req, read.body, ONBOARDING_ROUTES.includes(req.url))
           status = auth.status
           pubkey = auth.pubkey ?? ''
           if (status === 401) reply(res, 401, 'unauthorized')
@@ -200,10 +205,30 @@ export function createGateway(config, { fetchUpstream = fetch } = {}) {
             } else if (INVITE_ROUTES.includes(req.url)) {
             let body
             try { body = JSON.parse(read.body) } catch { status = 400; reply(res,400,'invalid json'); return }
-            const url=(config.publicUrl ?? 'http://' + req.headers.host) + '/invite/redeem'
-            const valid=req.url==='/invite/redeem' ? validInvite(body?.invite,url,members) : seedAllowed(config,members,body?.token,pubkey)
-            if(!valid){status=403;reply(res,403,'invitation unavailable')}
-            else {members.add(pubkey);if(req.url==='/invite/seed')cleanupSetupFiles(config);status=200;res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}')}
+            const base=config.publicUrl ?? 'http://' + req.headers.host
+            if(req.url==='/invite/core-status'){
+              status=200;res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({teacher:members.isTeacher(pubkey),core:members.isCoreMember(pubkey)}))
+            }else if(req.url==='/invite/redeem'){
+              const valid=validInvite(body?.invite,base+'/invite/redeem',members)
+              if(!valid){status=403;reply(res,403,'邀请暂不可用，请向老师要一个新链接')}
+              else {members.add(pubkey);status=200;res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}')}
+            }else if(req.url==='/invite/seed'){
+              const valid=seedAllowed(config,members,body?.token,pubkey)
+              if(!valid){status=403;reply(res,403,'登记口令已失效，请联系部署者')}
+              else {members.addTeacher(pubkey);cleanupSetupFiles(config);status=200;res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}')}
+            }else if(req.url==='/invite/core-seed'){
+              const valid=coreSeedAllowed(config,members,body?.token,pubkey)
+              if(!valid){status=403;reply(res,403,'核心成员登记链接已失效或已使用')}
+              else {members.addCoreMember(pubkey);cleanupCoreSetupFiles(config);status=200;res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}')}
+            }else if(req.url==='/invite/teacher'){
+              const valid=redeemTeacherRecommendation(config,body?.recommendation,base+'/invite/teacher',members,pubkey)
+              if(!valid){status=403;reply(res,403,'老师推荐链接已失效、已使用或暂不可用，请联系推荐人')}
+              else {status=200;res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}')}
+            }else if(req.url==='/invite/core-add'){
+              const valid=redeemCorePromotion(config,body?.promotion,base+'/invite/core-add',members,pubkey)
+              if(!valid){status=403;reply(res,403,'核心成员邀请已失效、已使用或暂不可用，请联系邀请人')}
+              else {status=200;res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}')}
+            }
           } else if (req.url === ROUTE || req.url === PROXY_ROUTE) status = await forward(req, res, read.body)
           else if (!push) { status = 503; reply(res, 503, 'push unavailable') }
           else {

@@ -52,11 +52,13 @@ M1-08：网页提醒见 push/README.md；gateway/push 为唯一有状态组件�
 
 ## M1-17 邀请与成员热更新
 
-`POST /invite/redeem` 与 `/invite/seed` 同样要求完整普通NIP-98、请求体摘要、防重放、体积和限流；只有这两条可由尚未入群的请求签名人调用，不给非成员开放模型或推送。redeem验证现有成员签发、绑定本部署、最长7天的邀请后，登记请求签名人。
+`POST /invite/redeem`、`/invite/seed`、`/invite/core-seed`、`/invite/teacher`、`/invite/core-add` 都要求普通 NIP-98、请求体摘要、防重放、体积和限流。成员文件兼容旧数组；新写入时保存成员、老师和核心成员身份。旧名单不整体迁移，只依据本机 `seed.json.usedFor` 认出旧部署口令登记的老师，其余旧成员不推断角色。学生邀请只接受老师签名。
+
+`core-seed.json` 只存核心登记口令的 SHA-256 与 `usedFor`；成功后申请身份登记为老师和核心成员，并删除本机 `core-member-code.txt` 与 `core-member.html`。核心成员对 `/invite/teacher` 签发最长 7 天的一次性推荐事件；新老师扫码后，网关把该事件绑定到首次请求身份，写入推荐者、老师、时间、理由，并登记老师身份。推荐记录存在本机 `teacher-recommendations.json`，日志与响应不含理由。`/invite/core-status` 只给成员身份签名查询；核心成员可签发 `/invite/core-add` 一次性晋升邀请，目标须是已登记老师。部署口令 `/invite/seed` 保留为没有核心成员时的老师登记兜底，不授予核心身份。
 
 成员名单由MemberStore原子写临时文件、fsync、rename；每次鉴权重读，不重启就生效。M1单进程文件存储，不支持多个网关同时写同一文件。Docker必须挂载可写目录（内测为 `/app/data/members.json`），不能绑定只读单文件。重跑部署只增补配置成员，不覆盖邀请已加入成员。
 
-可选 `seedTokenFile` 只存部署口令SHA256及usedFor。首次有效请求先原子认领到请求签名人，再写成员；崩溃后只允许同一人重试，别人不能重复认领。口令不进日志/回复；未配置则无此入口能力。第一位老师仍由部署口令的持有者确定，页面选择角色不构成服务器授权。
+`seedTokenFile` 与 `coreSeedTokenFile` 都只存口令 SHA-256 及 `usedFor`。首次有效请求原子认领口令，同一身份可在中断后重试，其他身份不能认领。口令不进日志或响应；页面选择角色本身不构成服务器授权。
 
 邀请不保存学生资料，没有用户业务数据库。后台日志规则保持原有四字段，不记录邀请、口令或请求内容。旧聊天/推送测试及新增邀请/原子失败测试由 `npm test` 执行。
 

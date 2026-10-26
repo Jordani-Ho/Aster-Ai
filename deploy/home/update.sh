@@ -21,7 +21,7 @@ hash_of() {
   node -e "try{process.stdout.write(require('crypto').createHash('sha256').update(require('fs').readFileSync(process.argv[1],'utf8')).digest('hex'))}catch{process.stdout.write('')}" "$1"
 }
 count_members() {
-  node -e "try{const m=JSON.parse(require('fs').readFileSync('data/gateway/members.json','utf8'));process.stdout.write(String(Array.isArray(m)?m.length:0))}catch{process.stdout.write('0')}"
+  node -e "try{const m=JSON.parse(require('fs').readFileSync('data/gateway/members.json','utf8'));process.stdout.write(String(Array.isArray(m)?m.length:Array.isArray(m?.members)?m.members.length:0))}catch{process.stdout.write('0')}"
 }
 
 # 1) 备份成员名单与一次性口令；被删了就先用上次备份恢复。

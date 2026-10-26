@@ -12,3 +12,13 @@ export function takeSetupToken(hash: string = typeof location === 'undefined' ? 
   }
   return normalizeSetupToken(value)
 }
+
+// V2-37：核心成员登记二维码也把一次性口令放在 fragment，页面读到后马上清除地址栏。
+export function takeCoreSeedToken(hash: string = typeof location === 'undefined' ? '' : location.hash): string {
+  const match=/#core=([^&\s]+)/.exec(hash)
+  if(!match)return ''
+  let value=''
+  try{value=decodeURIComponent(match[1])}catch{}
+  if(typeof location!=='undefined'&&typeof history!=='undefined'&&/#core=/.test(location.hash))history.replaceState(null,'',location.pathname+location.search)
+  return normalizeSetupToken(value)
+}

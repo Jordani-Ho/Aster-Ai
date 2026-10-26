@@ -30,9 +30,10 @@ export interface TeacherShellProps {
   status: ReactNode
   ledgerPanel?: ReactNode
   settings: ReactNode
+  coreNotice?: string
 }
 
-export function TeacherShell({ identity, store, stack, llm, gateway, status, settings }: TeacherShellProps) {
+export function TeacherShell({ identity, store, stack, llm, gateway, status, settings, coreNotice }: TeacherShellProps) {
   const [tab, setTab] = useState<Tab>('today')
   const [flow, setFlow] = useState<Flow>(null)
   const [groundwork, setGroundwork] = useState(false)
@@ -71,7 +72,7 @@ export function TeacherShell({ identity, store, stack, llm, gateway, status, set
     {tab === 'today' && <TeacherToday identity={identity} store={store} status={status} send={stack?.send as SendEnvelope | undefined}
       onStartVisit={() => setFlow({ kind: 'visit' })} onOpenRemote={consult => setFlow({ kind: 'remote', consult })} />}
     {tab === 'students' && <TeacherStudentsPage identity={identity} store={store} llm={llm} send={stack?.send as SendEnvelope | undefined} ledger={stack?.ledger ?? null} onVisit={student => setFlow({ kind: 'visit', student })} />}
-    {tab === 'manage' && <TeacherManagement identity={identity} store={store} llm={llm} gateway={gateway} send={stack?.send as SendEnvelope | undefined} ledger={stack?.ledger ?? null} settings={settings} />}
+    {tab === 'manage' && <TeacherManagement identity={identity} store={store} llm={llm} gateway={gateway} send={stack?.send as SendEnvelope | undefined} ledger={stack?.ledger ?? null} settings={settings} coreNotice={coreNotice} />}
     <nav className="nl-tabbar" aria-label="老师底部标签">
       <button type="button" aria-current={tab === 'today' ? 'page' : undefined} onClick={() => setTab('today')}><TodayIcon />今天</button>
       <button type="button" aria-current={tab === 'students' ? 'page' : undefined} onClick={() => setTab('students')}><PeopleIcon />学生</button>

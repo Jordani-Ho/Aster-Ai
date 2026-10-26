@@ -111,6 +111,7 @@ mv -f ../../relay/config.local.toml data/relay-config.toml
 # scripts/safeguard-data.mjs 成对维护（第 3b 步已处理），这里不再各自生成。
 log "社区老师首次登记：口令在 data/setup/teacher-setup-code.txt，扫码网页在 data/setup/teacher-setup.html。不要公开这些文件。"
 log "复制文件里的那串口令后，直接粘贴到「登记口令」框里即可，不用自己编；前后空格和换行会自动去掉。"
+log "核心成员首次登记：发起人用自己的手机扫码 core-member.html；登记成功后核心成员链接自动作废。"
 
 # ---- 7. 网关配置与成员名单 ----
 log "生成网关配置 data/gateway-config.json 与成员名单 data/gateway/members.json…"

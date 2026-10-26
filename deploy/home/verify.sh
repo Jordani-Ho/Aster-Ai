@@ -52,12 +52,13 @@ NODE
 import {existsSync,readFileSync,writeFileSync,mkdirSync} from 'node:fs'
 const file='data/gateway/members.json'
 mkdirSync('data/gateway',{recursive:true})
-let members=[]
-try{const value=JSON.parse(readFileSync(file,'utf8'));if(Array.isArray(value))members=value.filter(item=>typeof item==='string')}catch{}
+let value=[]
+try{value=JSON.parse(readFileSync(file,'utf8'))}catch{}
+const legacy=Array.isArray(value),members=(legacy?value:value?.members??[]).filter(item=>typeof item==='string')
 const unique=[...new Set(members)]
 if(!unique.includes(process.env.PUBKEY)){
   unique.push(process.env.PUBKEY)
-  writeFileSync(file, JSON.stringify(unique), {mode:0o600})
+  writeFileSync(file, JSON.stringify(legacy?unique:{...value,members:unique}), {mode:0o600})
   console.log('已把验收自测成员补进网关成员名单（幂等，只为探测）。')
 }
 NODE

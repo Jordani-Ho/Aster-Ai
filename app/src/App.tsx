@@ -33,7 +33,8 @@ import { StudentShell } from './StudentShell'
 import { loadFamilyMembers, memberIdentity, memberStore, type FamilyMember } from './core/family'
 import { markRestoreNeeded } from './core/records/backup'
 import { runRetentionOnce } from './core/records/retention'
-import { takeSetupToken } from './core/setup-link'
+import { takeCoreSeedToken, takeSetupToken } from './core/setup-link'
+import { claimCorePromotion, readCorePromotionLink, readTeacherRecommendationLink, validateCorePromotion, validateTeacherRecommendation } from './core/teacher-invites'
 
 const TeacherShell = lazy(() => import('./TeacherShell').then(module => ({default:module.TeacherShell})))
 
@@ -51,6 +52,10 @@ const pushGatewayUrl = env.VITE_PUSH_GATEWAY_URL ?? ''
 const pushVapidPublicKey = env.VITE_PUSH_VAPID_PUBLIC_KEY ?? ''
 
 const gateway = gatewayBase(env.VITE_MODEL_GATEWAY_URL ?? pushGatewayUrl)
+// Consume one-time URL fragments once at module load; doing this in a lazy state
+// initializer is unsafe because StrictMode may invoke that initializer twice.
+const initialSetupToken = takeSetupToken()
+const initialCoreSeedToken = takeCoreSeedToken()
 
 export function App() {
   const [modelConfig,setModelConfig]=useState<PersonalModel|null|undefined>(undefined)
@@ -60,6 +65,10 @@ export function App() {
   const [communityNotice,setCommunityNotice]=useState('')
   const [backupModel,setBackupModel]=useState(false)
   const [role, setRole] = useState<Role | null>(null)
+  const [setupToken] = useState(initialSetupToken)
+  const [coreSeedToken,setCoreSeedToken] = useState(initialCoreSeedToken)
+  const [teacherRecommendation,setTeacherRecommendation] = useState<Event|null>(null)
+  const [corePromotionNotice,setCorePromotionNotice] = useState('')
   // V2-15：老师第一次进来先走建馆引导；老部署已有门面/学生/问诊的直接视为已开馆。
   // V2-14：只读仪表盘走同一个单页的 hash，不新增服务器接口；hash 里的钥匙读一次就收起来。
   const [dashboardRoute] = useState(() => location.hash.startsWith('#dashboard'))
@@ -82,15 +91,13 @@ export function App() {
   const stackRef = useRef<Wiring | null>(null)
   const statsSending = useRef(false)
 
+  // V2-37：老师邀请使用 URL fragment；一次性核心登记口令在上面的 state 初始化时读出并清理。
+
   // V2-13：启动即注册现有 sw.js（只管推送通知），“添加到主屏幕”不再依赖先开提醒。
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
     void navigator.serviceWorker.register('/sw.js').catch(() => {})
   }, [])
-
-  // V2-31：扫码登记链接的 #setup=<口令> 由建馆引导读取；这里兜底清掉，
-  // 避免在其它入口打开时把口令留在地址栏（口令一次性、用完作废）。
-  useEffect(() => { if (location.hash.startsWith('#setup=')) takeSetupToken() }, [])
 
   // V2-14：只记录错误类型，不记内容；统计只读这些次数。
   useEffect(() => {
@@ -144,6 +151,14 @@ export function App() {
       if (cancelled) { session.store.close(); session.identity.privateKey.fill(0); return }
       const {store,identity: person}=session
       storeRef.current=store;identityRef.current=person
+      let teacherTicket:Event|null=null,corePromotion:Event|null=null
+      try{
+        teacherTicket=readTeacherRecommendationLink(location.href)
+        corePromotion=readCorePromotionLink(location.href)
+        if(teacherTicket&&!validateTeacherRecommendation(teacherTicket,gateway+'/invite/teacher')){teacherTicket=null;throw Error('老师推荐链接已失效、已使用或暂不可用，请联系推荐人')}
+        if(corePromotion&&!validateCorePromotion(corePromotion,gateway+'/invite/core-add')){corePromotion=null;throw Error('核心成员邀请已失效、已使用或暂不可用，请联系邀请人')}
+        if(teacherTicket)setTeacherRecommendation(teacherTicket)
+      }catch(cause){setError(cause instanceof Error?cause.message:'邀请暂不可用')}
       try {
         // V2-07：带 reidentify 标记的是换机找回链接（学生换手机 / 老师换手机），与普通邀请分开处理。
         const recoveryLink=readReidentifyLink(location.href)
@@ -161,7 +176,7 @@ export function App() {
           }else{
             setError(INVITE_ERROR)
           }
-        }else{
+        }else if(!teacherTicket&&!corePromotion&&!coreSeedToken){
           const invitation=readInviteLink(location.href)
           if(invitation){
             // V2-09：邀请核验失败或过期只提示，不显示门面；门面必须由邀请里的老师本人签名。
@@ -184,7 +199,17 @@ export function App() {
       } catch (cause) {setError(cause instanceof Error&&cause.message===INVITE_ERROR?INVITE_ERROR:'暂时未能加入社区，请稍后重新打开邀请。')}
       if(cancelled){store.close();person.privateKey.fill(0);return}
       const saved=await store.get('settings','role') as {role?:Role}|undefined
-      const nextRole=saved?.role??null
+      const nextRole=(teacherTicket||coreSeedToken)?'teacher':saved?.role??null
+      if((teacherTicket||coreSeedToken)&&saved?.role!=='teacher')await store.put('settings','role',{role:'teacher'})
+      if(corePromotion){
+        if(saved?.role==='teacher'){
+          try{
+            await claimCorePromotion(person,gateway,corePromotion)
+            history.replaceState(null,'',location.pathname+location.search)
+            setCorePromotionNotice('已成为核心成员，现在可以推荐老师。')
+          }catch(cause){setError(cause instanceof Error?cause.message:'核心成员邀请暂时无法使用')}
+        }else setError('这份邀请只适用于已经登记的老师。')
+      }
       // V2-15：老师端先判定这座馆开没开；老部署有门面/学生/问诊就跳过引导。
       // 新馆开馆后还要等第一位学生加入（completedAt）才算走完引导。
       let opened: boolean | null = null
@@ -346,7 +371,7 @@ export function App() {
     return <main style={{ fontFamily: 'system-ui', padding: 16, maxWidth: 480, margin: '0 auto' }}><h1>知衡</h1><p>正在准备…</p></main>
   }
   if (role === 'teacher' && store && identity && hallOpened === false) {
-    return <OpeningGuide identity={identity} store={store} gateway={gateway} send={stack?.send as SendEnvelope | undefined} modelGateway={modelGateway} modelConfig={modelConfig} onModelSaved={saveOwnModel} onDone={() => setHallOpened(true)} />
+    return <OpeningGuide identity={identity} store={store} gateway={gateway} send={stack?.send as SendEnvelope | undefined} modelGateway={modelGateway} modelConfig={modelConfig} onModelSaved={saveOwnModel} onDone={() => setHallOpened(true)} setupToken={setupToken} coreSeedToken={coreSeedToken} teacherRecommendation={teacherRecommendation} onRegistrationComplete={()=>{setCoreSeedToken('');setTeacherRecommendation(null)}} />
   }
   if(identity&&role==='student'&&store&&!modelConfig&&!communityConfig){
     if(modelConfig===undefined||communityConfig===undefined)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1><p>正在读取接入设置…</p></main>
@@ -357,7 +382,7 @@ export function App() {
   // M1-22：学生壳用“当前家人”的分片存储与身份，设置区仍用根身份；家人切换在今天页顶部。
   if (store && identity && role === 'student') return <StudentShell store={store} identity={identity} llm={llm} stack={stack} stackStatus={activeStatus} modelNotice={modelNotice} modelSettings={modelSettings} family={memberOptions} active={active} onSwitch={setActive} memberStore={activeStore ?? store} memberIdentity={activeIdentity ?? identity} sendConsult={activeStack?.sendConsult} sendEnvelope={activeStack?.send} onFamilyChanged={refreshFamily}
     notifySelf={async () => { if (pushGatewayUrl && pushVapidPublicKey) await createPushClient({ gatewayUrl: pushGatewayUrl, vapidPublicKey: pushVapidPublicKey, secretKey: identity.privateKey }).notifySubscribedSelf(identity.publicKey) }} />
-  if (role==='teacher' && store && identity) return <Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherShell identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} status={<>{modelNotice}<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p></>} ledgerPanel={<LedgerSettings managed flat identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} llm={llm}/>} settings={<details><summary>设置</summary>
+  if (role==='teacher' && store && identity) return <Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherShell identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} coreNotice={corePromotionNotice} status={<>{modelNotice}<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p></>} ledgerPanel={<LedgerSettings managed flat identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} llm={llm}/>} settings={<details><summary>设置</summary>
       <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button onClick={()=>void chooseRole('student')}>我是学生</button></details>
       {modelSettings}<TongueLevelSettings store={store}/><TemplateSettings store={store}/><TeacherListSettings store={store}/><PilotSettings store={store}/>
       <PushSettings identity={identity}/>
