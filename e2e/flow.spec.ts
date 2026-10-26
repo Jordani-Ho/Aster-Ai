@@ -285,6 +285,8 @@ test('V2-36 两台设备经真实中继请出、保留原预约、再用新邀�
     try { await session.store.put('appointments', appointment.offerId, appointment) }
     finally { session.store.close(); session.identity.privateKey.fill(0) }
   }, confirmed)
+  await intake(student, 'SYNTHETIC_PENDING_BEFORE_LEAVE')
+  await expect(student.getByRole('button', { name: /^发给/ })).toBeVisible()
   await teacher.evaluate(async ({ studentKey, appointment }) => {
     const storePath = '/src/core/store/index.ts', groundworkPath = '/src/core/hall/groundwork.ts', schedulePath = '/src/core/homework/schedule.ts'
     const { resumeStore } = await import(storePath)
@@ -305,9 +307,12 @@ test('V2-36 两台设备经真实中继请出、保留原预约、再用新邀�
     } finally { session.store.close(); session.identity.privateKey.fill(0) }
   }, { studentKey: actors.student.pubkey, appointment: confirmed })
   await expect.poll(async () => (await stored(teacher, 'teacher-roster-leaves')).length, { timeout: 45000 }).toBe(1)
+  await expect.poll(async () => (await stored(student, 'settings')).find((row: any) => row.key === 'teachers')?.value ?? [], { timeout: 45000 }).toEqual([])
+  await expect(student.getByText('请先请老师重新邀请你', { exact: true })).toBeVisible({ timeout: 15000 })
+  await expect(student.getByRole('button', { name: /^发给/ })).toHaveCount(0)
+  await student.getByRole('button', { name: '返回', exact: true }).click()
   await expect(student.getByRole('heading', { name: '与老师的智能体失联' })).toBeVisible({ timeout: 45000 })
   await expect(student.getByText('想回来，请老师重新邀请你', { exact: false })).toBeVisible()
-  await expect.poll(async () => (await stored(student, 'settings')).find((row: any) => row.key === 'teachers')?.value ?? [], { timeout: 15000 }).toEqual([])
   await expect.poll(async () => (await stored(teacher, 'teacher-roster-leaves')).length, { timeout: 15000 }).toBe(1)
   for (const page of [teacher, student]) expect((await stored(page, 'appointments')).find((row: any) => row.key === confirmed.offerId)?.value.status).toBe('confirmed')
   await expect(student.locator('.nl-appointment').filter({ hasText: '已确认面诊' })).toBeVisible()
