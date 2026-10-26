@@ -61,6 +61,9 @@ function clockLabel(at: number): string {
 export function OpeningGuide({ identity, store, gateway, send, modelGateway, modelConfig, onModelSaved, onDone }: OpeningGuideProps) {
   const [loaded, setLoaded] = useState(false)
   const [step, setStep] = useState<GuideStep>(1)
+  // 本次引导里刚测通的模型；上层 modelConfig 可能还没刷新，第 2、4 步的提示以两者任一为准。
+  const [modelSaved, setModelSaved] = useState(false)
+  const hasModel = !!modelConfig || modelSaved
   // V2-31：扫码链接 #setup=<口令> 在第 2 步自动填好；读到时立刻从地址栏清掉。
   const [token, setToken] = useState(() => takeSetupToken())
   const [displayName, setDisplayName] = useState('')
@@ -171,6 +174,7 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
       const saved = { ...config, testedAt: new Date().toISOString() }
       await savePersonalModel(store, saved)
       onModelSaved(saved)
+      setModelSaved(true)
       await persist(2)
     } catch (cause) {
       setError(cause instanceof Error && cause.message === '先填模型账户密钥' ? '先填模型账户密钥' : connectionError(cause))
@@ -277,7 +281,7 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
       {header}{progress}
       {errorLine}
       <section aria-label="登记为社区老师">
-        <p className="op-eyebrow">{modelConfig ? '模型已接好 ✓' : '模型以后再接'}</p>
+        <p className="op-eyebrow">{hasModel ? '模型已接好 ✓' : '模型以后再接'}</p>
         <h1 className="op-title">先登记您这位老师</h1>
         <p className="op-desc">填一个学生认得的称呼。<br />登记好，就可以起馆名了。</p>
         <div className="op-card">
@@ -332,7 +336,7 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
         <div className="op-card op-open-card">
           {draft.intro && <p>{draft.intro}</p>}
           <ul className="op-checks">
-            <li>{modelConfig ? '✓ 模型已接好' : '模型还没设，可以以后补'}</li>
+            <li>{hasModel ? '✓ 模型已接好' : '模型还没设，可以以后补'}</li>
             <li>✓ 老师已登记</li>
             <li>✓ 门面已备好</li>
           </ul>
