@@ -299,7 +299,7 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
             <label>登记口令<input type="password" autoComplete="off" disabled={busy} value={token} placeholder="粘贴收到的登记口令（空格和换行会自动去掉）" onChange={event => { setToken(normalizeSetupToken(event.target.value)); setError('') }} /></label>
             <p className="op-card-note">在部署电脑上打开 <code>data/setup/teacher-setup.html</code>，用这部手机扫码，口令会自动填好。</p>
             <p className="op-card-note">也可以手动粘贴：口令在部署电脑的 <code>data/setup/teacher-setup-code.txt</code>。</p>
-            <p className="op-card-note">这是一次性登记口令，登记成功后会自动作废。</p>
+            <p className="op-card-note">这是一次性登记口令，<strong>用过就作废</strong>，登记成功后口令文件和扫码网页会被自动删掉。</p>
             <p className="op-card-note">还没有核心成员时，部署口令仍可作为首次老师登记的兜底。</p>
           </>}
         </div>
