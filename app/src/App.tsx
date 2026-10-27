@@ -27,6 +27,7 @@ import { StorefrontWelcome } from './StorefrontWelcome'
 import type { Event } from 'nostr-tools/pure'
 import type { LocalStore } from './core/store'
 import { createWiring, type Wiring } from './core/wiring'
+import { sendPendingRosterJoin } from './core/roster'
 import { createPushClient } from './core/push'
 import { TeacherListSettings } from './TeacherListSettings'
 import { StudentShell } from './StudentShell'
@@ -311,6 +312,9 @@ export function App() {
     setWelcomeBusy(true); setError('')
     try {
       await acceptInvite(person, savedStore, welcome.invitation, gateway + '/invite/redeem')
+      // 已在用的学生再接受一位老师的邀请时，中继早已连上，不会再触发“连上后补发”；这里当场把“我进馆了”发给这位老师。
+      const running = stackRef.current
+      if (running) void sendPendingRosterJoin(savedStore, running.send).catch(() => {})
       await markRestoreNeeded(savedStore)
       history.replaceState(null, '', location.pathname + location.search)
       setWelcome(null)
