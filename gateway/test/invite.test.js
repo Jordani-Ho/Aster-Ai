@@ -8,6 +8,7 @@ import {createServer} from 'node:http'
 import {generateSecretKey,getPublicKey,finalizeEvent} from 'nostr-tools/pure'
 import {createGateway} from '../server.js'
 import {MemberStore} from '../members.js'
+import {coreSeedAllowed} from '../invite.js'
 const teacher=generateSecretKey(),student=generateSecretKey(),outsider=generateSecretKey(),founder=generateSecretKey(),nextTeacher=generateSecretKey()
 const listen=s=>new Promise(r=>s.listen(0,'127.0.0.1',()=>r('http://127.0.0.1:'+s.address().port)))
 const close=s=>new Promise(r=>{s.closeAllConnections?.();s.close(r)})
@@ -62,7 +63,10 @@ it('V2-37 只有老师签出的学生邀请可兑换，学生自己签的邀请�
  assert.ok(!state.teachers.includes(getPublicKey(student)))
 }))
 
-it('V2-37 核心登记链接一次性认领为老师和核心成员，日志不含令牌',()=>fixture(async({url,file,coreSeedTokenFile,logFile,setupDir})=>{
+it('V2-37b 核心登记不授予老师身份，核心成员可推荐老师但不能签学生邀请',()=>fixture(async({url,file,coreSeedTokenFile,logFile,setupDir})=>{
+ assert.equal((await post(url,'/invite/seed',teacher,{token:'SYNTHETIC_DEPLOYMENT_TOKEN'})).status,200)
+ assert.equal((await post(url,'/invite/redeem',founder,{invite:invite(teacher,url)})).status,200)
+ assert.deepEqual(await (await post(url,'/invite/core-status',founder,{})).json(),{teacher:false,core:false})
  assert.equal((await post(url,'/invite/core-seed',founder,{token:'wrong'})).status,403)
  assert.equal((await post(url,'/invite/core-seed',founder,{token:'SYNTHETIC_CORE_TOKEN'})).status,200)
  assert.equal((await post(url,'/invite/core-seed',founder,{token:'SYNTHETIC_CORE_TOKEN'})).status,403)
@@ -70,14 +74,37 @@ it('V2-37 核心登记链接一次性认领为老师和核心成员，日志不�
  assert.equal((await post(url,'/invite/seed',nextTeacher,{token:'SYNTHETIC_DEPLOYMENT_TOKEN'})).status,403)
  const state=JSON.parse(readFileSync(file,'utf8'))
  assert.ok(state.members.includes(getPublicKey(founder)))
- assert.ok(state.teachers.includes(getPublicKey(founder)))
+ assert.ok(!state.teachers.includes(getPublicKey(founder)))
+ assert.ok(state.teachers.includes(getPublicKey(teacher)))
  assert.ok(state.coreMembers.includes(getPublicKey(founder)))
+ assert.deepEqual(await (await post(url,'/invite/core-status',founder,{})).json(),{teacher:false,core:true})
+ assert.equal((await post(url,'/invite/redeem',student,{invite:invite(founder,url)})).status,403)
+ assert.equal((await post(url,'/invite/teacher',nextTeacher,{recommendation:recommendation(founder,url)})).status,200)
+ assert.equal((await post(url,'/invite/core-add',nextTeacher,{promotion:promotion(founder,url)})).status,200)
  assert.equal(JSON.parse(readFileSync(coreSeedTokenFile,'utf8')).usedFor,getPublicKey(founder))
  assert.equal(existsSync(join(setupDir,'core-member-code.txt')),false)
  assert.equal(existsSync(join(setupDir,'core-member.html')),false)
  assert.ok(existsSync(join(setupDir,'keep.txt')))
  assert.ok(!readFileSync(logFile,'utf8').includes('SYNTHETIC_CORE_TOKEN'))
 },true,true))
+
+it('V2-37b 已登记老师成为核心成员后仍是老师',()=>fixture(async({url,file})=>{
+ assert.equal((await post(url,'/invite/seed',teacher,{token:'SYNTHETIC_DEPLOYMENT_TOKEN'})).status,200)
+ assert.equal((await post(url,'/invite/core-seed',teacher,{token:'SYNTHETIC_CORE_TOKEN'})).status,200)
+ const state=JSON.parse(readFileSync(file,'utf8'))
+ assert.ok(state.teachers.includes(getPublicKey(teacher)))
+ assert.ok(state.coreMembers.includes(getPublicKey(teacher)))
+ assert.equal((await post(url,'/invite/redeem',student,{invite:invite(teacher,url)})).status,200)
+},true))
+
+it('V2-37b 核心登记认领后若名单写入中断，只允许同一身份重试',()=>fixture(async({coreSeedTokenFile})=>{
+ const record=JSON.parse(readFileSync(coreSeedTokenFile,'utf8'))
+ record.usedFor=getPublicKey(founder)
+ writeFileSync(coreSeedTokenFile,JSON.stringify(record))
+ const members={hasCoreMembers:()=>false}
+ assert.equal(coreSeedAllowed({coreSeedTokenFile},members,'SYNTHETIC_CORE_TOKEN',getPublicKey(student)),false)
+ assert.equal(coreSeedAllowed({coreSeedTokenFile},members,'SYNTHETIC_CORE_TOKEN',getPublicKey(founder)),true)
+},true))
 
 it('V2-37 核心成员推荐绑定首次扫码身份、记本机记录且不能复用',()=>fixture(async({url,file,recommendationsFile,logFile})=>{
  const ticket=recommendation(teacher,url,'synthetic recommendation reason')

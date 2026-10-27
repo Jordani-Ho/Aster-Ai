@@ -98,7 +98,7 @@ function writeCoreHtml({svg,baseUrl,tokenHash}){
   <h1>发起人用自己的手机扫码登记</h1>
   <p>这是一次性核心成员登记，只由部署者在本机生成。</p>
   <div class="card"><div class="qr">${svg}</div></div>
-  <p class="hint">扫码后选择“我是老师”，在建馆第 2 步点“登记，下一步”。</p>
+  <p class="hint">扫码后登记为核心成员，原有使用身份不变。</p>
   <p class="hint">登记成功后，链接和二维码会自动作废。</p>
   <p class="hint">部署网址：${escapeHtml(baseUrl)}</p>
 </main>

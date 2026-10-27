@@ -8,18 +8,20 @@ async function openTeacherSettings(page:import('@playwright/test').Page){
   await page.locator('.hall-row').filter({hasText:'设置'}).click()
 }
 
-test('V2-37 核心成员推荐老师登记、开馆邀学生；普通老师看不到推荐入口，晋升后才出现',async({people,browser})=>{
+async function openStudentSettings(page:import('@playwright/test').Page){
+  const back=page.locator('.nl-back')
+  if(await back.count())await back.first().click()
+  await page.getByRole('navigation',{name:'学生底部标签'}).getByRole('button',{name:'我',exact:true}).click()
+  await page.locator('.me-setting-row').click()
+}
+
+test('V2-37 核心学生推荐老师登记、开馆邀学生；普通老师晋升后才出现推荐入口',async({people,browser})=>{
   test.setTimeout(180000)
-  const founder=people.teacher.page,student=people.student.page
-  // 内测部署的一次性核心登记二维码由合成口令代替；使用正式签名请求路径。
-  await founder.evaluate(async()=>{
-    const storePath='/src/core/store/index.ts',onboardingPath='/src/core/onboarding/index.ts'
-    const {resumeStore}=await import(storePath),{onboardingRequest}=await import(onboardingPath),session=await resumeStore()
-    try{await onboardingRequest(session.identity,location.origin+'/invite/core-seed',{token:'SYNTHETIC_CORE_TOKEN'})}
-    finally{session.store.close();session.identity.privateKey.fill(0)}
-  })
-  await founder.reload()
-  await openTeacherSettings(founder)
+  const founder=people.student.page,student=founder
+  // 学生手机扫核心登记码，仍留在学生端。
+  await founder.evaluate(()=>{location.hash='#core=SYNTHETIC_CORE_TOKEN'})
+  await expect(founder.locator('[data-page=student-today]')).toBeVisible()
+  await openStudentSettings(founder)
   const reason=founder.getByLabel('为什么推荐这位老师',{exact:true})
   await expect(reason).toBeVisible()
   await reason.fill('合成推荐理由：愿意长期陪伴学生。')
@@ -72,7 +74,7 @@ test('V2-37 核心成员推荐老师登记、开馆邀学生；普通老师看�
     await expect(newTeacher.getByRole('button',{name:'推荐一位老师',exact:true})).toHaveCount(0)
 
     // 核心成员签发晋升链接；同一位老师兑换后，核心操作才出现。
-    await openTeacherSettings(founder)
+    await openStudentSettings(founder)
     await founder.getByRole('button',{name:'邀请已登记老师成为核心成员',exact:true}).click()
     const promotion=founder.getByLabel('邀请链接',{exact:true})
     await expect(promotion).toBeVisible()

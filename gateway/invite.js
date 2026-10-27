@@ -47,7 +47,6 @@ function tokenAllowed(file,token,caller){
 export function seedAllowed(config,members,token,caller){if(members.hasCoreMembers())return false;return tokenAllowed(config.seedTokenFile,token,caller)}
 export function coreSeedAllowed(config,members,token,caller){
  if(members.hasCoreMembers())return false
- try{const record=JSON.parse(readFileSync(config.coreSeedTokenFile,'utf8'));if(record.usedFor)return false}catch{return false}
  return tokenAllowed(config.coreSeedTokenFile,token,caller)
 }
 

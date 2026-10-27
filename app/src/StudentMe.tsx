@@ -13,6 +13,7 @@ import { TimeSettings } from './TimeSettings'
 import { PushSettings } from './PushSettings'
 import { SelfCheck } from './SelfCheck'
 import { VersionLine } from './VersionLine'
+import { CoreMemberActions } from './CoreMemberActions'
 import { themeOf } from './core/storefront'
 import type { TeacherVenue } from './core/storefront/active'
 import './newui.css'
@@ -31,6 +32,8 @@ export interface StudentMeProps {
   ledger?: { view(teacher: string, student: string): Promise<LedgerView> } | null
   stackStatus: 'offline' | 'connecting' | 'ready' | 'rejected' | 'invalid-message'
   modelSettings?: ReactNode
+  gateway?: string
+  coreNotice?: string
   sendEnvelope?: (recipient: string, envelope: import('./core/transport').Envelope) => Promise<unknown>
   onFamilyChanged?: () => void
   /** V2-23：打开当前身份（本人或正在代管的家人）的基础信息。 */
@@ -39,7 +42,7 @@ export interface StudentMeProps {
 
 const RELATION_LABEL: Record<string, string> = RELATION_LABELS
 
-export function StudentMe({ store, identity, family, onSwitch, venue, ledger, stackStatus, modelSettings, sendEnvelope, onFamilyChanged, onOpenBasics }: StudentMeProps) {
+export function StudentMe({ store, identity, family, onSwitch, venue, ledger, stackStatus, modelSettings, gateway = '', coreNotice, sendEnvelope, onFamilyChanged, onOpenBasics }: StudentMeProps) {
   const [view, setView] = useState<View>('me')
   const [alias, setAlias] = useState('')
   const [members, setMembers] = useState<FamilyMember[]>([])
@@ -69,6 +72,7 @@ export function StudentMe({ store, identity, family, onSwitch, venue, ledger, st
   const theme = themeOf(venue.active ? venue.venues[venue.active] ?? null : null)
 
   if (view === 'settings') return <SubPage title="设置" onBack={close}>
+    <CoreMemberActions identity={identity} gateway={gateway} notice={coreNotice} />
     <details className="nl-section" open><summary>模型、我的时间、通知</summary>
       {modelSettings}
       <TimeSettings store={store} identity={identity} sendEnvelope={sendEnvelope} />
