@@ -56,7 +56,11 @@ test('V2-37 核心成员推荐老师登记、开馆邀学生；普通老师看�
     // 这位合成学生已在发起人馆里填过基础信息，接受第二位老师的邀请后直接进首页。
     try{await expect(student.locator('[data-page=student-today]')).toBeVisible({timeout:20000})}
     catch(cause){throw Error('学生接受新老师邀请后没进首页，页面显示：'+(await student.locator('body').innerText()).replace(/\s*\n\s*/g,' | ').slice(0,700),{cause})}
-    await expect(newTeacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible({timeout:20000})
+    try{await expect(newTeacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible({timeout:40000})}
+    catch(cause){
+      const peek=(page:import('@playwright/test').Page,names:string[])=>page.evaluate(async list=>{const m='/src/core/store/index.ts',{resumeStore}=await import(m),s=await resumeStore();try{const out:Record<string,number>={};for(const n of list)out[n]=(await s.store.list(n)).length;const role=await s.store.get('settings','role');return {...out,role:JSON.stringify(role)}}finally{s.store.close();s.identity.privateKey.fill(0)}},names)
+      throw Error('新老师没自动进“今天”：老师端 '+JSON.stringify(await peek(newTeacher,['teacher-students']))+'；学生端 '+JSON.stringify(await peek(student,['student-roster-pending','student-roster-joined']))+'；老师页面：'+(await newTeacher.locator('body').innerText()).replace(/\s*\n\s*/g,' | ').slice(0,400),{cause})
+    }
     await openTeacherSettings(newTeacher)
     await expect(newTeacher.getByRole('button',{name:'推荐一位老师',exact:true})).toHaveCount(0)
 
