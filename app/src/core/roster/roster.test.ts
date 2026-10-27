@@ -5,11 +5,36 @@ import { openStore } from '../store'
 import { addTeacher, createInbox, listReceivedRecords, loadTeachers } from '../inbox'
 import { loadGroundwork, saveGroundwork } from '../hall/groundwork'
 import { makeInvite } from '../onboarding'
-import { dueForLeave, validLeaveDays, inactivityMilestones, runDailyRosterLeaves, receiveRosterJoin, listRosterLeaves, ROSTER_LEAVE_TEXT } from './index'
+import { dueForLeave, validLeaveDays, inactivityMilestones, runDailyRosterLeaves, receiveRosterJoin, sendPendingRosterJoin, listRosterLeaves, ROSTER_LEAVE_TEXT } from './index'
 
 describe('V2-36 名单资格与提醒节奏', () => {
   const today = '2026-10-31'
   const report = { hasHomework: true, homeworkSince: '2026-09-01', lastCheckinDay: '2026-09-30' }
+
+  it('接受邀请与中继连上同时触发补发时，同一条进馆消息只发一次，失败保留待发', async () => {
+    const student = createIdentity(), teacher = createIdentity()
+    const store = await openStore(student, { factory: new IDBFactory() })
+    try {
+      await store.put('student-roster-pending', teacher.publicKey, { invite: 'synthetic' })
+      let release!: () => void, started!: () => void
+      const sending = new Promise<void>(resolve => { release = resolve })
+      const entered = new Promise<void>(resolve => { started = resolve })
+      let calls = 0
+      const send = async () => { calls++; started(); await sending }
+      const first = sendPendingRosterJoin(store, send)
+      await entered
+      const second = sendPendingRosterJoin(store, send)
+      release()
+      await Promise.all([first, second])
+      expect(calls).toBe(1)
+      expect(await store.get('student-roster-pending', teacher.publicKey)).toBeUndefined()
+      await store.put('student-roster-pending', teacher.publicKey, { invite: 'synthetic' })
+      await expect(sendPendingRosterJoin(store, async () => { throw Error('offline') })).rejects.toThrow('offline')
+      expect(await store.get('student-roster-pending', teacher.publicKey)).toBeDefined()
+      await sendPendingRosterJoin(store, async () => {})
+      expect(await store.get('student-roster-pending', teacher.publicKey)).toBeUndefined()
+    } finally { store.close() }
+  })
 
   it('默认不请出；30 天只请出 31 天未打卡的有作业学生', () => {
     expect(dueForLeave(report, null, today)).toBe(false)

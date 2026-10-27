@@ -23,7 +23,8 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
   settingsStore?: LocalStore
   sendEnvelope?: SendEnvelope
 }) {
-  const [loaded, setLoaded] = useState(false)
+  const [loadedStore, setLoadedStore] = useState<LocalStore | null>(null)
+  const loaded = loadedStore === store
   const [alias, setAlias] = useState('')
   const [gender, setGender] = useState<BasicsGender | ''>('')
   const [birthDate, setBirthDate] = useState('')
@@ -50,10 +51,11 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let active = true
+    setLoadedStore(null)
     setError('')
     void loadBasics(store).then(value => {
       if (!active) return
-      fill(value); setMissing(missingLabels(value)); setLoaded(true)
+      fill(value); setMissing(missingLabels(value)); setLoadedStore(store)
     }).catch(() => { if (active) setError('基础信息暂时读不出来，请点“重新读取”。') })
     return () => { active = false }
   }, [store, attempt])

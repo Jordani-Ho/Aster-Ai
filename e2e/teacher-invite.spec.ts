@@ -32,6 +32,9 @@ test('V2-37 核心成员推荐老师登记、开馆邀学生；普通老师看�
   try{
     await mockModel(newTeacherContext)
     const newTeacher=await newTeacherContext.newPage()
+    await newTeacher.goto('/')
+    await expect(newTeacher.getByRole('heading',{name:'您是老师还是学生？'})).toBeVisible()
+    // 页面已打开，推荐链接只改变 fragment。
     await newTeacher.goto(teacherLink)
     await expect(newTeacher.getByText('建馆 · 第 1 / 5 步',{exact:true})).toBeVisible()
     await connectModel(newTeacher)
@@ -52,11 +55,11 @@ test('V2-37 核心成员推荐老师登记、开馆邀学生；普通老师看�
     const studentLink=await firstInvite.inputValue()
 
     // 真实中继的合成学生接受邀请；老师端收到名册后建馆流程完成。
-    await student.goto(studentLink)
+    // 不刷新已连接的学生页面，直接换邀请 fragment。
+    await student.evaluate(hash=>{location.hash=hash},new URL(studentLink).hash)
     const welcome=student.getByRole('button',{name:'开始使用',exact:true})
-    // 邀请首屏是异步出来的：先等首屏或首页其中之一出现，再决定点不点“开始使用”。
-    await expect(welcome.or(student.locator('[data-page=student-today]'))).toBeVisible({timeout:20000})
-    if(await welcome.isVisible())await welcome.click()
+    await expect(welcome).toBeVisible({timeout:20000})
+    await welcome.click()
     // 这位合成学生已在发起人馆里填过基础信息，接受第二位老师的邀请后直接进首页。
     try{await expect(student.locator('[data-page=student-today]')).toBeVisible({timeout:20000})}
     catch(cause){throw Error('学生接受新老师邀请后没进首页，页面显示：'+(await student.locator('body').innerText()).replace(/\s*\n\s*/g,' | ').slice(0,700),{cause})}
@@ -73,11 +76,8 @@ test('V2-37 核心成员推荐老师登记、开馆邀学生；普通老师看�
     await founder.getByRole('button',{name:'邀请已登记老师成为核心成员',exact:true}).click()
     const promotion=founder.getByLabel('邀请链接',{exact:true})
     await expect(promotion).toBeVisible()
-    // 链接和当前页同一地址、只差 # 后面，goto 不会重新加载；真机上是点开链接重新打开，这里补一次刷新。
-    await newTeacher.goto(await promotion.inputValue());await newTeacher.reload()
-    try{await expect(newTeacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible({timeout:30000})}
-    catch(cause){throw Error('打开晋升链接后没进“今天”，页面显示：'+(await newTeacher.locator('body').innerText()).replace(/\s*\n\s*/g,' | ').slice(0,700),{cause})}
-    await openTeacherSettings(newTeacher)
+    // 已打开设置的老师只改变 fragment，也应立即完成晋升。
+    await newTeacher.goto(await promotion.inputValue())
     await expect(newTeacher.getByRole('button',{name:'推荐一位老师',exact:true})).toBeVisible()
     await expect(newTeacher.getByText('已成为核心成员，现在可以推荐老师。',{exact:true})).toBeVisible()
   }finally{await newTeacherContext.close()}

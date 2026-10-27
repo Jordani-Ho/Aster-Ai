@@ -98,12 +98,20 @@ export async function receiveRosterLeave(store: LocalStore, teacher: string, at:
   await removeTeacher(store, teacher)
   return true
 }
-export async function sendPendingRosterJoin(store: LocalStore, send: (teacher: string, envelope: Envelope) => Promise<unknown>): Promise<void> {
-  for (const row of await store.list('student-roster-pending')) {
-    if (!HEX64.test(row.key) || !object(row.value)) continue
-    await send(row.key, { type: 'roster.join', version: 1, payload: { invite: row.value.invite } })
-    await store.delete('student-roster-pending', row.key)
-  }
+const joinFlushes = new WeakMap<LocalStore, Promise<void>>()
+export function sendPendingRosterJoin(store: LocalStore, send: (teacher: string, envelope: Envelope) => Promise<unknown>): Promise<void> {
+  const previous = joinFlushes.get(store)
+  const next = (previous ? previous.catch(() => {}) : Promise.resolve()).then(async () => {
+    for (const row of await store.list('student-roster-pending')) {
+      if (!HEX64.test(row.key) || !object(row.value)) continue
+      await send(row.key, { type: 'roster.join', version: 1, payload: { invite: row.value.invite } })
+      await store.delete('student-roster-pending', row.key)
+    }
+  })
+  joinFlushes.set(store, next)
+  const cleanup = () => { if (joinFlushes.get(store) === next) joinFlushes.delete(store) }
+  void next.then(cleanup, cleanup)
+  return next
 }
 export async function receiveRosterMessage(store: LocalStore, identity: Identity, message: Message): Promise<void> {
   if (message.envelope.version !== 1 || !object(message.envelope.payload)) return
