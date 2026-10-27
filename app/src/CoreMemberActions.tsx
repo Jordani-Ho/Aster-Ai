@@ -16,7 +16,7 @@ export function CoreMemberActions({identity,gateway,notice=''}:{identity:Identit
     if(!gateway)return
     void coreMemberStatus(identity,gateway).then(value=>{if(active)setCore(value.core)}).catch(()=>{if(active)setCore(false)})
     return()=>{active=false}
-  },[identity,gateway])
+  },[identity,gateway,notice])
   if(!core)return null
   const generate=(type:'teacher'|'promotion')=>{
     setBusy(true);setMessage('');setLink('');setKind(null)

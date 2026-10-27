@@ -202,10 +202,12 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
     expect(t.balance).not.toBeNull();expect(t.code).toBe(s.code)
   })
   const exportRequests:string[]=[]
-  // 打开设置页时会问一次网关“我是不是核心成员”（V2-37），与导出无关；导出本身不得发任何请求。
-  const observe=(request:any)=>{if(/^https?:/.test(request.url())&&!request.url().endsWith('/invite/core-status'))exportRequests.push(request.url())}
-  teacher.on('request',observe)
+  // 设置页会查询核心成员身份；等查询结束后再监控导出期间的全部 HTTP 请求。
+  const coreStatus=teacher.waitForResponse(response=>response.url().endsWith('/invite/core-status'))
   await settings(teacher)
+  await coreStatus
+  const observe=(request:any)=>{if(/^https?:/.test(request.url()))exportRequests.push(request.url())}
+  teacher.on('request',observe)
   const downloadPromise=teacher.waitForEvent('download')
   await teacher.getByRole('button',{name:'导出试点指标',exact:true}).click()
   const csv=await readFile((await (await downloadPromise).path())!,'utf8'),lines=csv.trim().split(/\r?\n/),cells=lines[1].split(',')

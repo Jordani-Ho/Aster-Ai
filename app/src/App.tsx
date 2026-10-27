@@ -90,6 +90,7 @@ export function App() {
   const storeRef = useRef<LocalStore | null>(null)
   const identityRef = useRef<Identity | null>(null)
   const stackRef = useRef<Wiring | null>(null)
+  const startupLinkRef = useRef('')
   const statsSending = useRef(false)
 
   // V2-37：老师邀请使用 URL fragment；一次性核心登记口令在上面的 state 初始化时读出并清理。
@@ -152,19 +153,21 @@ export function App() {
       if (cancelled) { session.store.close(); session.identity.privateKey.fill(0); return }
       const {store,identity: person}=session
       storeRef.current=store;identityRef.current=person
+      const startupLink = location.href
+      startupLinkRef.current = startupLink
       let teacherTicket:Event|null=null,corePromotion:Event|null=null
       try{
-        teacherTicket=readTeacherRecommendationLink(location.href)
-        corePromotion=readCorePromotionLink(location.href)
+        teacherTicket=readTeacherRecommendationLink(startupLink)
+        corePromotion=readCorePromotionLink(startupLink)
         if(teacherTicket&&!validateTeacherRecommendation(teacherTicket,gateway+'/invite/teacher')){teacherTicket=null;throw Error('老师推荐链接已失效、已使用或暂不可用，请联系推荐人')}
         if(corePromotion&&!validateCorePromotion(corePromotion,gateway+'/invite/core-add')){corePromotion=null;throw Error('核心成员邀请已失效、已使用或暂不可用，请联系邀请人')}
         if(teacherTicket)setTeacherRecommendation(teacherTicket)
       }catch(cause){setError(cause instanceof Error?cause.message:'邀请暂不可用')}
       try {
         // V2-07：带 reidentify 标记的是换机找回链接（学生换手机 / 老师换手机），与普通邀请分开处理。
-        const recoveryLink=readReidentifyLink(location.href)
+        const recoveryLink=readReidentifyLink(startupLink)
         if(recoveryLink){
-          history.replaceState(null,'',location.pathname+location.search)
+          if(location.href===startupLink)history.replaceState(null,'',location.pathname+location.search)
           if(recoveryLink.kind==='student'){
             // 学生换手机：老师身份没变。先照常加入社区，再填称呼发认回请求。
             await acceptInvite(person,store,recoveryLink.event,gateway+'/invite/redeem')
@@ -178,12 +181,12 @@ export function App() {
             setError(INVITE_ERROR)
           }
         }else if(!teacherTicket&&!corePromotion&&!coreSeedToken){
-          const invitation=readInviteLink(location.href)
+          const invitation=readInviteLink(startupLink)
           if(invitation){
             // V2-09：邀请核验失败或过期只提示，不显示门面；门面必须由邀请里的老师本人签名。
             if(!validateInvite(invitation,gateway+'/invite/redeem'))throw Error(INVITE_ERROR)
             const teachers=await loadTeachers(store)
-            const linked=readStorefrontLink(location.href,invitation.pubkey)
+            const linked=readStorefrontLink(startupLink,invitation.pubkey)
             if(linked)await saveReceivedStorefront(store,linked.event,invitation.pubkey).catch(()=>{})
             const cached=await loadCachedStorefront(store,invitation.pubkey)
             const decision=inviteWelcome(teachers,invitation.pubkey,linked?.storefront??cached)
@@ -191,7 +194,7 @@ export function App() {
               // 首屏先认门；点“开始使用”才走原来的加入流程。
               if(!cancelled)setWelcome({invitation,storefront:decision.storefront})
             }else{
-              await acceptInvite(person,store,invitation,gateway+'/invite/redeem');history.replaceState(null,'',location.pathname+location.search)
+              await acceptInvite(person,store,invitation,gateway+'/invite/redeem');if(location.href===startupLink)history.replaceState(null,'',location.pathname+location.search)
               // V2-05：重新进入社区后，连上中继时自动向老师要回保留期内的记录。
               await markRestoreNeeded(store)
             }
@@ -206,7 +209,7 @@ export function App() {
         if(saved?.role==='teacher'){
           try{
             await claimCorePromotion(person,gateway,corePromotion)
-            history.replaceState(null,'',location.pathname+location.search)
+            if(location.href===startupLink)history.replaceState(null,'',location.pathname+location.search)
             setCorePromotionNotice('已成为核心成员，现在可以推荐老师。')
           }catch(cause){setError(cause instanceof Error?cause.message:'核心成员邀请暂时无法使用')}
         }else setError('这份邀请只适用于已经登记的老师。')
@@ -233,6 +236,74 @@ export function App() {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true; stackRef.current?.close(); stackRef.current = null; storeRef.current?.close(); storeRef.current = null; identityRef.current?.privateKey.fill(0); identityRef.current = null }
   }, [])
+
+  // 已打开的页面只改变 fragment 时，沿用启动时的邀请校验与接收流程。
+  useEffect(() => {
+    const store = storeRef.current, person = identityRef.current
+    if (!identity || !store || !person) return
+    let active = true, sequence = 0
+    const handle = async (link: string) => {
+      const turn = ++sequence
+      if (!/^#(?:teacher-invite|core-add|invite)=/.test(new URL(link).hash)) return
+      const current = () => active && turn === sequence
+      const clearLink = () => {
+        if (location.href === link) history.replaceState(null, '', location.pathname + location.search)
+      }
+      setError('')
+      try {
+        const recommendation = readTeacherRecommendationLink(link)
+        if (recommendation) {
+          if (!validateTeacherRecommendation(recommendation, gateway + '/invite/teacher')) throw Error('老师推荐链接已失效、已使用或暂不可用，请联系推荐人')
+          let opened = false
+          try {
+            const hall = await loadHall(store)
+            opened = hall ? Boolean(hall.completedAt) : await hasOpenedHall(store, person)
+          } catch { /* 未开馆时仍可从引导继续 */ }
+          if (!current()) return
+          await store.put('settings', 'role', { role: 'teacher' })
+          if (!current()) return
+          setWelcome(null); setRecovery(null); setTeacherRecommendation(recommendation)
+          setHallOpened(opened); setRole('teacher')
+          return
+        }
+        const promotion = readCorePromotionLink(link)
+        if (promotion) {
+          if (!validateCorePromotion(promotion, gateway + '/invite/core-add')) throw Error('核心成员邀请已失效、已使用或暂不可用，请联系邀请人')
+          const saved = await store.get('settings', 'role') as { role?: Role } | undefined
+          if (saved?.role !== 'teacher') throw Error('这份邀请只适用于已经登记的老师。')
+          await claimCorePromotion(person, gateway, promotion)
+          if (!current()) return
+          clearLink()
+          setCorePromotionNotice('已成为核心成员，现在可以推荐老师。')
+          return
+        }
+        const invitation = readInviteLink(link)
+        if (!invitation || !validateInvite(invitation, gateway + '/invite/redeem')) throw Error(INVITE_ERROR)
+        const teachers = await loadTeachers(store)
+        const linked = readStorefrontLink(link, invitation.pubkey)
+        if (linked) await saveReceivedStorefront(store, linked.event, invitation.pubkey).catch(() => {})
+        const cached = await loadCachedStorefront(store, invitation.pubkey)
+        if (!current()) return
+        const decision = inviteWelcome(teachers, invitation.pubkey, linked?.storefront ?? cached)
+        if (decision.kind === 'welcome') {
+          setRecovery(null); setWelcome({ invitation, storefront: decision.storefront })
+        } else {
+          await acceptInvite(person, store, invitation, gateway + '/invite/redeem')
+          const running = stackRef.current
+          if (running) void sendPendingRosterJoin(store, running.send).catch(() => {})
+          await markRestoreNeeded(store)
+          if (!current()) return
+          clearLink(); setRole('student')
+        }
+      } catch (cause) {
+        if (current()) setError(cause instanceof Error ? cause.message : '邀请暂不可用')
+      }
+    }
+    const changed = () => { void handle(location.href) }
+    window.addEventListener('hashchange', changed)
+    if (location.href !== startupLinkRef.current) changed()
+    return () => { active = false; window.removeEventListener('hashchange', changed) }
+  }, [identity])
 
   useEffect(()=>{
     if(!identity||!storeRef.current)return
@@ -332,7 +403,7 @@ export function App() {
   const store = storeRef.current
   const stack = stackRef.current
   const activeMember = family.find(member => member.account === active) ?? null
-  const activeStore = store ? (activeMember ? memberStore(store, activeMember.account) : store) : null
+  const activeStore = useMemo(() => store ? (activeMember ? memberStore(store, activeMember.account) : store) : null, [store, activeMember?.account])
   const activeIdentity = useMemo(() => activeMember ? memberIdentity(activeMember) : identity, [identity, activeMember])
   const activeStack = activeMember ? memberStacks.get(activeMember.account) ?? null : stack
   const activeStatus: LinkStatus = activeMember ? memberStatus[activeMember.account] ?? 'offline' : stackStatus
@@ -375,22 +446,22 @@ export function App() {
     return <main style={{ fontFamily: 'system-ui', padding: 16, maxWidth: 480, margin: '0 auto' }}><h1>知衡</h1><p>正在准备…</p></main>
   }
   if (role === 'teacher' && store && identity && hallOpened === false) {
-    return <OpeningGuide identity={identity} store={store} gateway={gateway} send={stack?.send as SendEnvelope | undefined} modelGateway={modelGateway} modelConfig={modelConfig} onModelSaved={saveOwnModel} onDone={() => setHallOpened(true)} setupToken={setupToken} coreSeedToken={coreSeedToken} teacherRecommendation={teacherRecommendation} onRegistrationComplete={()=>{setCoreSeedToken('');setTeacherRecommendation(null)}} />
+    return <>{error && <p role="alert">{error}</p>}<OpeningGuide identity={identity} store={store} gateway={gateway} send={stack?.send as SendEnvelope | undefined} modelGateway={modelGateway} modelConfig={modelConfig} onModelSaved={saveOwnModel} onDone={() => setHallOpened(true)} setupToken={setupToken} coreSeedToken={coreSeedToken} teacherRecommendation={teacherRecommendation} onRegistrationComplete={()=>{setCoreSeedToken('');setTeacherRecommendation(null)}} /></>
   }
   if(identity&&role==='student'&&store&&!modelConfig&&!communityConfig){
     if(modelConfig===undefined||communityConfig===undefined)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1><p>正在读取接入设置…</p></main>
-    return <ModelSettings initial store={store} gateway={modelGateway} current={null} onSaved={saveOwnModel}
-      community={communityOffered?{available:true,busy:communityBusy,error:communityNotice,onStart:()=>void startWithCommunity()}:undefined} />
+    return <>{error && <p role="alert">{error}</p>}<ModelSettings initial store={store} gateway={modelGateway} current={null} onSaved={saveOwnModel}
+      community={communityOffered?{available:true,busy:communityBusy,error:communityNotice,onStart:()=>void startWithCommunity()}:undefined} /></>
   }
   // V2-16：学生端三个底部标签（今天/记录/我），老师端三个标签（今天/学生/我的馆）。模型由 M1-21 的 personal client 提供。
   // M1-22：学生壳用“当前家人”的分片存储与身份，设置区仍用根身份；家人切换在今天页顶部。
-  if (store && identity && role === 'student') return <StudentShell store={store} identity={identity} llm={llm} stack={stack} stackStatus={activeStatus} modelNotice={modelNotice} modelSettings={modelSettings} family={memberOptions} active={active} onSwitch={setActive} memberStore={activeStore ?? store} memberIdentity={activeIdentity ?? identity} sendConsult={activeStack?.sendConsult} sendEnvelope={activeStack?.send} onFamilyChanged={refreshFamily}
-    notifySelf={async () => { if (pushGatewayUrl && pushVapidPublicKey) await createPushClient({ gatewayUrl: pushGatewayUrl, vapidPublicKey: pushVapidPublicKey, secretKey: identity.privateKey }).notifySubscribedSelf(identity.publicKey) }} />
-  if (role==='teacher' && store && identity) return <Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherShell identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} coreNotice={corePromotionNotice} status={<>{modelNotice}<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p></>} ledgerPanel={<LedgerSettings managed flat identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} llm={llm}/>} settings={<details><summary>设置</summary>
+  if (store && identity && role === 'student') return <>{error && <p role="alert">{error}</p>}<StudentShell store={store} identity={identity} llm={llm} stack={stack} stackStatus={activeStatus} modelNotice={modelNotice} modelSettings={modelSettings} family={memberOptions} active={active} onSwitch={setActive} memberStore={activeStore ?? store} memberIdentity={activeIdentity ?? identity} sendConsult={activeStack?.sendConsult} sendEnvelope={activeStack?.send} onFamilyChanged={refreshFamily}
+    notifySelf={async () => { if (pushGatewayUrl && pushVapidPublicKey) await createPushClient({ gatewayUrl: pushGatewayUrl, vapidPublicKey: pushVapidPublicKey, secretKey: identity.privateKey }).notifySubscribedSelf(identity.publicKey) }} /></>
+  if (role==='teacher' && store && identity) return <>{error && <p role="alert">{error}</p>}<Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherShell identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} coreNotice={corePromotionNotice} status={<>{modelNotice}<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p></>} ledgerPanel={<LedgerSettings managed flat identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} llm={llm}/>} settings={<details><summary>设置</summary>
       <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button onClick={()=>void chooseRole('student')}>我是学生</button></details>
       {modelSettings}<TongueLevelSettings store={store}/><TemplateSettings store={store}/><TeacherListSettings store={store}/><PilotSettings store={store}/>
       <PushSettings identity={identity}/>
-    </details>} /></Suspense>
+    </details>} /></Suspense></>
   return <main style={{fontFamily:'system-ui, sans-serif',padding:'24px 16px',maxWidth:480,margin:'0 auto'}}>
     <h1>知衡</h1>{modelNotice}
     {loading&&<p>正在准备…</p>}{error&&<p role="alert">{error}</p>}
