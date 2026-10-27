@@ -100,6 +100,8 @@ jobs:
         run: node e2e/v231.browser.mjs
       - name: Invitation fragment and basics loading browser integration
         run: node e2e/hash-invite.browser.mjs
+      - name: Student core-member registration and teacher invitations
+        run: node e2e/core-student.browser.mjs
       - name: V2-30 posture tool browser integration (capture/import, metrics, drag+sign, trends, local assets)
         run: node e2e/posture.browser.mjs
       - name: V2-32 posture at home browser integration (student capture, package without images, teacher metrics, family)

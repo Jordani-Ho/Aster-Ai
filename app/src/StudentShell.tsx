@@ -34,6 +34,8 @@ export interface StudentShellProps {
   stackStatus: 'offline' | 'connecting' | 'ready' | 'rejected' | 'invalid-message'
   modelNotice?: ReactNode
   modelSettings?: ReactNode
+  gateway?: string
+  coreNotice?: string
   family?: readonly Pick<FamilyMember, 'account' | 'alias'>[]
   active?: number
   onSwitch?: (account: number) => void
@@ -49,7 +51,7 @@ type Tab = 'today' | 'records' | 'me'
 type Sub = 'consult' | 'homework' | 'records' | 'basics' | 'herbs' | null
 
 // V2-16 新外壳：学生端底部三个标签“今天 / 记录 / 我”；V2-17 把记录、问诊、我也按设计稿重画。
-export function StudentShell({ store, identity, llm, stack, stackStatus, modelNotice, modelSettings, family = [], active = 0, onSwitch, memberStore: scopedStore, memberIdentity: scopedIdentity, sendConsult, sendEnvelope, onFamilyChanged, notifySelf }: StudentShellProps) {
+export function StudentShell({ store, identity, llm, stack, stackStatus, modelNotice, modelSettings, gateway = '', coreNotice, family = [], active = 0, onSwitch, memberStore: scopedStore, memberIdentity: scopedIdentity, sendConsult, sendEnvelope, onFamilyChanged, notifySelf }: StudentShellProps) {
   const [tab, setTab] = useState<Tab>('today')
   const [sub, setSub] = useState<Sub>(null)
   // V2-23：基础信息还差哪几项；新学生填全前不能第一次问诊，老用户只提示。
@@ -193,7 +195,7 @@ export function StudentShell({ store, identity, llm, stack, stackStatus, modelNo
       onConsult={openConsult} onHomework={() => setSub('homework')} onCheckedIn={reportAdherence} sendEnvelope={sendEnvelope ?? stack?.send} />}
     {tab === 'records' && <StudentRecordsHome store={pagesStore} identity={pagesIdentity} onOpenAllRecords={() => setSub('records')} />}
     {tab === 'me' && <StudentMe store={store} identity={identity} family={family} active={active} onSwitch={onSwitch}
-      venue={venue} ledger={stack?.ledger ?? null} stackStatus={stackStatus} modelSettings={modelSettings}
+      venue={venue} ledger={stack?.ledger ?? null} stackStatus={stackStatus} modelSettings={modelSettings} gateway={gateway} coreNotice={coreNotice}
       sendEnvelope={sendEnvelope} onFamilyChanged={onFamilyChanged} onOpenBasics={() => { setBasicsNote(''); setSub('basics') }} />}
     <p role="status" className="nl-status" style={{ padding: '0 20px' }}>中继：{stackStatus === 'ready' ? '已连接' : stackStatus === 'connecting' ? '正在连接' : stackStatus === 'rejected' ? '连接未成功，请联系老师' : '尚未连接'}</p>
     <nav className="nl-tabbar" aria-label="学生底部标签">

@@ -7,7 +7,7 @@ export class MemberStore {
   const value=JSON.parse(readFileSync(this.file,'utf8'))
   const state=Array.isArray(value)?{members:value,teachers:[],coreMembers:[]} : value
   const valid=keys=>Array.isArray(keys)&&keys.every(key=>typeof key==='string'&&/^[0-9a-f]{64}$/.test(key))
-  if(!state||!valid(state.members)||!valid(state.teachers)||!valid(state.coreMembers)||state.teachers.some(key=>!state.members.includes(key))||state.coreMembers.some(key=>!state.teachers.includes(key)))throw Error('invalid members file')
+  if(!state||!valid(state.members)||!valid(state.teachers)||!valid(state.coreMembers)||state.teachers.some(key=>!state.members.includes(key))||state.coreMembers.some(key=>!state.members.includes(key)))throw Error('invalid members file')
   const members=[...new Set(state.members)]
   return {members,teachers:[...new Set([...state.teachers,...[...this.legacyTeachers].filter(key=>members.includes(key))])],coreMembers:[...new Set(state.coreMembers)]}
  }
@@ -18,7 +18,7 @@ export class MemberStore {
  isCoreMember(key){return this.state().coreMembers.includes(key)}
  add(key){this.checkKey(key);return this.update(state=>{if(!state.members.includes(key))state.members.push(key)})}
  addTeacher(key){this.checkKey(key);return this.update(state=>{if(!state.members.includes(key))state.members.push(key);if(!state.teachers.includes(key))state.teachers.push(key)})}
- addCoreMember(key){this.checkKey(key);return this.update(state=>{if(!state.members.includes(key))state.members.push(key);if(!state.teachers.includes(key))state.teachers.push(key);if(!state.coreMembers.includes(key))state.coreMembers.push(key)})}
+ addCoreMember(key){this.checkKey(key);return this.update(state=>{if(!state.members.includes(key))state.members.push(key);if(!state.coreMembers.includes(key))state.coreMembers.push(key)})}
  checkKey(key){if(typeof key!=='string'||!/^[0-9a-f]{64}$/.test(key))throw Error('invalid member')}
  update(edit){const state=this.state();edit(state);this.write(state)}
  write(value){

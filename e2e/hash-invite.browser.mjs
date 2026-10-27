@@ -18,7 +18,7 @@ try {
   await expect(founder.getByRole('heading', { name: '您是老师还是学生？' })).toBeVisible()
   const links = await founder.evaluate(async () => {
     const storePath='/src/core/store/index.ts', onboardingPath='/src/core/onboarding/index.ts', invitePath='/src/core/teacher-invites.ts'
-    const {resumeStore}=await import(storePath), {onboardingRequest,makeInvite,inviteLink}=await import(onboardingPath)
+    const {resumeStore}=await import(storePath), {onboardingRequest}=await import(onboardingPath)
     const {makeTeacherRecommendation,teacherRecommendationLink,makeCorePromotion,corePromotionLink}=await import(invitePath)
     const session=await resumeStore()
     try {
@@ -26,7 +26,6 @@ try {
       return {
         teacher:teacherRecommendationLink(location.origin,makeTeacherRecommendation(session.identity,location.origin+'/invite/teacher','合成推荐理由')),
         promotion:corePromotionLink(location.origin,makeCorePromotion(session.identity,location.origin+'/invite/core-add')),
-        student:inviteLink(location.origin,makeInvite(session.identity,location.origin+'/invite/redeem')),
       }
     } finally { session.store.close();session.identity.privateKey.fill(0) }
   })
@@ -37,15 +36,16 @@ try {
   await teacher.goto(links.teacher)
   await expect(teacher.getByText('建馆 · 第 1 / 5 步',{exact:true})).toBeVisible()
   // 准备已登记老师；随后晋升仅改变 fragment。
-  await teacher.evaluate(async () => {
-    const storePath='/src/core/store/index.ts', invitePath='/src/core/teacher-invites.ts', hallPath='/src/core/hall/index.ts'
-    const {resumeStore}=await import(storePath),{readTeacherRecommendationLink,registerRecommendedTeacher}=await import(invitePath),{completeHall}=await import(hallPath)
+  const studentLink = await teacher.evaluate(async () => {
+    const storePath='/src/core/store/index.ts', invitePath='/src/core/teacher-invites.ts', hallPath='/src/core/hall/index.ts', onboardingPath='/src/core/onboarding/index.ts'
+    const {resumeStore}=await import(storePath),{readTeacherRecommendationLink,registerRecommendedTeacher}=await import(invitePath),{completeHall}=await import(hallPath),{makeInvite,inviteLink}=await import(onboardingPath)
     const session=await resumeStore()
     try {
       await registerRecommendedTeacher(session.identity,location.origin,readTeacherRecommendationLink(location.href))
       await session.store.put('settings','role',{role:'teacher'})
       await completeHall(session.store)
       history.replaceState(null,'',location.pathname+location.search)
+      return inviteLink(location.origin,makeInvite(session.identity,location.origin+'/invite/redeem'))
     } finally { session.store.close();session.identity.privateKey.fill(0) }
   })
   await teacher.reload()
@@ -62,12 +62,12 @@ try {
   await expect(student.getByRole('heading',{name:'您是老师还是学生？'})).toBeVisible()
   await student.evaluate(()=>{location.hash='#teacher-invite=broken'})
   await expect(student.getByRole('alert')).toContainText('老师推荐链接已失效')
-  await student.goto(links.student)
+  await student.goto(studentLink)
   await expect(student.getByRole('button',{name:'开始使用',exact:true})).toBeVisible()
   await student.getByRole('button',{name:'开始使用',exact:true}).click()
   await expect(student.getByRole('heading',{name:'接入您的大模型',exact:true})).toBeVisible()
   const repeat = student.waitForResponse(response=>response.url().endsWith('/invite/redeem'))
-  await student.goto(links.student)
+  await student.goto(studentLink)
   expect((await repeat).status()).toBe(200)
   await expect.poll(() => new URL(student.url()).hash).toBe('')
   await expect(student.getByRole('button',{name:'开始使用',exact:true})).toHaveCount(0)

@@ -37,7 +37,6 @@ export interface OpeningGuideProps {
   onModelSaved: (model: PersonalModel) => void
   onDone: () => void
   setupToken?: string
-  coreSeedToken?: string
   teacherRecommendation?: Event | null
   onRegistrationComplete?: () => void
 }
@@ -63,13 +62,13 @@ function clockLabel(at: number): string {
   return `${hours}:${minutes}`
 }
 
-export function OpeningGuide({ identity, store, gateway, send, modelGateway, modelConfig, onModelSaved, onDone, setupToken='', coreSeedToken='', teacherRecommendation=null, onRegistrationComplete }: OpeningGuideProps) {
+export function OpeningGuide({ identity, store, gateway, send, modelGateway, modelConfig, onModelSaved, onDone, setupToken='', teacherRecommendation=null, onRegistrationComplete }: OpeningGuideProps) {
   const [loaded, setLoaded] = useState(false)
   const [step, setStep] = useState<GuideStep>(1)
   // 本次引导里刚测通的模型；上层 modelConfig 可能还没刷新，第 2、4 步的提示以两者任一为准。
   const [modelSaved, setModelSaved] = useState(false)
   const hasModel = !!modelConfig || modelSaved
-  // V2-31/V2-37：一次性登记口令由外层在启动时取出并清理 URL fragment。
+  // V2-31：老师登记口令由外层在启动时取出并清理 URL fragment。
   const [token, setToken] = useState(setupToken)
   const [displayName, setDisplayName] = useState('')
   const [draft, setDraft] = useState<Storefront>(DEFAULT_STOREFRONT)
@@ -192,11 +191,10 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
     if (name === '') { setError('先填一个学生认得的称呼。'); return }
     if (name.length > STOREFRONT_LIMITS.displayName) { setError(`称呼最多 ${STOREFRONT_LIMITS.displayName} 个字。`); return }
     const code = normalizeSetupToken(token)
-    if (!teacherRecommendation&&!coreSeedToken&&code === '') { setError('先粘贴登记口令。'); return }
+    if (!teacherRecommendation&&code === '') { setError('先粘贴登记口令。'); return }
     setBusy(true); setError('')
     try {
       if(teacherRecommendation)await registerRecommendedTeacher(identity,gateway,teacherRecommendation)
-      else if(coreSeedToken)await onboardingRequest(identity,gateway+'/invite/core-seed',{token:coreSeedToken})
       else await onboardingRequest(identity, gateway + '/invite/seed', { token: code })
       setToken('')
       history.replaceState(null,'',location.pathname+location.search)
@@ -295,7 +293,7 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
         <p className="op-desc">填一个学生认得的称呼。<br />登记好，就可以起馆名了。</p>
         <div className="op-card">
           <label>学生怎么称呼您<input value={displayName} maxLength={STOREFRONT_LIMITS.displayName} disabled={busy} placeholder="例如：阿慈老师" onChange={event => { setDisplayName(event.target.value); setError('') }} /></label>
-          {teacherRecommendation ? <p className="op-card-note">一位核心成员推荐您加入知衡。登记链接只能使用一次，7 天内有效。</p> : coreSeedToken ? <p className="op-card-note">您正在登记为知衡核心成员。此链接只能由发起人使用一次。</p> : <>
+          {teacherRecommendation ? <p className="op-card-note">一位核心成员推荐您加入知衡。登记链接只能使用一次，7 天内有效。</p> : <>
             <label>登记口令<input type="password" autoComplete="off" disabled={busy} value={token} placeholder="粘贴收到的登记口令（空格和换行会自动去掉）" onChange={event => { setToken(normalizeSetupToken(event.target.value)); setError('') }} /></label>
             <p className="op-card-note">在部署电脑上打开 <code>data/setup/teacher-setup.html</code>，用这部手机扫码，口令会自动填好。</p>
             <p className="op-card-note">也可以手动粘贴：口令在部署电脑的 <code>data/setup/teacher-setup-code.txt</code>。</p>
@@ -309,7 +307,7 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
         </div>
         {!gateway && <p role="alert" className="nl-danger-strong">还没有配置社区网关，暂时不能登记。</p>}
       </section>
-      <footer className="op-foot"><button type="button" className="nl-primary" disabled={busy || (!teacherRecommendation&&!coreSeedToken&&token.trim() === '') || displayName.trim() === '' || !gateway} onClick={() => void register()}>登记，下一步</button></footer>
+      <footer className="op-foot"><button type="button" className="nl-primary" disabled={busy || (!teacherRecommendation&&token.trim() === '') || displayName.trim() === '' || !gateway} onClick={() => void register()}>登记，下一步</button></footer>
     </main>
   }
 

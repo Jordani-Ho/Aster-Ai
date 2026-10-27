@@ -152,6 +152,8 @@ test('V2-31 全新部署：终端与 teacher-setup.html 都有二维码，口令
   assert.equal(marker[1],createHash('sha256').update(token).digest('hex'))
    const coreToken=(await readFile(path.join(home,CORE_CODE),'utf8')).trim(),coreHtml=await readFile(path.join(home,CORE_HTML),'utf8')
    assert.ok(coreToken.length>=40);assert.ok(!out.includes(coreToken));assert.ok(!coreHtml.includes(coreToken));assert.ok(coreHtml.includes('<svg'))
+   assert.match(coreHtml,/原有使用身份不变/)
+   assert.doesNotMatch(coreHtml,/选择“我是老师”/)
    const coreMarker=/name="core-token-sha256" content="([0-9a-f]{64})"/.exec(coreHtml)
    assert.equal(coreMarker[1],createHash('sha256').update(coreToken).digest('hex'))
   // 还没登记时重跑：保留同一对 seed/口令（二维码与口令绑定，不能每次换）。
