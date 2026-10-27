@@ -74,7 +74,8 @@ test('V2-37 核心成员推荐老师登记、开馆邀学生；普通老师看�
     const promotion=founder.getByLabel('邀请链接',{exact:true})
     await expect(promotion).toBeVisible()
     await newTeacher.goto(await promotion.inputValue())
-    await expect(newTeacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible()
+    try{await expect(newTeacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible({timeout:30000})}
+    catch(cause){throw Error('打开晋升链接后没进“今天”，页面显示：'+(await newTeacher.locator('body').innerText()).replace(/\s*\n\s*/g,' | ').slice(0,700),{cause})}
     await openTeacherSettings(newTeacher)
     await expect(newTeacher.getByRole('button',{name:'推荐一位老师',exact:true})).toBeVisible()
     await expect(newTeacher.getByText('已成为核心成员，现在可以推荐老师。',{exact:true})).toBeVisible()
