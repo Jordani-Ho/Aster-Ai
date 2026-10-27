@@ -50,7 +50,9 @@ test('V2-37 核心成员推荐老师登记、开馆邀学生；普通老师看�
     // 真实中继的合成学生接受邀请；老师端收到名册后建馆流程完成。
     await student.goto(studentLink)
     const welcome=student.getByRole('button',{name:'开始使用',exact:true})
-    if(await welcome.count())await welcome.click()
+    // 邀请首屏是异步出来的：先等首屏或首页其中之一出现，再决定点不点“开始使用”。
+    await expect(welcome.or(student.locator('[data-page=student-today]'))).toBeVisible({timeout:20000})
+    if(await welcome.isVisible())await welcome.click()
     // 这位合成学生已在发起人馆里填过基础信息，接受第二位老师的邀请后直接进首页。
     try{await expect(student.locator('[data-page=student-today]')).toBeVisible({timeout:20000})}
     catch(cause){throw Error('学生接受新老师邀请后没进首页，页面显示：'+(await student.locator('body').innerText()).replace(/\s*\n\s*/g,' | ').slice(0,700),{cause})}
