@@ -29,8 +29,12 @@ async function backToToday(page:Page){
 async function openAdvice(page:Page){
  const summary=page.getByText('今天的完整建议',{exact:true})
  await summary.waitFor({state:'visible',timeout:20000})
- const details=summary.locator('..')
- if(await details.getAttribute('open')===null)await summary.click()
+ // 首页数据到齐时会重绘，刚展开的“完整建议”可能又收起；展开后确认建议区真的在，不在就再展开一次。
+ await expect(async()=>{
+  const details=summary.locator('..')
+  if(await details.getAttribute('open')===null)await summary.click()
+  await expect(page.getByRole('region',{name:'每日建议'})).toBeVisible({timeout:2000})
+ }).toPass({timeout:20000})
 }
 test('M1-20 four pages: time order, three taps to sign, revision stays draft, four 375px screenshots',async({people})=>{
  const teacher=people.teacher.page,student=people.student.page
