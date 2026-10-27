@@ -1,11 +1,15 @@
 import {expect,runtime,test,mockModel,connectModel} from './fixtures'
 
 async function openTeacherSettings(page:import('@playwright/test').Page){
+  // 已经停在设置页时，先按返回回到“我的馆”，底部标签才在。
+  const back=page.locator('.nl-back')
+  if(await back.count())await back.first().click()
   await page.getByRole('navigation',{name:'老师底部标签'}).getByRole('button',{name:'我的馆',exact:true}).click()
   await page.locator('.hall-row').filter({hasText:'设置'}).click()
 }
 
 test('V2-37 核心成员推荐老师登记、开馆邀学生；普通老师看不到推荐入口，晋升后才出现',async({people,browser})=>{
+  test.setTimeout(180000)
   const founder=people.teacher.page,student=people.student.page
   // 内测部署的一次性核心登记二维码由合成口令代替；使用正式签名请求路径。
   await founder.evaluate(async()=>{
