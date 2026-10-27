@@ -46,14 +46,17 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
   // 从首页底部点进来时，页面从顶上开始看。
   useEffect(() => { try { window.scrollTo(0, 0) } catch { /* 测试环境没有 window */ } }, [])
 
+  // 资料读完才能填：读不出来时保持锁定，给一个“重新读取”，免得没读到的旧资料被新填的悄悄盖掉。
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let active = true
+    setError('')
     void loadBasics(store).then(value => {
       if (!active) return
       fill(value); setMissing(missingLabels(value)); setLoaded(true)
-    }).catch(() => { if (active) { setError('基础信息暂时读不出来，请稍后再试。'); setLoaded(true) } })
+    }).catch(() => { if (active) setError('基础信息暂时读不出来，请点“重新读取”。') })
     return () => { active = false }
-  }, [store])
+  }, [store, attempt])
 
   const fill = (value: Partial<StudentBasics>) => {
     setAlias(value.alias ?? ''); setGender(value.gender ?? ''); setBirthDate(value.birthDate ?? '')
@@ -152,6 +155,7 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
         </div>
       </div>}
       {error && <p role="alert" className="nl-danger-strong">{error}</p>}
+      {error && !loaded && <button type="button" onClick={() => setAttempt(value => value + 1)}>重新读取</button>}
       {status && <p role="status" className="nl-quiet">{status}</p>}
     </div>
     <div className="basics-foot">
