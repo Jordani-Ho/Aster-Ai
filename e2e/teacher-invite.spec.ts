@@ -1,5 +1,4 @@
 import {expect,runtime,test,mockModel,connectModel} from './fixtures'
-import { fillJoinBasics } from './basics-helper'
 
 async function openTeacherSettings(page:import('@playwright/test').Page){
   await page.getByRole('navigation',{name:'老师底部标签'}).getByRole('button',{name:'我的馆',exact:true}).click()
@@ -52,8 +51,9 @@ test('V2-37 核心成员推荐老师登记、开馆邀学生；普通老师看�
     await student.goto(studentLink)
     const welcome=student.getByRole('button',{name:'开始使用',exact:true})
     if(await welcome.count())await welcome.click()
-    // V2-23：新学生进馆先填基础信息。
-    await fillJoinBasics(student)
+    // 这位合成学生已在发起人馆里填过基础信息，接受第二位老师的邀请后直接进首页。
+    try{await expect(student.locator('[data-page=student-today]')).toBeVisible({timeout:20000})}
+    catch(cause){throw Error('学生接受新老师邀请后没进首页，页面显示：'+(await student.locator('body').innerText()).replace(/\s*\n\s*/g,' | ').slice(0,700),{cause})}
     await expect(newTeacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible({timeout:20000})
     await openTeacherSettings(newTeacher)
     await expect(newTeacher.getByRole('button',{name:'推荐一位老师',exact:true})).toHaveCount(0)
