@@ -5,6 +5,8 @@
   "upstreamModel": null,
   "upstreamApiKeyEnv": "UPSTREAM_API_KEY",
   "membersFile": "./members.json",
+  "coreSeedTokenFile": "./core-seed.json",
+  "recommendationsFile": "./teacher-recommendations.json",
   "maxBodyBytes": 1048576,
   "upstreamTimeoutMs": 120000,
   "rateLimit": {

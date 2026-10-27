@@ -14,6 +14,9 @@ const MEMBERS = join('data', 'gateway', 'members.json')
 const SEED = join('data', 'gateway', 'seed.json')
 const CODE = join('data', 'setup', 'teacher-setup-code.txt')
 const HTML = join('data', 'setup', 'teacher-setup.html')
+const CORE_SEED = join('data', 'gateway', 'core-seed.json')
+const CORE_CODE = join('data', 'setup', 'core-member-code.txt')
+const CORE_HTML = join('data', 'setup', 'core-member.html')
 
 const hash = text => createHash('sha256').update(text).digest('hex')
 const log = text => console.log(text)
@@ -25,10 +28,19 @@ function remove(file) { try { rmSync(file, { force: true }) } catch { /* 删不�
 function members() {
   const text = read(MEMBERS)
   if (typeof text !== 'string') return []
-  try { const value = JSON.parse(text); return Array.isArray(value) ? value : [] } catch { return [] }
+  try { const value = JSON.parse(text); return Array.isArray(value) ? value : Array.isArray(value?.members) ? value.members : [] } catch { return [] }
 }
 function seed() {
   const text = read(SEED)
+  if (typeof text !== 'string') return null
+  try {
+    const value = JSON.parse(text)
+    if (!value || typeof value.tokenHash !== 'string' || !/^[0-9a-f]{64}$/.test(value.tokenHash)) return null
+    return { tokenHash: value.tokenHash, ...(typeof value.usedFor === 'string' && value.usedFor !== '' ? { usedFor: value.usedFor } : {}) }
+  } catch { return null }
+}
+function coreSeed() {
+  const text = read(CORE_SEED)
   if (typeof text !== 'string') return null
   try {
     const value = JSON.parse(text)
@@ -107,14 +119,16 @@ function prepareMembers() {
   if (list.length > 0) backupFile(MEMBERS, 'members.json')
   if (list.length === 0 && read(join(BACKUP, 'members.json')) !== null) {
     const saved = JSON.parse(read(join(BACKUP, 'members.json')))
-    if (Array.isArray(saved) && saved.length > 0 && restoreFile('members.json', MEMBERS)) {
-      log(`提醒：成员名单被删除或清空，已从上次备份恢复 ${saved.length} 人（旧邀请仍然有效）。`)
+    const count=Array.isArray(saved)?saved.length:Array.isArray(saved?.members)?saved.members.length:0
+    if (count > 0 && restoreFile('members.json', MEMBERS)) {
+      log(`提醒：成员名单被删除或清空，已从上次备份恢复 ${count} 人（旧邀请仍然有效）。`)
     }
   }
 }
 
 function prepare() {
   prepareMembers()
+  prepareCoreSeed()
   const record = seed()
   const code = codeText()
   const htmlExists = existsSync(HTML)
@@ -158,6 +172,16 @@ function prepare() {
     regeneratePair('还没有口令与种子')
     return
   }
+}
+
+function prepareCoreSeed() {
+  const record=coreSeed(),code=(read(CORE_CODE)??'').trim()
+  if(record?.usedFor){remove(CORE_CODE);remove(CORE_HTML);log('提醒：核心成员已登记，已删除作废的核心成员登记口令与扫码页。');return}
+  if(record&&code&&hash(code)===record.tokenHash){backupFile(CORE_SEED,'core-seed.json');backupFile(CORE_CODE,'core-member-code.txt');return}
+  const token=randomBytes(32).toString('base64url'),fresh={tokenHash:hash(token)}
+  write(CORE_SEED,JSON.stringify(fresh));write(CORE_CODE,token+'\n');remove(CORE_HTML)
+  backupFile(CORE_SEED,'core-seed.json');backupFile(CORE_CODE,'core-member-code.txt')
+  log('提醒：核心成员登记凭据缺失或不一致，已生成新的核心登记链接（旧链接失效）。')
 }
 
 function verify() {

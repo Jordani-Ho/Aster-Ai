@@ -19,7 +19,7 @@ export function gatewayBase(modelUrl:string):string{return modelUrl.replace(/\/v
 // V2-28：从终端/微信复制的一次性口令常带换行或空格（网关会把多出来的字符算进哈希，直接 403）。
 // 口令本体是 base64url，不含空白，所以粘贴时去掉所有空格、换行、制表符是安全的。
 export function normalizeSetupToken(value:string):string{return value.replace(/\s+/g,'')}
-export async function onboardingRequest(identity:Identity,url:string,payload:unknown):Promise<void>{const body=JSON.stringify(payload),authorization=await nip98Authorization(identity.privateKey,url,'POST',body);const res=await fetch(url,{method:'POST',headers:{'content-type':'application/json',authorization},body});if(!res.ok)throw Error(res.status===403?INVITE_ERROR:'暂时未能加入社区，请稍后重试。')}
+export async function onboardingRequest(identity:Identity,url:string,payload:unknown):Promise<void>{const body=JSON.stringify(payload),authorization=await nip98Authorization(identity.privateKey,url,'POST',body);const res=await fetch(url,{method:'POST',headers:{'content-type':'application/json',authorization},body});if(!res.ok){let detail='';try{const value=await res.json() as {error?:unknown};if(typeof value.error==='string')detail=value.error}catch{};throw Error(detail||(res.status===403?INVITE_ERROR:'暂时未能加入社区，请稍后重试。'))}}
 export async function acceptInvite(identity:Identity,store:LocalStore,event:Event,url:string){
  if(!validateInvite(event,url))throw Error(INVITE_ERROR)
  const departed=await store.get('student-roster-leaves',event.pubkey) as {at?:unknown}|undefined

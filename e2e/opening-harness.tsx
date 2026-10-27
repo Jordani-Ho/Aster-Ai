@@ -8,6 +8,10 @@ import { loadPersonalModel, type PersonalModel } from '../app/src/core/llm/perso
 import { markHallOpened, loadGuide, saveGuide } from '../app/src/core/hall'
 import { publishStorefront } from '../app/src/core/storefront'
 import { rememberTeacherStudent } from '../app/src/core/records/teacher'
+import { takeSetupToken } from '../app/src/core/setup-link'
+
+// 和 App 一样：一次性口令在模块加载时取出并清掉地址栏（V2-31 / V2-37）。
+const initialSetupToken = takeSetupToken()
 
 // V2-17 建馆浏览器验收：真实组件 + fake 网关/模型路由，不连中继、不调真实模型。
 // 场景：guide（五步引导）/ manage（开馆后的“我的馆”）。
@@ -52,6 +56,7 @@ if (scene === 'manage') {
       modelConfig={modelConfig}
       onModelSaved={model => setModelConfig(model)}
       onDone={() => setDone(true)}
+      setupToken={initialSetupToken}
     />
   }
   createRoot(document.getElementById('root')!).render(<Harness />)

@@ -12,6 +12,7 @@ function bash(script,env){const result=process.platform==='win32'?spawnSync('wsl
 // 期望失败时用这个：不 assert 退出码，返回 status/stdout/stderr 自己判断。
 function bashRaw(script,env){return process.platform==='win32'?spawnSync('wsl.exe',['-d','Ubuntu','--exec','env',...Object.entries(env).map(([k,v])=>k+'='+v),'bash',linux(script)],{encoding:'utf8'}):spawnSync('bash',[script],{encoding:'utf8',env:{...process.env,...env}})}
 const CODE='data/setup/teacher-setup-code.txt',HTML='data/setup/teacher-setup.html'
+const CORE_CODE='data/setup/core-member-code.txt',CORE_HTML='data/setup/core-member.html'
 const ENV_TEXT='APP_DOMAIN=app.example\nRELAY_DOMAIN=relay.example\nVAPID_SUBJECT=mailto:synthetic@example.invalid\nVAPID_PUBLIC_KEY=synthetic\nVAPID_PRIVATE_KEY=synthetic\nMODEL_FALLBACK_ENABLED=false\nMODEL_PROXY_ALLOWED_URLS=https://synthetic.example/v1/chat/completions\nRELAY_COMMUNITY_OPEN=true\n'
 async function fakeBin(dir){const bin=path.join(dir,'fake-bin');await mkdir(bin,{recursive:true});await writeFile(path.join(bin,'docker'),'#!/bin/sh\nif [ -n "${DOCKER_FAKE_LOG:-}" ]; then printf \'%s\\n\' "$*" >> "$DOCKER_FAKE_LOG"; fi\nexit 0\n',{mode:0o755});if(process.platform==='win32'){const result=spawnSync('wsl.exe',['-d','Ubuntu','--exec','chmod','+x',linux(path.join(bin,'docker'))]);assert.equal(result.status,0)}return bin}
 function envFor(bin){return {SKIP_BUILD:'1',PATH:process.platform==='win32'?linux(bin)+':/usr/local/bin:/usr/bin:/bin':bin+':'+process.env.PATH}}
@@ -21,8 +22,10 @@ test('第二版 setup 不写成员白名单：开放模式起中继、生成一�
   await writeFile(path.join(home,'.env'),ENV_TEXT)
   const env=envFor(bin),script=path.join(home,'setup.sh'),out=bash(script,env)
   const token=await readFile(path.join(home,'data/setup/teacher-setup-code.txt'),'utf8'),seed=await readFile(path.join(home,'data/gateway/seed.json'),'utf8')
+   const coreToken=await readFile(path.join(home,CORE_CODE),'utf8'),coreSeed=await readFile(path.join(home,'data/gateway/core-seed.json'),'utf8')
   assert.ok(token.trim().length>=40);assert.ok(!seed.includes(token.trim()));assert.ok(!out.includes(token.trim()))
-  const cfg=JSON.parse(await readFile(path.join(home,'data/gateway-config.json'),'utf8'));assert.equal(cfg.membersFile,'/app/data/members.json');assert.equal(cfg.seedTokenFile,'/app/data/seed.json');assert.equal(cfg.fallbackEnabled,false);assert.deepEqual(cfg.proxyAllowedUrls,['https://synthetic.example/v1/chat/completions']);assert.equal(cfg.upstreamModel,null)
+   assert.ok(coreToken.trim().length>=40);assert.ok(!coreSeed.includes(coreToken.trim()));assert.ok(!out.includes(coreToken.trim()))
+   const cfg=JSON.parse(await readFile(path.join(home,'data/gateway-config.json'),'utf8'));assert.equal(cfg.membersFile,'/app/data/members.json');assert.equal(cfg.seedTokenFile,'/app/data/seed.json');assert.equal(cfg.coreSeedTokenFile,'/app/data/core-seed.json');assert.equal(cfg.recommendationsFile,'/app/data/teacher-recommendations.json');assert.equal(cfg.fallbackEnabled,false);assert.deepEqual(cfg.proxyAllowedUrls,['https://synthetic.example/v1/chat/completions']);assert.equal(cfg.upstreamModel,null)
   // 第二版：中继只有 community_open，没有成员白名单；也没有旧版成员名单文件。
   const relay=await readFile(path.join(home,'data/relay-config.toml'),'utf8');assert.match(relay,/community_open = true/);assert.match(relay,/pubkey_whitelist = \[\]/)
   assert.deepEqual(JSON.parse(await readFile(path.join(home,'data/gateway/members.json'),'utf8')),[])
@@ -31,6 +34,7 @@ test('第二版 setup 不写成员白名单：开放模式起中继、生成一�
   await writeFile(path.join(home,'data/gateway/members.json'),JSON.stringify(['a'.repeat(64)]));bash(script,env)
   assert.deepEqual(JSON.parse(await readFile(path.join(home,'data/gateway/members.json'),'utf8')),['a'.repeat(64)])
   assert.equal(await readFile(path.join(home,'data/setup/teacher-setup-code.txt'),'utf8'),token);assert.equal(await readFile(path.join(home,'data/gateway/seed.json'),'utf8'),seed)
+   assert.equal(await readFile(path.join(home,CORE_CODE),'utf8'),coreToken);assert.equal(await readFile(path.join(home,'data/gateway/core-seed.json'),'utf8'),coreSeed)
  }finally{await rm(dir,{recursive:true,force:true})}
 })
 // V2-28：更新环境时名单/口令被误删，不能就此变成空名单；要从本机备份恢复并说清楚。
@@ -146,11 +150,33 @@ test('V2-31 全新部署：终端与 teacher-setup.html 都有二维码，口令
   assert.ok(html.includes('<svg'))
   const marker=/name="setup-token-sha256" content="([0-9a-f]{64})"/.exec(html)
   assert.equal(marker[1],createHash('sha256').update(token).digest('hex'))
+   const coreToken=(await readFile(path.join(home,CORE_CODE),'utf8')).trim(),coreHtml=await readFile(path.join(home,CORE_HTML),'utf8')
+   assert.ok(coreToken.length>=40);assert.ok(!out.includes(coreToken));assert.ok(!coreHtml.includes(coreToken));assert.ok(coreHtml.includes('<svg'))
+   const coreMarker=/name="core-token-sha256" content="([0-9a-f]{64})"/.exec(coreHtml)
+   assert.equal(coreMarker[1],createHash('sha256').update(coreToken).digest('hex'))
   // 还没登记时重跑：保留同一对 seed/口令（二维码与口令绑定，不能每次换）。
   const seed=await readFile(path.join(home,'data/gateway/seed.json'),'utf8')
   bash(setup,env)
   assert.equal((await readFile(path.join(home,CODE),'utf8')).trim(),token)
   assert.equal(await readFile(path.join(home,'data/gateway/seed.json'),'utf8'),seed)
+   assert.equal((await readFile(path.join(home,CORE_CODE),'utf8')).trim(),coreToken)
+ }finally{await rm(dir,{recursive:true,force:true})}
+})
+test('V2-37 核心成员用过后仅删除核心登记文件，普通老师兜底仍在',async()=>{
+ const dir=await workspace(),home=path.join(dir,'deploy/home'),bin=await fakeBin(dir)
+ try{
+  await writeFile(path.join(home,'.env'),ENV_TEXT)
+  const env=envFor(bin)
+  bash(path.join(home,'setup.sh'),env)
+  const seedFile=path.join(home,'data/gateway/core-seed.json'),record=JSON.parse(await readFile(seedFile,'utf8'))
+  record.usedFor='a'.repeat(64)
+  await writeFile(seedFile,JSON.stringify(record))
+  const out=bash(path.join(home,'setup.sh'),env)
+  await assert.rejects(readFile(path.join(home,CORE_CODE)))
+  await assert.rejects(readFile(path.join(home,CORE_HTML)))
+  assert.ok((await readFile(path.join(home,CODE),'utf8')).trim().length>=40)
+  assert.ok(await readFile(path.join(home,'data/gateway/seed.json'),'utf8'))
+  assert.match(out,/核心成员已登记|核心成员登记链接已使用/)
  }finally{await rm(dir,{recursive:true,force:true})}
 })
 // V2-31：seed 与口令只能成对；只缺一个时不混用；已有老师时口令作废。

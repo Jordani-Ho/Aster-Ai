@@ -18,6 +18,7 @@ import { TeacherCarePlan } from './TeacherCarePlan'
 import { VersionLine } from './VersionLine'
 import { VenueEmblem } from './StorefrontWelcome'
 import { HerbLibrary } from './HerbLibrary'
+import { CoreMemberActions } from './CoreMemberActions'
 import { lowStockHerbs } from './core/herbs'
 import { loadOwnStorefront, verifyStorefrontEvent, themeOf, type Storefront } from './core/storefront'
 import './newui.css'
@@ -34,6 +35,7 @@ export interface TeacherManagementProps {
   ledger?: (LedgerRecorder & { mergedViews?: () => Promise<LedgerView[]> }) | null
   ledgerPanel?: ReactNode
   settings: ReactNode
+  coreNotice?: string
 }
 
 type View = 'hall' | 'invite' | 'storefront' | 'ledger' | 'herbs' | 'settings' | 'retention' | 'reidentify' | 'stats' | 'mirror' | 'groundwork'
@@ -65,7 +67,7 @@ export function totalsOf(views: readonly LedgerView[], now: Date): Totals {
   return { currency: currency || 'CNY', balance, income, charge, ready }
 }
 
-export function TeacherManagement({ identity, store, llm, gateway, send, ledger, settings }: TeacherManagementProps) {
+export function TeacherManagement({ identity, store, llm, gateway, send, ledger, settings, coreNotice }: TeacherManagementProps) {
   const [view, setView] = useState<View>('hall')
   const [own, setOwn] = useState<Storefront | null>(null)
   const [totals, setTotals] = useState<Totals | null>(null)
@@ -117,6 +119,7 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
     </details>
   </SubPage>
   if (view === 'settings') return <SubPage title="设置" onBack={() => setView('hall')}>
+    <CoreMemberActions identity={identity} gateway={gateway} notice={coreNotice} />
     <ul className="hall-list">
       <li><button type="button" className="nl-row" onClick={() => setView('groundwork')}>开馆基础工作</button></li>
       <li><button type="button" className="nl-row" onClick={() => setView('retention')}><span className="nl-row-main"><strong>记录保留多久</strong><span>记录按设定天数滚动删除</span></span><span className="ts-chevron">›</span></button></li>
