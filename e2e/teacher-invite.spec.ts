@@ -73,7 +73,8 @@ test('V2-37 核心成员推荐老师登记、开馆邀学生；普通老师看�
     await founder.getByRole('button',{name:'邀请已登记老师成为核心成员',exact:true}).click()
     const promotion=founder.getByLabel('邀请链接',{exact:true})
     await expect(promotion).toBeVisible()
-    await newTeacher.goto(await promotion.inputValue())
+    // 链接和当前页同一地址、只差 # 后面，goto 不会重新加载；真机上是点开链接重新打开，这里补一次刷新。
+    await newTeacher.goto(await promotion.inputValue());await newTeacher.reload()
     try{await expect(newTeacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible({timeout:30000})}
     catch(cause){throw Error('打开晋升链接后没进“今天”，页面显示：'+(await newTeacher.locator('body').innerText()).replace(/\s*\n\s*/g,' | ').slice(0,700),{cause})}
     await openTeacherSettings(newTeacher)
