@@ -202,7 +202,8 @@ test('nine-step consultation: signing, erasure, ledger, homework, followup and n
     expect(t.balance).not.toBeNull();expect(t.code).toBe(s.code)
   })
   const exportRequests:string[]=[]
-  const observe=(request:any)=>{if(/^https?:/.test(request.url()))exportRequests.push(request.url())}
+  // 打开设置页时会问一次网关“我是不是核心成员”（V2-37），与导出无关；导出本身不得发任何请求。
+  const observe=(request:any)=>{if(/^https?:/.test(request.url())&&!request.url().endsWith('/invite/core-status'))exportRequests.push(request.url())}
   teacher.on('request',observe)
   await settings(teacher)
   const downloadPromise=teacher.waitForEvent('download')
