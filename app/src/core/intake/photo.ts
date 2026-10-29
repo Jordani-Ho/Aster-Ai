@@ -154,9 +154,11 @@ export function randomId(bytes: number): string {
 
 // 处理一张照片：解码 → 缩放 → 逐级降质量重编码 → 校验大小，返回 AttachmentRef 与处理后字节。
 // canvas 重编码生成的是全新 JPEG，原图里的 EXIF/GPS 不会带过来。
-export async function processPhoto(input: PhotoInput, options: { codec?: PhotoCodec; existingCount?: number } = {}): Promise<PhotoResult> {
+export async function processPhoto(input: PhotoInput, options: { codec?: PhotoCodec; existingCount?: number; maxBytes?: number } = {}): Promise<PhotoResult> {
   if (!input || !(input.bytes instanceof Uint8Array) || input.bytes.length === 0) throw new Error('照片内容为空')
   assertPhotoCount(options.existingCount ?? 0)
+  const maxBytes = options.maxBytes ?? MAX_BYTES
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > MAX_BYTES) throw new Error('照片大小上限无效')
   const codec = options.codec ?? browserCodec()
   if (!codec) throw new Error('当前浏览器不支持照片处理')
   const decoded = await codec.decode(input.bytes, input.type || 'image/jpeg')
@@ -165,9 +167,9 @@ export async function processPhoto(input: PhotoInput, options: { codec?: PhotoCo
   let data: Uint8Array | null = null
   for (const quality of QUALITY_STEPS) {
     const encoded = await canvas.toJpeg(quality)
-    if (encoded.length <= MAX_BYTES) { data = encoded; break }
+    if (encoded.length <= maxBytes) { data = encoded; break }
   }
-  if (!data) throw new Error('照片压缩后仍超过 500 KB，请重拍或换一张')
+  if (!data) throw new Error(`照片压缩后仍超过 ${Math.floor(maxBytes / 1024)} KB，请重拍或换一张`)
   return {
     ref: { id: randomId(16), type: 'photo', sha256: await sha256Hex(data), bytes: data.length },
     data,
