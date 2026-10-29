@@ -18,6 +18,7 @@ import { loadOwnStorefront, verifyStorefrontEvent, type Storefront } from './cor
 import { loadTeacherHerbSnapshot } from './core/herbs/snapshots'
 import { isSameCity } from './core/city'
 import { loadProfile } from './core/intake/session'
+import { basicsLine, loadStudentBasics } from './student-basics-display'
 import './newui.css'
 
 // V2-17 老师·学生（06）与一位学生（07）。
@@ -70,8 +71,9 @@ export function TeacherStudentsPage({ identity, store, llm, send, ledger, onVisi
   const [selected, setSelected] = useState<string | null>(null)
 
   useEffect(() => {
-    let active = true
+    let active = true, generation = 0
     const refresh = () => {
+      const current = ++generation
       void (async () => {
         const [people, reports, consults, own, roster, profile] = await Promise.all([knownStudents(store), listStudentAdherence(store), listConsults(store), loadOwnStorefront(store, identity), store.list('teacher-students'), loadProfile(store)])
         const teacherCity = profile.city.value ?? (own.current ? verifyStorefrontEvent(own.current, identity.publicKey)?.city ?? null : null)
@@ -79,21 +81,23 @@ export function TeacherStudentsPage({ identity, store, llm, send, ledger, onVisi
         const records: Record<string, LoadedTeacherRecord[]> = {}
         const activePeople = people.filter(student => rosterByStudent.has(student))
         for (const student of activePeople) records[student] = await teacherRecordsOf(store, student)
+        const basicsByStudent = Object.fromEntries(await Promise.all(activePeople.map(async student => [student, await loadStudentBasics(store, student)] as const)))
         const today = localDay(new Date())
         const rows = buildStudentRows(activePeople.map(student => {
           const rows = records[student] ?? []
           const consult = consults.find(item => item.sender === student) ?? consults.map(item => item).find(item => item.encounter.student === student)
-          const alias = rows.at(0)?.encounter.profile.alias.value ?? consult?.encounter.profile.alias.value ?? '学生 ' + student.slice(0, 4)
+          const basics = basicsByStudent[student]
+          const alias = basics?.alias ?? rows.at(0)?.encounter.profile.alias.value ?? consult?.encounter.profile.alias.value ?? '学生 ' + student.slice(0, 4)
           const managedBy = rows.at(0)?.encounter.profile.managedBy?.value ?? consult?.encounter.profile.managedBy?.value ?? undefined
           const lastAt = [rows.at(0)?.encounter.createdAt ?? null, consult?.receivedAt ?? null].filter((value): value is string => typeof value === 'string').sort().at(-1) ?? null
           const report = reports.find(item => item.student === student) ?? null
           const saved = rosterByStudent.get(student)
           const city = saved && Object.hasOwn(saved, 'city') ? saved.city ?? null : rows.at(0)?.encounter.profile.city.value ?? consult?.encounter.profile.city.value ?? null
-          return { student, alias, ...(managedBy ? { managedBy } : {}), lastAt, report, city, remote: !isSameCity(city, teacherCity) }
+          return { student, alias, basics, ...(managedBy ? { managedBy } : {}), lastAt, report, city:basics?.city ?? city, remote: !isSameCity(basics?.city ?? city, teacherCity) }
         }), today)
-        if (!active) return
+        if (!active || current !== generation) return
         setData({ rows, records, venued: own.current ? verifyStorefrontEvent(own.current, identity.publicKey)?.storefront ?? null : null, error: '', teacherCity })
-      })().catch(() => { if (active) setData(previous => ({ ...previous, error: '学生名单读取失败，请稍后重试。' })) })
+      })().catch(() => { if (active && current === generation) setData(previous => ({ ...previous, error: '学生名单读取失败，请稍后重试。' })) })
     }
     refresh()
     window.addEventListener('aster:data-changed', refresh)
@@ -128,7 +132,7 @@ export function TeacherStudentsPage({ identity, store, llm, send, ledger, onVisi
           <span className="nl-avatar" aria-hidden="true">{row.alias.slice(0, 1)}</span>
           <span className="ts-row-main">
             <strong>{row.alias}</strong>
-            <span>{row.managedBy ? `由${row.managedBy}代管 · ` : ''}{lastVisitLabel(row.lastAt)}</span>
+            <span>{row.managedBy ? `由${row.managedBy}代管 · ` : ''}{row.basics ? basicsLine(row.basics) + ' · ' + lastVisitLabel(row.lastAt) : '正在填基础信息'}</span>
             {row.remote && <span className="ts-remote-city">异地 · 远程问诊</span>}
           </span>
           {row.status !== 'unknown' && <span className={statusClass(row.status)}>{row.weekLabel}</span>}
@@ -195,7 +199,7 @@ function StudentDetail({ identity, store, llm, send, ledger, row, records, onBac
     {postureOpen ? <PostureTool identity={identity} store={store} student={row.student} onClose={() => setPostureOpen(false)} /> : <>
     <header className="nl-flow-head">
       <button type="button" className="nl-back" aria-label="返回" onClick={onBack}>‹</button>
-      <div><h1>{row.alias}</h1><small>{genderAge(latest, row.city)}</small></div>
+      <div><h1>{row.alias}</h1><small>{row.basics ? basicsLine(row.basics) : genderAge(latest, row.city)}</small></div>
     </header>
     <div className="nl-flow-body nl-detail-body">
       <section className="ts-plan-card" aria-label="当前方案">
@@ -272,7 +276,8 @@ function StudentDetail({ identity, store, llm, send, ledger, row, records, onBac
       {!balance && <p className="nl-quiet">还没有记过账，或账本尚未同步。</p>}
     </div>
     <footer className="ts-detail-foot">
-      <button type="button" className="nl-primary" onClick={onVisit}>＋ 开始面诊</button>
+      {!row.basics && <p className="nl-quiet">正在填基础信息，填好后才能开始面诊。</p>}
+      <button type="button" className="nl-primary" disabled={!row.basics} onClick={onVisit}>＋ 开始面诊</button>
     </footer>
     </>}
   </div>

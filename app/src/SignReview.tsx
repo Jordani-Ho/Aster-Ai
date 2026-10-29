@@ -4,6 +4,8 @@ import type { ObservationChoice } from './core/kangbi'
 import { OBSERVATION_CHOICES } from './core/kangbi'
 import { acceptDraftForSigning } from './core/record/sign'
 import { PostureSummary } from './PostureTool'
+import { recordIntakeField } from './core/record/in-person'
+import type { VisitOrganization } from './core/record/visit-organization'
 import { isLongRecord } from './core/record/fold'
 import { EXAM_LABELS, EXAM_KEYS, type ExamKey } from './four-exams'
 import { assessPrescriptionStock, DEFAULT_HERB_UNITS, type HerbUnits, type SharedHomeHerb } from './core/herbs'
@@ -29,7 +31,10 @@ function scheduleLabel(spec: Homework['schedule']): string {
 }
 
 function heroTag(block: ReviewBlock, hasPrevious: boolean): string {
-  if (!block.pending) return '已确认'
+  if (!block.pending) {
+    const empty = block.key === 'prescription' ? !block.prescription : block.key === 'homework' ? block.items.length === 0 : block.fields.every(field => field.missing)
+    return empty ? '未填写' : '已确认'
+  }
   if (block.key === 'prescription') return hasPrevious ? '草稿 · 照您上次加减' : '草稿 · 智能体整理'
   return '草稿 · 智能体整理'
 }
@@ -56,16 +61,18 @@ export interface SignReviewProps {
   extras?: ReactNode
   /** V2-32：学生在家拍的体态骨架 + 老师自己公式算的指标，放在核对页正文里（默认展开）。 */
   postureReview?: ReactNode
+  visitOrganization?: VisitOrganization | null
+  visitPhotos?: ReactNode
 }
 
 export function SignReview({
   encounter, alias, subtitle, materialNote, previousPrescription = null, previousEventId = null,
-  comparison = null, onComparisonChange, onSign, onBack, onRevise, extras, postureReview, homeHerbs, herbUnits = DEFAULT_HERB_UNITS,
+  comparison = null, onComparisonChange, onSign, onBack, onRevise, extras, postureReview, homeHerbs, herbUnits = DEFAULT_HERB_UNITS, visitOrganization, visitPhotos,
 }: SignReviewProps) {
   const [current, setCurrent] = useState<Encounter>(encounter)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [editing, setEditing] = useState<ReviewBlockKey | 'fourExams' | null>(null)
+  const [editing, setEditing] = useState<ReviewBlockKey | 'fourExams' | 'intake' | null>(null)
   const [texts, setTexts] = useState<Record<string, string>>({})
   const [herbs, setHerbs] = useState('')
   const [method, setMethod] = useState('')
@@ -80,11 +87,15 @@ export function SignReview({
   const blocks = reviewBlocks(current)
   const examPending = EXAM_KEYS.some(key => current.fourExams[key].source === 'ai_draft')
   const pending = pendingBlockCount(current)
+  const firstPending = examPending ? 'fourExams' : blocks.find(block => block.pending)?.key
   const changeReasonNeeded = prescriptionChangeReasonNeeded(previousPrescription, current.plan.prescription.value)
   const diffText = changeReasonText(previousPrescription, current.plan.prescription.value)
 
-  const startEdit = (key: ReviewBlockKey | 'fourExams') => {
+  const startEdit = (key: ReviewBlockKey | 'fourExams' | 'intake') => {
     setError(''); setEditing(key)
+    if (key === 'intake') {
+      setTexts({ 'intake.chiefComplaint':current.intake.chiefComplaint.value ?? '', 'intake.presentIllness':current.intake.presentIllness.value ?? '' }); return
+    }
     if (key === 'fourExams') {
       setTexts(Object.fromEntries(EXAM_KEYS.map(exam => ['fourExams.' + exam, current.fourExams[exam].value ?? ''])))
       return
@@ -112,7 +123,10 @@ export function SignReview({
 
   const saveTexts = () => {
     let next = current
-    for (const [path, value] of Object.entries(texts)) next = setTextField(next, path, value)
+    for (const [path, value] of Object.entries(texts)) {
+      if (path === 'intake.chiefComplaint' || path === 'intake.presentIllness') next = recordIntakeField(next, path.endsWith('chiefComplaint') ? 'chiefComplaint' : 'presentIllness', value)
+      else next = setTextField(next, path, value)
+    }
     setCurrent(next); setEditing(null)
   }
 
@@ -176,7 +190,7 @@ export function SignReview({
           : <TextBody block={block} />}
       {block.pending && <div className="nl-block-actions">
         <button type="button" className="nl-secondary" onClick={() => startEdit(block.key)}>改一改</button>
-        <button type="button" className="nl-primary" onClick={() => block.key === 'prescription' ? confirmPrescription() : setCurrent(confirmBlock(current, block.key))}>就这样</button>
+        <button type="button" className={firstPending === block.key ? 'nl-primary' : 'nl-secondary'} onClick={() => block.key === 'prescription' ? confirmPrescription() : setCurrent(confirmBlock(current, block.key))}>就这样</button>
       </div>}
       {block.pending && block.key === 'prescription' && changeReasonNeeded && <>
         <p className="nl-diff">{diffText}。改了要写一句理由。</p>
@@ -186,9 +200,9 @@ export function SignReview({
     </>
   }
 
-  const examBlock = examPending && <details className="nl-review-block draft" aria-label="四诊" open={longRecord ? openBlocks.fourExams ?? true : true}
+  const examBlock = <details className={'nl-review-block ' + (examPending ? 'draft' : 'confirmed')} aria-label="四诊" open={longRecord ? openBlocks.fourExams ?? true : true}
     onToggle={event => { const open = event.currentTarget.open; setOpenBlocks(previous => ({ ...previous, fourExams: open })) }}>
-    <summary><h2>四诊</h2><span className="nl-tag draft">草稿 · 听到了，待您确认</span></summary>
+    <summary><h2>四诊</h2>{examPending && <span className="nl-tag draft">草稿 · 听到了，待您确认</span>}</summary>
     {editing === 'fourExams'
       ? <div className="nl-edit">
         {EXAM_KEYS.map(exam => <label key={exam}>{EXAM_LABELS[exam]}<textarea rows={2} value={texts['fourExams.' + exam] ?? ''} placeholder={EXAM_PLACEHOLDER[exam]}
@@ -196,12 +210,14 @@ export function SignReview({
         <div className="nl-edit-actions"><button type="button" className="nl-secondary" onClick={() => setEditing(null)}>先不改</button><button type="button" className="nl-primary" onClick={() => saveTexts()}>改成这样</button></div>
       </div>
       : <>
-        {EXAM_KEYS.filter(exam => current.fourExams[exam].value !== null).map(exam => <div className="nl-review-field" key={exam}>
-          <small>{EXAM_LABELS[exam]}</small><p>{current.fourExams[exam].value}</p>
+        {EXAM_KEYS.map(exam => <div className="nl-review-field" key={exam}>
+          <button type="button" className="nl-link-button" aria-label={'填写' + EXAM_LABELS[exam]} onClick={() => startEdit('fourExams')}><small>{EXAM_LABELS[exam]}</small> {current.fourExams[exam].value ?? '未记'}</button>
+          {visitOrganization?.[exam].text === current.fourExams[exam].value && visitOrganization?.[exam].citations.length ? <small>依据：{visitOrganization[exam].citations.map(id=>'第 '+id+' 句').join('、')}</small> : null}
+          {exam === 'look' && visitPhotos}
         </div>)}
         <div className="nl-block-actions">
           <button type="button" className="nl-secondary" onClick={() => startEdit('fourExams')}>改一改</button>
-          <button type="button" className="nl-primary" onClick={() => setCurrent(confirmHeardExams(current))}>就这样</button>
+          {examPending && <button type="button" className="nl-primary" onClick={() => setCurrent(confirmHeardExams(current))}>就这样</button>}
         </div>
       </>}
   </details>
@@ -213,6 +229,10 @@ export function SignReview({
     </header>
     <div className="nl-flow-body">
       {error && <p role="alert" className="nl-danger-strong">{error}</p>}
+      <section className="nl-review-block confirmed" aria-label="学生信息"><h2>学生</h2><p>{[current.profile.alias.value || alias, current.profile.gender.value === 'male' ? '男' : current.profile.gender.value === 'female' ? '女' : current.profile.gender.value === 'other' ? '其他' : '', current.profile.age.value === null ? '' : current.profile.age.value + ' 岁', current.profile.city.value ?? ''].filter(Boolean).join(' · ')}</p></section>
+      <section className="nl-review-block confirmed" aria-label="主诉和现病史"><h2>主诉和现病史</h2>
+        {editing === 'intake' ? <div className="nl-edit">{(['chiefComplaint','presentIllness'] as const).map(key => <label key={key}>{key==='chiefComplaint'?'主诉':'现病史'}<textarea value={texts['intake.'+key] ?? ''} onChange={event=>setTexts({...texts,['intake.'+key]:event.target.value})}/></label>)}<button type="button" onClick={saveTexts}>改成这样</button><button type="button" onClick={()=>setEditing(null)}>先不改</button></div> : <>{(['chiefComplaint','presentIllness'] as const).map(key=><div className="nl-review-field" key={key}><small>{key==='chiefComplaint'?'主诉':'现病史'}</small><p>{current.intake[key].value ?? '未记'}</p>{visitOrganization?.[key].text === current.intake[key].value && visitOrganization?.[key].citations.length ? <small>依据：{visitOrganization[key].citations.map(id=>'第 '+id+' 句').join('、')}</small>:null}</div>)}{current.kind==='in_person' && <button type="button" className="nl-secondary" onClick={()=>startEdit('intake')}>改一改</button>}</>}
+      </section>
       {/* V2-19：减了旧病历或相似医案时说清楚，不悄悄少带。 */}
       {materialNote && materialNote.length > 0 && <p className="nl-quiet" role="note">这次的材料：{materialNote.join('；')}。</p>}
       {extras && <details className="nl-section"><summary>本次资料（舌象、扣费、方案）</summary>{extras}</details>}
@@ -225,7 +245,7 @@ export function SignReview({
       </div>}
       {examBlock}
       {blocks.map(block => longRecord
-        ? <details key={block.key} className={'nl-review-block ' + (block.pending ? 'draft' : 'confirmed')} open={openBlocks[block.key] ?? block.key === 'judgment'}
+        ? <details key={block.key} className={'nl-review-block ' + (block.pending ? 'draft' : 'confirmed')} open={openBlocks[block.key] ?? (block.key === 'judgment' || block.key === firstPending)}
           onToggle={event => { const open = event.currentTarget.open; setOpenBlocks(previous => ({ ...previous, [block.key]: open })) }}>
           <summary><h2>{block.title}</h2><span className={'nl-tag' + (block.pending ? ' draft' : '')}>{heroTag(block, Boolean(previousPrescription))}</span></summary>
           {blockBody(block)}
@@ -254,17 +274,15 @@ export function SignReview({
       <PostureSummary postures={encounter.postures} title="这次面诊的体态记录" />
     </div>
     <footer className="nl-review-foot">
-      <p className={'nl-hint' + (pending > 0 ? '' : ' clear')}>{pending > 0 ? `还有 ${pending} 处草稿等您确认` : '都确认了，可以签字发出。'}</p>
-      <button type="button" className="nl-primary" disabled={busy || pendingDraftCount(current) > 0} onClick={() => void sign()}>签字发出</button>
+      <p className={'nl-hint' + (pending > 0 ? '' : ' clear')}>{pending > 0 ? `还有 ${pending} 处草稿等您确认` : '没有待确认草稿，可以签字发出。'}</p>
+      <button type="button" className={pending > 0 ? 'nl-secondary' : 'nl-primary'} disabled={busy || pendingDraftCount(current) > 0} onClick={() => void sign()}>签字发出</button>
     </footer>
   </div>
 }
 
 function TextBody({ block }: { block: ReviewBlock }) {
-  const shown = block.fields.filter(field => !field.missing)
-  if (shown.length === 0) return <p className="nl-empty">还没有内容，点“改一改”手动填写。</p>
-  return <>{shown.map(field => <div className="nl-review-field" key={field.path}>
-    <small>{field.label}</small><p>{field.value}</p>
+  return <>{block.fields.map(field => <div className="nl-review-field" key={field.path}>
+    <small>{field.label}</small><p>{field.missing ? '未记' : field.value}</p>
   </div>)}</>
 }
 

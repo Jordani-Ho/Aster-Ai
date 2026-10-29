@@ -108,29 +108,21 @@ function blockPending(encounter: Encounter, key: ReviewBlockKey): boolean {
   return pending.some(path => path === 'plan.advice')
 }
 
-// 核对页只显示有内容的块；判断（含治法）/方子/作业/医嘱按设计稿顺序。
+// 四块始终可见，没内容时也能由老师填写。
 export function reviewBlocks(encounter: Encounter): ReviewBlock[] {
   const blocks: ReviewBlock[] = []
   const judgmentFields = JUDGMENT_FIELDS.map(([path, label]) => textField(encounter, path, label))
   const judgmentPending = blockPending(encounter, 'judgment')
-  if (judgmentPending || judgmentFields.some(field => !field.missing)) {
-    blocks.push({ key: 'judgment', title: '判断', pending: judgmentPending, fields: judgmentFields, items: [], prescription: null, prescriptionSource: null })
-  }
+  blocks.push({ key: 'judgment', title: '判断', pending: judgmentPending, fields: judgmentFields, items: [], prescription: null, prescriptionSource: null })
   const prescriptionField = encounter.plan.prescription
   const prescription = prescriptionField.value ?? null
   const prescriptionPending = blockPending(encounter, 'prescription')
-  if (prescriptionPending || prescription) {
-    blocks.push({ key: 'prescription', title: '方子', pending: prescriptionPending, fields: [], items: [], prescription, prescriptionSource: prescription ? prescriptionField.source : null })
-  }
+  blocks.push({ key: 'prescription', title: '方子', pending: prescriptionPending, fields: [], items: [], prescription, prescriptionSource: prescription ? prescriptionField.source : null })
   const homeworkPending = blockPending(encounter, 'homework')
-  if (homeworkPending || encounter.plan.homework.length > 0) {
-    blocks.push({ key: 'homework', title: '作业', pending: homeworkPending, fields: [], items: encounter.plan.homework, prescription: null, prescriptionSource: null })
-  }
+  blocks.push({ key: 'homework', title: '作业', pending: homeworkPending, fields: [], items: encounter.plan.homework, prescription: null, prescriptionSource: null })
   const advice = textField(encounter, 'plan.advice', '医嘱')
   const advicePending = blockPending(encounter, 'advice')
-  if (advicePending || !advice.missing) {
-    blocks.push({ key: 'advice', title: '医嘱', pending: advicePending, fields: [advice], items: [], prescription: null, prescriptionSource: null })
-  }
+  blocks.push({ key: 'advice', title: '医嘱', pending: advicePending, fields: [advice], items: [], prescription: null, prescriptionSource: null })
   return blocks
 }
 

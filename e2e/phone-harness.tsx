@@ -156,6 +156,7 @@ async function seedRoster(): Promise<string[]> {
     const person = await node('v217-roster-' + scene + '-' + index)
     keys.push(person.identity.publicKey)
     await rememberTeacherStudent(teacher.store, person.identity.publicKey)
+    await teacher.store.put('teacher-student-basics', person.identity.publicKey, {alias:seed.alias,gender:seed.gender,age:seed.age,bazi:null,city:seed.city,at:1})
     if (seed.alias === '小王') {
       for (const days of [30, 14, seed.daysAgo]) {
         await saveTeacherRecord(teacher.store, signEncounter(encounterFor(person.identity.publicKey, { ...seed, at: daysAgoDate(days), id: seedHex('roster-' + scene + '-' + seed.alias + '-' + days) }), teacher.identity.privateKey))
@@ -261,6 +262,7 @@ function remoteEncounter(): Encounter {
 
 async function seedRemote() {
   await rememberTeacherStudent(teacher.store, student.publicKey)
+  await teacher.store.put('teacher-student-basics', student.publicKey, {alias:'合成小王',gender:'male',age:34,bazi:null,city:'北京市',at:1})
   await teacher.store.put('consult-package', 'a'.repeat(32), {
     encounter: remoteEncounter(), history: [], attachments: [],
     receivedAt: new Date('2026-10-22T02:05:00.000Z').toISOString(), sender: student.publicKey, droppedHistory: 0,
@@ -349,7 +351,7 @@ async function main() {
     if (scene === 'long') return <SignReview encounter={long} alias="合成小王" previousPrescription={null} onSign={() => {}} onBack={() => {}} />
     if (scene === 'tongue') return <div className="nl-shell"><main className="nl-page"><TonguePair record={tongue} crop={cropped} editable title="舌象 1 · 辰时 · 霜降 · 北京" /></main></div>
     if (studentScene) return <StudentShell store={pagesStore} identity={pagesIdentity} llm={stubLlm} stack={stack} stackStatus="ready" modelSettings={modelSettingsNode} memberStore={pagesStore} memberIdentity={pagesIdentity} family={familyOptions} active={0} onSwitch={() => {}} sendEnvelope={async () => {}} />
-    return <TeacherShell identity={teacher.identity} store={teacher.store} stack={stack} llm={stubLlm} gateway={gateway} status={status} settings={settingsNode} />
+    return <TeacherShell identity={teacher.identity} store={teacher.store} stack={stack} llm={scene === 'visit' ? null : stubLlm} gateway={gateway} status={status} settings={settingsNode} />
   }
 
   // Vite 冷启动可能让这个模块执行两次；同一个容器只建一个 React 根，否则整页切换时两个根互删节点。

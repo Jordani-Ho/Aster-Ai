@@ -1,4 +1,5 @@
 import { weekStart } from './core/adherence'
+import type { StudentBasicsDisplay } from './student-basics-display'
 
 // V2-17 老师·学生名单（06）：排序、搜索、“全部 / 最近来过”筛选、坚持情况标签。
 // 老师本机只有学生发来的周汇总（V2-10/V2-24 口径：只展示学生上报的数值，不做二次判定），
@@ -22,6 +23,7 @@ export interface StudentRowInput {
   report: StudentWeekSummary | null
   city?: string | null
   remote?: boolean
+  basics?: StudentBasicsDisplay | null
 }
 
 export interface StudentRow extends StudentRowInput {
@@ -75,7 +77,7 @@ export function buildStudentRows(inputs: readonly StudentRowInput[], today: stri
   }).sort((left, right) => {
     const leftAt = left.lastAt ?? ''
     const rightAt = right.lastAt ?? ''
-    return rightAt.localeCompare(leftAt) || left.alias.localeCompare(right.alias)
+    return Number(Boolean(right.basics)) - Number(Boolean(left.basics)) || rightAt.localeCompare(leftAt) || left.alias.localeCompare(right.alias)
   })
 }
 

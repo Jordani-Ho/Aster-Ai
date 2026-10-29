@@ -26,6 +26,13 @@ export function encounter(): Encounter {
 }
 
 describe('V2-16 核对页分块（合成数据）', () => {
+  it('没有模型和内容时四块仍可填写', () => {
+    const value=encounter()
+    value.judgment={symptomSummary:unknown(),pattern:unknown(),mechanism:unknown(),rationale:unknown()}
+    value.plan={principle:unknown(),prescription:unknown(),homework:[],advice:unknown()}
+    expect(reviewBlocks(value).map(block=>block.key)).toEqual(['judgment','prescription','homework','advice'])
+    expect(pendingBlockCount(value)).toBe(0)
+  })
   it('草稿块按设计稿顺序出现，并标出草稿', () => {
     const blocks = reviewBlocks(encounter())
     expect(blocks.map(block => block.title)).toEqual(['判断', '方子', '作业', '医嘱'])

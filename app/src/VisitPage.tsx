@@ -21,6 +21,8 @@ import { confirmHeardExams } from './review-model'
 import { SignReview } from './SignReview'
 import { PostureTool } from './PostureTool'
 import { VisitRecorder } from './VisitRecorder'
+import { VisitReviewPhotos } from './VisitReviewPhotos'
+import { applyStudentBasics, basicsLine, loadStudentBasics, sortByBasics, type StudentBasicsDisplay } from './student-basics-display'
 import { VisitAudioPlayer } from './VisitAudioPlayer'
 import { VisitPhotos } from './VisitPhotos'
 import { TongueCapture } from './TongueCapture'
@@ -28,7 +30,7 @@ import { TonguePair } from './TonguePair'
 import { loadVisitOriginals, editVisitOriginal, appendVisitOriginal, type VisitOriginal } from './core/record/visit-originals'
 import { organizeVisitSegment } from './core/intake/visit-organizer'
 import { clearVisitRawMaterials } from './core/record/visit-cleanup'
-import { VISIT_ORGANIZATION_KEYS, validateVisitOrganization, mergeVisitOrganization, emptyVisitOrganization, type VisitOrganization } from './core/record/visit-organization'
+import { validateVisitOrganization, mergeVisitOrganization, emptyVisitOrganization, type VisitOrganization } from './core/record/visit-organization'
 import { uiError } from './core/onboarding/ui'
 import { prescriptionStockNotes } from './core/herbs'
 import './newui.css'
@@ -58,6 +60,8 @@ function aliasOf(records: readonly LoadedTeacherRecord[]): string {
 export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStudent, onExit }: VisitPageProps) {
   const [phase, setPhase] = useState<Phase>('select')
   const [students, setStudents] = useState<string[]>([])
+  const basicsGeneration = useRef(0)
+  const [basicsByStudent, setBasicsByStudent] = useState<Record<string,StudentBasicsDisplay|null>>({})
   const [records, setRecords] = useState<LoadedTeacherRecord[]>([])
   const [adherence, setAdherence] = useState<StudentAdherence[]>([])
   const [savedDraft, setSavedDraft] = useState<Encounter | null>(null)
@@ -84,32 +88,40 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
   const [busy, setBusy] = useState(false)
   const [comparison, setComparison] = useState<ObservationNote>(null)
   const [postureOpen, setPostureOpen] = useState(false)
-  const textarea = useRef<HTMLTextAreaElement | null>(null)
   const saveQueue = useRef<Promise<void>>(Promise.resolve())
   const originalEditQueue = useRef<Promise<void>>(Promise.resolve())
 
   useEffect(() => {
     let active = true
+    const generation = ++basicsGeneration.current
     void Promise.all([knownStudents(store), listStudentAdherence(store), loadInPersonDraft(store), heavenNow(store)])
-      .then(([people, reports, draftRow, time]) => {
+      .then(async ([people, reports, draftRow, time]) => {
+        const basics = Object.fromEntries(await Promise.all(people.map(async student => [student, await loadStudentBasics(store, student)] as const)))
         if (!active) return
-        setStudents(people); setAdherence(reports); setSavedDraft(draftRow); setHeaven(time)
-        if (initialStudent && people.includes(initialStudent)) void start(initialStudent)
+        if (generation === basicsGeneration.current) { setStudents(people); setBasicsByStudent(basics) }
+        setAdherence(reports); setSavedDraft(draftRow); setHeaven(time)
+        if (initialStudent && people.includes(initialStudent) && basics[initialStudent]) void start(initialStudent)
       }).catch(() => { if (active) setError('本机资料读取失败，请稍后重试。') })
     return () => { active = false }
+  }, [store])
+
+  useEffect(() => {
+    let active = true
+    const refresh = () => { const current = ++basicsGeneration.current; void knownStudents(store).then(async people => {
+      const basics = Object.fromEntries(await Promise.all(people.map(async student => [student, await loadStudentBasics(store, student)] as const)))
+      if (active && current === basicsGeneration.current) { setStudents(people); setBasicsByStudent(basics) }
+    }).catch(() => { if (active && current === basicsGeneration.current) setError('学生名单读取失败，请稍后重试。') }) }
+    window.addEventListener('aster:data-changed', refresh)
+    return () => { active = false; window.removeEventListener('aster:data-changed', refresh) }
   }, [store])
 
   const start = async (student: string) => {
     setBusy(true); setError('')
     try {
       const [rows, time] = await Promise.all([teacherRecordsOf(store, student), heavenNow(store)])
-      const next = startInPersonEncounter({ teacher: identity.publicKey, student, heaven: heavenStampOf(time) })
-      const basics = await store.get('teacher-student-basics', student) as { alias: string; gender: 'male' | 'female' | 'other'; age: number; bazi: typeof next.profile.bazi.value; city: string; at: number } | undefined
-      const roster = await store.get('teacher-students', student) as { city?: string | null; cityUpdatedAt?: number } | undefined
-      if (basics) for (const key of ['alias', 'gender', 'age', 'bazi', 'city'] as const) {
-        const value = key === 'city' && typeof roster?.cityUpdatedAt === 'number' && roster.cityUpdatedAt > basics.at ? roster.city ?? null : basics[key]
-        Object.assign(next.profile[key], { value, source: value === null ? 'unknown' : 'student' })
-      }
+      const basics = await loadStudentBasics(store, student)
+      if (!basics) throw Error('这位学生正在填基础信息，填好后才能开始面诊。')
+      const next = applyStudentBasics(startInPersonEncounter({ teacher: identity.publicKey, student, heaven: heavenStampOf(time) }), basics)
       setRecords(rows); setPrevious(rows.at(0) ?? null); setEncounter(next); setHeaven(time); setDraft(null)
       setMaterialNote([]); setComparison(null); setVisitOrganization(null); setUtterance(''); setStatus(''); setPostSignNotice(''); setPhase('dictate')
       await saveInPersonDraft(store, next)
@@ -120,8 +132,11 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
     if (!savedDraft) return
     setBusy(true); setError('')
     try {
-      const rows = await teacherRecordsOf(store, savedDraft.student)
-      setRecords(rows); setPrevious(rows.at(0) ?? null); setEncounter(savedDraft); setPhase('dictate')
+      const [rows, basics] = await Promise.all([teacherRecordsOf(store, savedDraft.student), loadStudentBasics(store, savedDraft.student)])
+      if (!basics) throw Error('这位学生正在填基础信息，填好后才能继续面诊。')
+      const updated=applyStudentBasics(savedDraft,basics)
+      await saveInPersonDraft(store,updated)
+      setRecords(rows); setPrevious(rows.at(0) ?? null); setEncounter(updated); setPhase('dictate')
       setStatus('已读回上次未签字的面诊草稿，都还在本机。')
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
@@ -205,7 +220,9 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
     if (!encounter || busy) return
     setBusy(true); setError(''); setStatus('')
     try {
-      const confirmed = confirmHeardExams(encounter)
+      const basics = await loadStudentBasics(store, encounter.student)
+      if (!basics) throw Error('这位学生正在填基础信息，填好后才能继续面诊。')
+      const confirmed = confirmHeardExams(applyStudentBasics(encounter, basics))
       let drafted = confirmed
       let notes: string[] = []
       if (llm) {
@@ -285,7 +302,9 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
     return <SignReview
       encounter={draft}
       alias={alias}
-      subtitle={llm ? '四诊已记好 · 下面是智能体的草稿' : '四诊已记好 · 核对后签字'}
+      subtitle={llm ? '下面是智能体的草稿' : '没接模型，智能体这次没有起草，请您直接写；接模型在设置里'}
+      visitOrganization={visitOrganization}
+      visitPhotos={<VisitReviewPhotos store={store} encounter={draft} />}
       materialNote={materialNote}
       comparison={comparison}
       onComparisonChange={setComparison}
@@ -324,21 +343,12 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
           {report && <p className="nl-quiet">这周练习 {report.practiceDays} 天{report.streak > 0 ? ' · 已连续 ' + report.streak + ' 天' : ''}</p>}
         </details>}
 
-        <VisitRecorder key={encounter.id} store={store} visitId={encounter.id} onChange={refreshOriginals} onRecording={setRecording} stopRequest={stopRequest} onStopped={() => { setAudioRevision(value => value + 1); void organizeRecording().then(() => { if (exitAfterStop.current) { exitAfterStop.current = false; onExit() } }) }} />
+        <VisitRecorder key={encounter.id} store={store} visitId={encounter.id} highlight={!encounter.intake.chiefComplaint.value} onChange={refreshOriginals} onRecording={setRecording} stopRequest={stopRequest} onStopped={() => { setAudioRevision(value => value + 1); void organizeRecording().then(() => { if (exitAfterStop.current) { exitAfterStop.current = false; onExit() } }) }} />
         <VisitAudioPlayer store={store} visitId={encounter.id} revision={audioRevision} />
         {originals.length > 0 && <section className="nl-card" aria-label="逐句原话"><h2>逐句原话</h2>{originals.map(line => <label key={line.id}>第 {line.id} 句{line.edited ? ' · 老师改' : ''}<textarea defaultValue={line.text} onBlur={event => { if (event.target.value !== line.text) { const text = event.target.value; originalEditQueue.current = originalEditQueue.current.catch(() => {}).then(async () => { await editVisitOriginal(store, encounter.id, line.id, text); await store.delete('visit-organized', encounter.id); setVisitOrganization(null); refreshOriginals() }); void originalEditQueue.current.catch(() => setError('原话没有保存，请检查内容后重试。')) } }} /></label>)}<button type="button" disabled={busy || recording} onClick={() => void organizeRecording()}>重新整理原话</button></section>}
-        {visitOrganization && <section className="nl-card" aria-label="录音整理草稿"><h2>录音整理 · 待您确认</h2>{VISIT_ORGANIZATION_KEYS.map(key => {
-          const field = visitOrganization[key]
-          if (!field.text) return null
-          const label = {chiefComplaint:'主诉',presentIllness:'现病史',look:'望',listenSmell:'闻',ask:'问',pulse:'切'}[key]
-          return <div key={key}><strong>{label} · 草稿</strong><p>{field.text}</p><small>依据：{field.citations.map(id => '第 ' + id + ' 句').join('、')}</small><button type="button" onClick={() => {
-            if (key === 'chiefComplaint' || key === 'presentIllness') apply(recordIntakeField(encounter, key, field.text!))
-            else apply({ ...encounter, fourExams: { ...encounter.fourExams, [key]: { value: field.text, source: 'teacher', note: 'heard' } } })
-          }}>采用这一栏</button></div>
-        })}</section>}
         <section className="nl-listen" aria-label="口述记录">
           <div className="nl-listen-head"><span className="nl-listen-dot" aria-hidden="true" />正在听 · 您说，智能体记</div>
-          <textarea ref={textarea} rows={3} maxLength={2000} value={utterance} disabled={busy} aria-label="您说，智能体记"
+          <textarea rows={3} maxLength={2000} value={utterance} disabled={busy} aria-label="您说，智能体记"
             placeholder="用输入法的语音输入，或直接打字。说一段，点“整理”。" onChange={event => setUtterance(event.target.value)} />
           <div className="nl-listen-actions">
             <button type="button" disabled={busy || !utterance.trim()} onClick={() => void organize()}>整理</button>
@@ -347,8 +357,10 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
         </section>
 
         <section className="nl-card" aria-label="面诊基本记录">
-          <label>主诉{encounter.intake.chiefComplaint.source === 'ai_draft' && ' · 草稿，待您确认'}<textarea aria-label="主诉" value={encounter.intake.chiefComplaint.value ?? ''} onChange={event => apply(recordIntakeField(encounter, 'chiefComplaint', event.target.value))} /></label>
-          <label>现病史{encounter.intake.presentIllness.source === 'ai_draft' && ' · 草稿，待您确认'}<textarea aria-label="现病史" value={encounter.intake.presentIllness.value ?? ''} onChange={event => apply(recordIntakeField(encounter, 'presentIllness', event.target.value))} /></label>
+          {(['chiefComplaint','presentIllness'] as const).map(key=><div key={key}><label>{key==='chiefComplaint'?'主诉':'现病史'}{encounter.intake[key].source === 'ai_draft' && ' · 草稿，待您确认'}<textarea aria-label={key==='chiefComplaint'?'主诉':'现病史'} value={encounter.intake[key].value ?? ''} onChange={event => apply(recordIntakeField(encounter, key, event.target.value))} /></label>
+            {visitOrganization?.[key].text === encounter.intake[key].value && visitOrganization?.[key].citations.length ? <small>依据：{visitOrganization[key].citations.map(id=>'第 '+id+' 句').join('、')}</small> : null}
+            {encounter.intake[key].source === 'ai_draft' && <button type="button" className={!recording && (key==='chiefComplaint' || encounter.intake.chiefComplaint.source!=='ai_draft') ? 'nl-primary' : 'nl-secondary'} onClick={()=>apply(recordIntakeField(encounter,key,encounter.intake[key].value ?? ''))}>就这样</button>}
+          </div>)}
         </section>
         <div className="nl-exams">
           {EXAM_ORDER.map(key => {
@@ -363,6 +375,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
                 ? <textarea rows={3} value={examText} aria-label={key === 'look' ? '望' : key === 'listenSmell' ? '闻' : key === 'ask' ? '问' : '切'}
                   onClick={event => event.stopPropagation()} onChange={event => setExamText(event.target.value)} />
                 : <p className={field.value === null ? 'placeholder' : undefined}>{field.value ?? (heard ? '待确认' : '点一下填写')}</p>}
+              {visitOrganization?.[key].text === field.value && visitOrganization?.[key].citations.length ? <small>依据：{visitOrganization[key].citations.map(id=>'第 '+id+' 句').join('、')}</small> : null}
               {editingExam === key && <div onClick={event => event.stopPropagation()}>
                 <button type="button" onClick={saveExam}>就这样</button>
               </div>}
@@ -382,10 +395,8 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
         <button type="button" className="nl-link-button" onClick={() => setPostureOpen(true)}>体态：拍一段 / 导入骨架（这次 {encounter.postures?.length ?? 0} 条）</button>
       </div>
       <footer className="nl-visit-foot">
-        <button type="button" className="nl-mic" aria-label="话筒：唤起语音输入" onClick={() => { textarea.current?.focus() }}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V22h2v-3.1A7 7 0 0 0 19 12h-2Z" /></svg>
-        </button>
-        <button type="button" className="nl-primary" disabled={busy || recording || encounter.intake.chiefComplaint.value === null || encounter.intake.chiefComplaint.source === 'ai_draft' || encounter.intake.presentIllness.source === 'ai_draft'} onClick={() => void toReview()}>说完了，看草稿</button>
+        {(busy || recording || !encounter.intake.chiefComplaint.value || encounter.intake.chiefComplaint.source === 'ai_draft' || encounter.intake.presentIllness.source === 'ai_draft') && <p className="nl-quiet">{recording ? '请先停止录音' : busy ? '正在处理，请稍候' : !encounter.intake.chiefComplaint.value ? '先写主诉' : '请先确认主诉和现病史草稿'}</p>}
+        <button type="button" className={busy || recording || !encounter.intake.chiefComplaint.value || encounter.intake.chiefComplaint.source === 'ai_draft' || encounter.intake.presentIllness.source === 'ai_draft' ? 'nl-secondary' : 'nl-primary'} disabled={busy || recording || encounter.intake.chiefComplaint.value === null || encounter.intake.chiefComplaint.source === 'ai_draft' || encounter.intake.presentIllness.source === 'ai_draft'} onClick={() => void toReview()}>说完了，看草稿</button>
       </footer>
     </div>
   }
@@ -400,10 +411,10 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
       {error && <p role="alert" className="nl-danger-strong">{error}</p>}
       {students.length === 0 && <p className="nl-empty">还没有学生。先在“我的馆 → 邀请学生”请学生进来。</p>}
       <ul className="nl-list">
-        {students.map((student, index) => <li key={student}>
-          <button type="button" className="nl-row" disabled={busy} onClick={() => void start(student)}>
+        {sortByBasics(students.map(student=>({student,basics:basicsByStudent[student]??null}))).map(({student,basics}, index) => <li key={student}>
+          <button type="button" className="nl-row" disabled={busy || !basics} onClick={() => void start(student)}>
             <span className="nl-avatar" aria-hidden="true">{index + 1}</span>
-            <span className="nl-row-main"><strong>{'学生 ' + (index + 1)}</strong><span>{student === pendingDraftStudent ? '有一份未签字的面诊草稿' : '点一下开始这次面诊'}</span></span>
+            <span className="nl-row-main"><strong>{basics?.alias ?? '学生 ' + (index + 1)}</strong><span>{basics ? basicsLine(basics) + (student === pendingDraftStudent ? ' · 有未签字草稿' : '') : '正在填基础信息'}</span></span>
           </button>
         </li>)}
       </ul>
