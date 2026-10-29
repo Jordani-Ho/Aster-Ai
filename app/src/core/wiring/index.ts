@@ -8,6 +8,7 @@ import { autoRestore } from '../records/backup'
 import type { ConsultPackage } from '../record/types'
 import { createAppointmentInbox } from '../appointments'
 import { sendPendingRosterJoin } from '../roster'
+import { sendPendingStudentBasics } from '../roster/basics-ready'
 
 // M1-15a：一个 createTransport 实例 + 一个收件分发 + 一个账本同步控制器。
 // 所有业务消息（问诊包、照片、签字病历、账本事件）都走同一个发送函数；
@@ -44,7 +45,7 @@ export function createWiring(options: WiringOptions) {
       options.onStatus?.(status)
       if (status === 'ready') {
         transport.sync()
-        void sendPendingRosterJoin(store, send).catch(() => options.onError?.())
+        void sendPendingRosterJoin(store, send).then(() => sendPendingStudentBasics(store, send)).catch(() => options.onError?.())
         // 重连后补一次对账与待发队列。
         void ledger.requestSync().then(() => ledger.flush()).catch(() => options.onError?.())
         // V2-05：师生互为备份——连上中继后自动补发恢复请求（每天最多一次）。

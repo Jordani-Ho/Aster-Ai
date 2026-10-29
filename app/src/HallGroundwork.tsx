@@ -4,7 +4,6 @@ import { defaultSchedule, GROUNDWORK_ITEMS, groundworkStatus, saveGroundwork, ty
 import { loadTemplates, saveTemplateDraft, publishTemplate } from './core/templates'
 import { defaultSchema, TEMPLATE_LABELS, TEMPLATE_TYPES } from '../../domain/tcm/templates/schema'
 import { loadRetentionDays, saveRetentionDays } from './core/records/retention'
-import { loadPersonalModel } from './core/llm/personal'
 import { TemplateStudio } from './TemplateStudio'
 import './groundwork.css'
 import { HerbLibrary } from './HerbLibrary'
@@ -19,21 +18,22 @@ import { TimeSettings } from './TimeSettings'
 
 type Item = keyof typeof GROUNDWORK_ITEMS
 const keys = Object.keys(GROUNDWORK_ITEMS) as Item[]
-export function HallGroundwork({ store, identity, send, onDone }: { store: LocalStore; identity?: Identity; send?: SendEnvelope; onDone?: () => void }) {
+export function HallGroundwork({ store, identity, send, onDone, onStatus }: { store: LocalStore; identity?: Identity; send?: SendEnvelope; onDone?: () => void; onStatus?: (ready: boolean) => void }) {
   const [value, setValue] = useState<Groundwork | null>(null), [missing, setMissing] = useState<string[]>([]), [item, setItem] = useState<Item>('templates')
   const [days, setDays] = useState(90), [error, setError] = useState(''), [busy, setBusy] = useState(false), [notice, setNotice] = useState('')
   const [herbOpen, setHerbOpen] = useState(false)
+  const [herbChosen, setHerbChosen] = useState(false)
   const [edited, setEdited] = useState(false)
   const [scheduleConflicts, setScheduleConflicts] = useState<{ value: Groundwork; rows: Appointment[]; names: Record<string, string> } | null>(null)
   const refresh = async (advance = false) => {
     const status = await groundworkStatus(store)
-    setValue(status.value); setMissing(status.missing)
+    setValue(status.value); setMissing(status.missing); onStatus?.(status.missing.length === 0)
     if (advance) setItem(keys.find(key => status.missing.includes(GROUNDWORK_ITEMS[key])) ?? 'model')
   }
   useEffect(() => { let active = true; void (async () => {
     const [status, retention] = await Promise.all([groundworkStatus(store), loadRetentionDays(store)])
     if (!active) return
-    setValue(status.value); setMissing(status.missing); setDays(retention); setItem(keys.find(key => status.missing.includes(GROUNDWORK_ITEMS[key])) ?? 'model')
+    setValue(status.value); setMissing(status.missing); onStatus?.(status.missing.length === 0); setDays(retention); setItem(keys.find(key => status.missing.includes(GROUNDWORK_ITEMS[key])) ?? 'model')
   })().catch(cause => { if (active) setError(`读取失败：${cause.message}`) }); return () => { active = false } }, [store])
   const persist = async (key: Item, candidate = value, scheduleChoice: 'keep' | 'cancel' | null = null) => {
     if (!candidate) return
@@ -69,12 +69,11 @@ export function HallGroundwork({ store, identity, send, onDone }: { store: Local
           await publishTemplate(store, draft.id); rows = await loadTemplates(store)
         }
       }
-      if (key === 'model' && !await loadPersonalModel(store)) throw Error('模型还没接好，请到模型设置测试连接')
       if (key === 'retention') await saveRetentionDays(store, days)
       const next = key === 'herbs' && candidate.herbs === 'pending'
         ? { ...candidate, herbs: (await listHerbs(store)).length ? 'ready' as const : 'pending' as const }
         : candidate
-      if (key === 'herbs' && next.herbs === 'pending') throw Error('先录入至少一味药材，或选择“不备药”')
+      if (key === 'herbs' && !herbChosen && !candidate.checked.includes('herbs')) throw Error('请选择是否自己备药')
       const checked = [...new Set([...next.checked, key])]
       await saveGroundwork(store, { ...next, checked })
       if ((key === 'templates' || key === 'invitation' || key === 'schedule') && identity) {
@@ -95,14 +94,14 @@ export function HallGroundwork({ store, identity, send, onDone }: { store: Local
     finally { setBusy(false) }
   }
   if (!value) return <section aria-label="开馆基础工作"><p>{error || '正在读取基础工作…'}</p>{error && <button type="button" onClick={() => void refresh(true).catch(cause => setError(cause.message))}>重新读取</button>}</section>
-  if (herbOpen) return <section className="groundwork" aria-label="药材库准备"><HerbLibrary store={store} role="老师" /><button type="button" onClick={() => { setHerbOpen(false); void refresh() }}>返回基础工作</button></section>
+  if (herbOpen) return <section className="groundwork" aria-label="药材库准备"><HerbLibrary store={store} role="老师" /><button type="button" onClick={() => setHerbOpen(false)}>返回基础工作</button></section>
   const patch = (next: Partial<Groundwork>) => { setValue({ ...value, ...next }); setScheduleConflicts(null); setEdited(true); setNotice('') }
   const schedule = value.schedule
   const editPeriods = (day: string, periods: Period[]) => patch({ schedule: { ...schedule, week: { ...schedule.week, [day]: periods } } })
   return <section aria-label="开馆基础工作" className="groundwork">
     <h2>开馆基础工作</h2>
-    <p role="status">{missing.length ? '以下准备是建议，可以以后补。现在就能邀请学生。' : '六项准备已设好。'}</p>
-    <div className="ground-tabs">{keys.map(key => <button type="button" disabled={busy} aria-pressed={item === key} key={key} onClick={() => { setItem(key); setError(''); setNotice('') }}>{GROUNDWORK_ITEMS[key]} · {missing.includes(GROUNDWORK_ITEMS[key]) ? '还没设，可以以后补' : '已设好'}</button>)}</div>
+    <p role="status">{missing.length ? '请依次看过并确认六项准备。' : '六项准备已确认。'}</p>
+    <div className="ground-tabs">{keys.map(key => <button type="button" disabled={busy || (missing.includes(GROUNDWORK_ITEMS[key]) && key !== keys.find(candidate => missing.includes(GROUNDWORK_ITEMS[candidate])))} aria-pressed={item === key} key={key} onClick={() => { setItem(key); setError(''); setNotice('') }}>{GROUNDWORK_ITEMS[key]} · {missing.includes(GROUNDWORK_ITEMS[key]) ? '还没看' : '已确认'}</button>)}</div>
     <h3>{GROUNDWORK_ITEMS[item]}</h3>
     {item === 'templates' && <>
       <p>问诊、病历、施治、开方各有一套默认骨架。先用默认就能开馆，以后随时改。</p>
@@ -152,26 +151,15 @@ export function HallGroundwork({ store, identity, send, onDone }: { store: Local
       <p className="nl-quiet">老师智能体每天按这个方式准备面诊邀约；排班和预约变更会在发出前核对。</p>
     </>}
     {item === 'herbs' && <>
-      <label><input type="radio" name="herbs" checked={value.herbs === 'none'} onChange={() => patch({ herbs: 'none' })} />不备药</label>
-      <label><input type="radio" name="herbs" checked={value.herbs !== 'none'} onChange={() => patch({ herbs: 'pending' })} />我自己备药，要建药材库</label>
-      {value.herbs === 'pending' && <p role="status">药材库还没建好，可以以后补；现在仍可邀请学生。</p>}
+      <label><input type="radio" name="herbs" checked={value.herbs === 'none' && (herbChosen || value.checked.includes('herbs'))} onChange={() => { setHerbChosen(true); patch({ herbs: 'none' }) }} />不备药</label>
+      <label><input type="radio" name="herbs" checked={value.herbs !== 'none' && (herbChosen || value.checked.includes('herbs'))} onChange={() => { setHerbChosen(true); patch({ herbs: 'pending' }) }} />我自己备药，要建药材库</label>
+      {value.herbs === 'pending' && <p role="status">药材可以现在录入，也可以以后添加。</p>}
       {value.herbs !== 'none' && <button type="button" onClick={() => setHerbOpen(true)}>前往药材库</button>}
     </>}
     {item === 'retention' && <><label>旧病历保留天数<input type="number" min="30" max="1095" value={days} onChange={e => { setDays(Number(e.target.value)); setEdited(true) }} /></label><p className="nl-quiet">默认 90 天，可设 30 天到 3 年；最新方案和长期观察沿用现有规则。</p></>}
     {item === 'model' && <p>未接个人模型时沿用社区模型；社区模型也不可用时，仍可按规则操作。以后可在“模型与偏好设置”接入。</p>}
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
-    {(missing.length > 0 || edited) && <button type="button" className="nl-primary" disabled={busy} onClick={() => void persist(item)}>就这样，保存{GROUNDWORK_ITEMS[item]}</button>}
+    {(missing.includes(GROUNDWORK_ITEMS[item]) || edited) && <button type="button" className="nl-primary" disabled={busy} onClick={() => void persist(item)}>就这样，保存{GROUNDWORK_ITEMS[item]}</button>}
     {onDone && <button type="button" onClick={onDone}>返回我的馆</button>}
   </section>
-}
-
-export function GroundworkNotice({ store, onOpen }: { store: LocalStore; onOpen: () => void }) {
-  const [missing, setMissing] = useState<string[]>([]), [error, setError] = useState('')
-  useEffect(() => {
-    let active = true
-    const refresh = () => { void groundworkStatus(store).then(result => { if (active) { setMissing(result.missing); setError('') } }).catch(cause => { if (active) setError(cause.message) }) }
-    refresh(); window.addEventListener('aster:data-changed', refresh)
-    return () => { active = false; window.removeEventListener('aster:data-changed', refresh) }
-  }, [store])
-  return missing.length || error ? <aside className="nl-card ground-notice">{error ? <p>{error}</p> : <><p>开馆准备可以以后补：</p><ul>{keys.map(key => <li key={key}>{GROUNDWORK_ITEMS[key]} · {missing.includes(GROUNDWORK_ITEMS[key]) ? '还没设，可以以后补' : '已设好'}</li>)}</ul></>}<button type="button" onClick={onOpen}>查看开馆准备</button></aside> : null
 }

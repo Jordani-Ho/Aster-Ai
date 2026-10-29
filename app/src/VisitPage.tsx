@@ -85,6 +85,12 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
     try {
       const [rows, time] = await Promise.all([teacherRecordsOf(store, student), heavenNow(store)])
       const next = startInPersonEncounter({ teacher: identity.publicKey, student, heaven: heavenStampOf(time) })
+      const basics = await store.get('teacher-student-basics', student) as { alias: string; gender: 'male' | 'female' | 'other'; age: number; bazi: typeof next.profile.bazi.value; city: string; at: number } | undefined
+      const roster = await store.get('teacher-students', student) as { city?: string | null; cityUpdatedAt?: number } | undefined
+      if (basics) for (const key of ['alias', 'gender', 'age', 'bazi', 'city'] as const) {
+        const value = key === 'city' && typeof roster?.cityUpdatedAt === 'number' && roster.cityUpdatedAt > basics.at ? roster.city ?? null : basics[key]
+        Object.assign(next.profile[key], { value, source: value === null ? 'unknown' : 'student' })
+      }
       setRecords(rows); setPrevious(rows.at(0) ?? null); setEncounter(next); setHeaven(time); setDraft(null)
       setMaterialNote([]); setComparison(null); setUtterance(''); setStatus(''); setPostSignNotice(''); setPhase('dictate')
       await saveInPersonDraft(store, next)
@@ -221,7 +227,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
   }
 
   if (phase === 'review' && draft && encounter) {
-    const alias = aliasOf(records) || '这位学生'
+    const alias = encounter.profile.alias.value || aliasOf(records) || '这位学生'
     return <SignReview
       encounter={draft}
       alias={alias}
@@ -236,8 +242,10 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
   }
 
   if (phase === 'dictate' && encounter) {
-    const alias = aliasOf(records) || '这位学生'
+    const alias = encounter.profile.alias.value || aliasOf(records) || '这位学生'
     const report = adherence.find(item => item.student === encounter.student)
+    const gender = encounter.profile.gender.value ?? previous?.encounter.profile.gender.value
+    const age = encounter.profile.age.value ?? previous?.encounter.profile.age.value
     const lastPattern = previous?.encounter.judgment.pattern.value
     const lastPrescription = previous?.encounter.plan.prescription.value?.items.map(item => item.herb).join('、')
     const lastHomework = previous?.encounter.plan.homework.map(item => item.title).join('、')
@@ -245,7 +253,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
       <header className="nl-flow-head">
         <button type="button" className="nl-back" aria-label="返回" onClick={onExit}>‹</button>
         <div><h1>{alias}</h1><small>{[
-          [previous?.encounter.profile.gender.value === 'male' ? '男' : previous?.encounter.profile.gender.value === 'female' ? '女' : '', previous?.encounter.profile.age.value ? previous.encounter.profile.age.value + ' 岁' : ''].filter(Boolean).join(' · '),
+          [gender === 'male' ? '男' : gender === 'female' ? '女' : '', age != null ? age + ' 岁' : ''].filter(Boolean).join(' · '),
           '第 ' + (new Set(records.map(row => row.encounterId)).size + 1) + ' 次面诊',
           heaven ? formatHeavenTime(heaven) : '',
           heaven ? heaven.jieqi : '',

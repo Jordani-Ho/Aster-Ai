@@ -119,9 +119,9 @@ try {
   await teacher.getByLabel('一句介绍', { exact: true }).fill('一起照顾日常作息。')
   await expect(teacher.getByText('合成阿慈老师邀请你', { exact: true })).toBeVisible()
   await teacher.getByRole('button', { name: '就用这个名字', exact: true }).click()
-  for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) await teacher.getByRole('button', { name: '就这样，保存' + label, exact: true }).click()
+  for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) { if (label === '药材库') await teacher.getByLabel('不备药', { exact: true }).check(); await teacher.getByRole('button', { name: '就这样，保存' + label, exact: true }).click() }
   await teacher.getByRole('button', { name: '开馆', exact: true }).click()
-  await expect(teacher.getByRole('heading', { name: '请第一位学生进来', exact: true })).toBeVisible({ timeout: 20000 })
+  await expect(teacher.getByRole('heading', { name: '请第一位来面诊的学生当面扫码', exact: true })).toBeVisible({ timeout: 20000 })
   await teacher.locator('details.op-link-details > summary').click()
   const invite = teacher.getByLabel('邀请链接', { exact: true })
   await expect(invite).toBeVisible()
@@ -141,6 +141,8 @@ try {
   check('学生打开邀请首屏、开始使用、接入模型、进入学生首页')
 
   // 学生连上社区后，老师端建馆引导自动结束，进入正常首页。
+  await expect(teacher.getByRole('button', { name: '开始面诊', exact: true })).toBeVisible({ timeout: 30000 })
+  await teacher.getByRole('button', { name: '先不面诊，进工作台', exact: true }).click()
   await expect(teacher.getByRole('heading', { name: '今天', exact: true })).toBeVisible({ timeout: 30000 })
   await connected(teacher)
   await shot(teacher, '01-teacher-home')

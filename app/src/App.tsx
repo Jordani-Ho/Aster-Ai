@@ -1,3 +1,4 @@
+import { queueStudentBasicsReady, sendPendingStudentBasics } from './core/roster/basics-ready'
 import { PilotSettings } from './PilotSettings'
 import {createPersonalClient, loadPersonalModel, type PersonalModel} from './core/llm/personal'
 import {clearCommunityModel, communityError, createCommunityClient, loadCommunityModel, saveCommunityModel, testCommunityModel, type CommunityModel} from './core/llm/community'
@@ -73,6 +74,7 @@ export function App() {
   // V2-14：只读仪表盘走同一个单页的 hash，不新增服务器接口；hash 里的钥匙读一次就收起来。
   const [dashboardRoute] = useState(() => location.hash.startsWith('#dashboard'))
   const [hallOpened, setHallOpened] = useState<boolean | null>(null)
+  const [initialVisitStudent, setInitialVisitStudent] = useState<string | undefined>()
   // M1-22 家人子账户：家人清单、当前在看谁（0 = 本人），以及每位家人的中继连接。
   const [family, setFamily] = useState<FamilyMember[]>([])
   const [active, setActive] = useState(0)
@@ -204,7 +206,7 @@ export function App() {
               // 首屏先认门；点“开始使用”才走原来的加入流程。
               if(!cancelled)setWelcome({invitation,storefront:decision.storefront})
             }else{
-              await acceptInvite(person,store,invitation,gateway+'/invite/redeem');if(location.href===startupLink)history.replaceState(null,'',location.pathname+location.search)
+              await acceptInvite(person,store,invitation,gateway+'/invite/redeem');await queueStudentBasicsReady(store);if(location.href===startupLink)history.replaceState(null,'',location.pathname+location.search)
               // V2-05：重新进入社区后，连上中继时自动向老师要回保留期内的记录。
               await markRestoreNeeded(store)
             }
@@ -309,7 +311,8 @@ export function App() {
         } else {
           await acceptInvite(person, store, invitation, gateway + '/invite/redeem')
           const running = stackRef.current
-          if (running) void sendPendingRosterJoin(store, running.send).catch(() => {})
+          await queueStudentBasicsReady(store)
+          if (running) void sendPendingRosterJoin(store, running.send).then(() => sendPendingStudentBasics(store, running.send)).catch(() => {})
           await markRestoreNeeded(store)
           if (!current()) return
           clearLink(); setRole('student')
@@ -404,7 +407,8 @@ export function App() {
       await acceptInvite(person, savedStore, welcome.invitation, gateway + '/invite/redeem')
       // 已在用的学生再接受一位老师的邀请时，中继早已连上，不会再触发“连上后补发”；这里当场把“我进馆了”发给这位老师。
       const running = stackRef.current
-      if (running) void sendPendingRosterJoin(savedStore, running.send).catch(() => {})
+      await queueStudentBasicsReady(savedStore)
+      if (running) void sendPendingRosterJoin(savedStore, running.send).then(() => sendPendingStudentBasics(savedStore, running.send)).catch(() => {})
       await markRestoreNeeded(savedStore)
       history.replaceState(null, '', location.pathname + location.search)
       setWelcome(null)
@@ -465,7 +469,7 @@ export function App() {
     return <main style={{ fontFamily: 'system-ui', padding: 16, maxWidth: 480, margin: '0 auto' }}><h1>知衡</h1><p>正在准备…</p></main>
   }
   if (role === 'teacher' && store && identity && hallOpened === false) {
-    return <>{error && <p role="alert">{error}</p>}<OpeningGuide identity={identity} store={store} gateway={gateway} send={stack?.send as SendEnvelope | undefined} modelGateway={modelGateway} modelConfig={modelConfig} onModelSaved={saveOwnModel} onDone={() => setHallOpened(true)} setupToken={setupToken} teacherRecommendation={teacherRecommendation} onRegistrationComplete={()=>setTeacherRecommendation(null)} /></>
+    return <>{error && <p role="alert">{error}</p>}<OpeningGuide identity={identity} store={store} gateway={gateway} send={stack?.send as SendEnvelope | undefined} modelGateway={modelGateway} modelConfig={modelConfig} onModelSaved={saveOwnModel} onDone={student => { setInitialVisitStudent(student); setHallOpened(true) }} setupToken={setupToken} teacherRecommendation={teacherRecommendation} onRegistrationComplete={()=>setTeacherRecommendation(null)} /></>
   }
   if(identity&&role==='student'&&store&&!modelConfig&&!communityConfig){
     if(modelConfig===undefined||communityConfig===undefined)return <main style={{fontFamily:'system-ui',padding:16,maxWidth:480,margin:'0 auto'}}><h1>知衡</h1><p>正在读取接入设置…</p></main>
@@ -476,7 +480,7 @@ export function App() {
   // M1-22：学生壳用“当前家人”的分片存储与身份，设置区仍用根身份；家人切换在今天页顶部。
   if (store && identity && role === 'student') return <>{error && <p role="alert">{error}</p>}{corePromotionNotice && <p role="status">{corePromotionNotice}</p>}<StudentShell store={store} identity={identity} llm={llm} stack={stack} stackStatus={activeStatus} modelNotice={modelNotice} modelSettings={modelSettings} family={memberOptions} active={active} onSwitch={setActive} memberStore={activeStore ?? store} memberIdentity={activeIdentity ?? identity} sendConsult={activeStack?.sendConsult} sendEnvelope={activeStack?.send} onFamilyChanged={refreshFamily} gateway={gateway} coreNotice={corePromotionNotice}
     notifySelf={async () => { if (pushGatewayUrl && pushVapidPublicKey) await createPushClient({ gatewayUrl: pushGatewayUrl, vapidPublicKey: pushVapidPublicKey, secretKey: identity.privateKey }).notifySubscribedSelf(identity.publicKey) }} /></>
-  if (role==='teacher' && store && identity) return <>{error && <p role="alert">{error}</p>}<Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherShell identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} coreNotice={corePromotionNotice} status={<>{modelNotice}<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p></>} ledgerPanel={<LedgerSettings managed flat identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} llm={llm}/>} settings={<details><summary>设置</summary>
+  if (role==='teacher' && store && identity) return <>{error && <p role="alert">{error}</p>}<Suspense fallback={<p>正在打开老师工作台…</p>}><TeacherShell initialVisitStudent={initialVisitStudent} identity={identity} store={store} stack={stack} llm={llm} gateway={gateway} coreNotice={corePromotionNotice} status={<>{modelNotice}<p role="status">中继：{stackStatus==='ready'?'已连接':stackStatus==='connecting'?'正在连接':'尚未连接'}</p></>} ledgerPanel={<LedgerSettings managed flat identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} llm={llm}/>} settings={<details><summary>设置</summary>
       <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button onClick={()=>void chooseRole('student')}>我是学生</button></details>
       {modelSettings}<TongueLevelSettings store={store}/><TemplateSettings store={store}/><TeacherListSettings store={store}/><PilotSettings store={store}/>
       <PushSettings identity={identity}/>

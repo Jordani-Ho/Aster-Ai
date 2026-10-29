@@ -1,3 +1,4 @@
+import { attachWaitingBasics } from './basics-ready'
 import type { Event } from 'nostr-tools/pure'
 import type { Identity } from '../identity'
 import type { LocalStore, StoreValue } from '../store'
@@ -87,7 +88,9 @@ export async function receiveRosterJoin(store: LocalStore, teacher: string, stud
   const leave = await store.get(TEACHER_LEAVES, student)
   if (validLeave(leave) && event.created_at <= Math.floor(Date.parse(leave.at) / 1000)) return false
   await store.delete(TEACHER_LEAVES, student)
-  await store.put('teacher-students', student, { student } as StoreValue)
+  const prior = await store.get('teacher-students', student)
+  await store.put('teacher-students', student, { ...(object(prior) ? prior : {}), student, joinedAt: object(prior) && typeof prior.joinedAt === 'number' ? Math.min(prior.joinedAt, at) : at } as StoreValue)
+  await attachWaitingBasics(store, student)
   return true
 }
 export async function receiveRosterLeave(store: LocalStore, teacher: string, at: number): Promise<boolean> {

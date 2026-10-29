@@ -105,6 +105,11 @@ async function dropRows(store: LocalStore, collection: string, keep: (key: strin
 // 老师端：删超过保留期的完整医案、问诊包、进行中的面诊草稿，以及不再被引用的照片。
 async function cleanTeacher(store: LocalStore, cutoff: number): Promise<Record<string, number>> {
   const deleted: Record<string, number> = {}
+  // 未匹配到有效进馆邀请的资料也遵照老师的保留期限清理。
+  deleted['teacher-basics-waiting'] = await dropRows(store, 'teacher-basics-waiting', (_key, value) => {
+    const at = (value as { at?: unknown })?.at
+    return typeof at === 'number' && Number.isSafeInteger(at) && at * 1000 >= cutoff
+  })
   deleted[TEACHER_RECORDS] = await dropRows(store, TEACHER_RECORDS, (_key, value) => {
     const record = value as { createdAt?: unknown }
     return !olderThan(record?.createdAt, cutoff)

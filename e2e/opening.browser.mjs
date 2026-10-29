@@ -36,7 +36,12 @@ try {
   await page.reload()
   await expect(page.getByRole('heading', { name: '给您的馆起个名', exact: true })).toBeVisible()
   await expect(page.getByText('建馆 · 第 3 / 5 步', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '就用这个名字', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('名字')
   await page.getByLabel('馆名', { exact: true }).fill('合成养生馆')
+  await page.getByRole('button', { name: '就用这个名字', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('介绍')
+  await expect(page.getByRole('heading', { name: '给您的馆起个名' })).toBeVisible()
   await page.getByLabel('一句介绍', { exact: true }).fill('一起照顾日常作息。')
   await page.getByRole('button', { name: /暖白/ }).click()
   await expect(page.getByText('合成阿慈老师邀请你', { exact: true })).toBeVisible()
@@ -52,7 +57,7 @@ try {
     await page.screenshot({ path: root + 'docs/screenshots/v222-hall-groundwork-390.png' })
     await page.setViewportSize({ width: 375, height: 812 })
   }
-  await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeDisabled()
   await page.getByRole('button', { name: '就这样，保存模板', exact: true }).click()
   await expect(page.getByRole('button', { name: '就这样，保存排班', exact: true })).toBeVisible()
   await page.reload()
@@ -60,21 +65,30 @@ try {
   await page.getByLabel('每时段最多接待几位', { exact: true }).fill('0')
   await page.getByRole('button', { name: '就这样，保存排班', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('1–20')
-  await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeEnabled()
-  await page.getByLabel('每时段最多接待几位', { exact: true }).fill('3')
+  await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeDisabled()
+  await page.getByLabel('每时段最多接待几位', { exact: true }).fill('1')
   await page.evaluate(() => window.__opening.failNextSave())
   await page.getByRole('button', { name: '就这样，保存排班', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('没保存成功')
   await expect(page.getByRole('alert')).toContainText('SYNTHETIC_DISK_FULL')
   await page.reload()
   await expect(page.getByRole('button', { name: '就这样，保存排班', exact: true })).toBeVisible()
-  for (const label of ['排班', '邀约方式', '药材库', '保留期限', '模型']) {
+  await page.getByText('周一至周日的排班（展开修改）').click()
+  await page.getByLabel('周一第1段开始').fill('09:30')
+  await page.getByRole('button', { name: '就这样，保存排班', exact: true }).click()
+  await page.getByRole('button', { name: '排班 · 已确认', exact: true }).click()
+  await page.getByText('周一至周日的排班（展开修改）').click()
+  await expect(page.getByLabel('周一第1段开始')).toHaveValue('09:30')
+  await page.getByRole('button', { name: '邀约方式 · 还没看', exact: true }).click()
+  for (const label of ['邀约方式', '药材库', '保留期限', '模型']) {
+      if (label === '药材库') await page.getByLabel('不备药', { exact: true }).check()
       await page.getByRole('button', { name: '就这样，保存' + label, exact: true }).click()
     }
+    await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeEnabled()
     await page.getByRole('button', { name: '开馆', exact: true }).click()
 
   // 05e：1 小时邀请、二维码、重新生成。
-  await expect(page.getByRole('heading', { name: '请第一位学生进来', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '请第一位来面诊的学生当面扫码', exact: true })).toBeVisible()
   await expect(page.getByText('这份邀请 1 小时有效', { exact: true })).toBeVisible()
   await page.locator('details.op-link-details > summary').click()
   const invite = await page.getByLabel('邀请链接', { exact: true }).inputValue()
@@ -92,7 +106,13 @@ try {
 
   // 第一位学生加入后引导结束，进入首页。
   await page.evaluate(() => window.__opening.addFirstStudent())
+  await expect(page.getByText('一位学生已进馆，正在填基础信息')).toBeVisible()
+  await expect(page.getByRole('button', { name: '开始面诊', exact: true })).toHaveCount(0)
+  await page.evaluate(() => window.__opening.finishBasics())
+  await expect(page.getByText('合成小明已进馆', { exact: false })).toBeVisible()
+  await page.getByRole('button', { name: '开始面诊', exact: true }).click()
   await expect(page.getByRole('heading', { name: '已进入老师首页', exact: true })).toBeVisible()
+  await expect(page.getByText('a'.repeat(64), { exact: true })).toBeVisible()
 
   // 08：开馆后的“我的馆”首页与设置入口。
   const manage = await browser.newPage({ viewport: { width: 375, height: 812 } })
@@ -100,9 +120,11 @@ try {
   await manage.goto(`http://127.0.0.1:${server.httpServer.address().port}/@fs/${root}e2e/opening.html?scene=manage&name=opening-manage-browser`)
   await expect(manage.getByRole('heading', { name: '我的馆', exact: true })).toBeVisible()
   await expect(manage.getByText('已开馆', { exact: true })).toBeVisible()
+  await manage.getByRole('button', { name: '开馆准备', exact: true }).click()
   for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) {
-    await expect(manage.getByText(`${label} · 还没设，可以以后补`, { exact: true })).toBeVisible()
+    await expect(manage.getByText(`${label} · 还没看`, { exact: true })).toBeVisible()
   }
+  await manage.getByRole('button', { name: '返回', exact: true }).first().click()
   await expect(manage.getByRole('button', { name: '＋ 邀请学生', exact: true })).toBeVisible()
   await expect(manage.getByRole('region', { name: '钱账总览' })).toContainText('还没记过账')
   await manage.getByRole('button', { name: /门面/ }).click()
@@ -112,26 +134,6 @@ try {
   for (const label of ['记录保留多久', '换手机', '向社区分享运行统计', '我的镜子']) await expect(manage.getByRole('button', { name: new RegExp(label) })).toBeVisible()
   await manage.close()
 
-  // V2-35：新老师跳过模型与六项准备，仍能开馆并取得第一张邀请。
-  const optional = await browser.newPage({ viewport: { width: 375, height: 812 } })
-  optional.on('pageerror', error => errors.push(error.message))
-  await optional.route('https://opening.synthetic.invalid/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }))
-  await optional.goto(`http://127.0.0.1:${server.httpServer.address().port}/@fs/${root}e2e/opening.html?scene=guide&name=opening-optional-browser`)
-  await optional.getByRole('button', { name: '先跳过，以后接模型', exact: true }).click()
-  await optional.getByLabel('学生怎么称呼您', { exact: true }).fill('合成小黄')
-  await optional.getByLabel('登记口令', { exact: true }).fill('SYNTHETIC_DEPLOYMENT_TOKEN')
-  await optional.getByRole('button', { name: '登记，下一步', exact: true }).click()
-  await optional.getByLabel('馆名', { exact: true }).fill('合成运动馆')
-  await optional.getByRole('button', { name: '就用这个名字', exact: true }).click()
-  for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) {
-    await expect(optional.getByRole('button', { name: `${label} · 还没设，可以以后补`, exact: true })).toBeVisible()
-  }
-  await optional.getByRole('button', { name: '开馆', exact: true }).click()
-  await expect(optional.getByRole('heading', { name: '请第一位学生进来', exact: true })).toBeVisible()
-  await optional.locator('details.op-link-details > summary').click()
-  await expect(optional.getByLabel('邀请链接', { exact: true })).toHaveValue(/invite=/)
-  await optional.close()
-
   expect(errors).toEqual([])
-  console.log('PASS: V2-17 五步建馆与 V2-35 六项可选、无模型邀请、我的馆缺项提示')
+  console.log('PASS: V2-38 五步建馆、六项确认与我的馆')
 } finally { await browser.close(); await server.close() }

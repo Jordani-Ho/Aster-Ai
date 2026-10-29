@@ -48,9 +48,9 @@ test('V2-37 核心学生推荐老师登记、开馆邀学生；普通老师晋�
     await newTeacher.getByLabel('馆名',{exact:true}).fill('合成新老师的馆')
     await newTeacher.getByLabel('一句介绍',{exact:true}).fill('合成介绍')
     await newTeacher.getByRole('button',{name:'就用这个名字',exact:true}).click()
-    for(const label of ['模板','排班','邀约方式','药材库','保留期限','模型'])await newTeacher.getByRole('button',{name:'就这样，保存'+label,exact:true}).click()
+    for(const label of ['模板','排班','邀约方式','药材库','保留期限','模型']){if(label==='药材库')await newTeacher.getByLabel('不备药',{exact:true}).check();await newTeacher.getByRole('button',{name:'就这样，保存'+label,exact:true}).click()}
     await newTeacher.getByRole('button',{name:'开馆',exact:true}).click()
-    await expect(newTeacher.getByRole('heading',{name:'请第一位学生进来',exact:true})).toBeVisible()
+    await expect(newTeacher.getByRole('heading',{name:'请第一位来面诊的学生当面扫码',exact:true})).toBeVisible()
     await newTeacher.locator('details.op-link-details > summary').click()
     const firstInvite=newTeacher.getByLabel('邀请链接',{exact:true})
     await expect(firstInvite).toBeVisible()
@@ -65,7 +65,7 @@ test('V2-37 核心学生推荐老师登记、开馆邀学生；普通老师晋�
     // 这位合成学生已在发起人馆里填过基础信息，接受第二位老师的邀请后直接进首页。
     try{await expect(student.locator('[data-page=student-today]')).toBeVisible({timeout:20000})}
     catch(cause){throw Error('学生接受新老师邀请后没进首页，页面显示：'+(await student.locator('body').innerText()).replace(/\s*\n\s*/g,' | ').slice(0,700),{cause})}
-    try{await expect(newTeacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible({timeout:40000})}
+    try{await expect(newTeacher.getByRole('button',{name:'开始面诊',exact:true})).toBeVisible({timeout:40000});await newTeacher.getByRole('button',{name:'先不面诊，进工作台',exact:true}).click();await expect(newTeacher.getByRole('heading',{name:'今天',exact:true})).toBeVisible()}
     catch(cause){
       const peek=(page:import('@playwright/test').Page,names:string[])=>page.evaluate(async list=>{const m='/src/core/store/index.ts',{resumeStore}=await import(m),s=await resumeStore();try{const out:Record<string,number>={};for(const n of list)out[n]=(await s.store.list(n)).length;const role=await s.store.get('settings','role');return {...out,role:JSON.stringify(role)}}finally{s.store.close();s.identity.privateKey.fill(0)}},names)
       throw Error('新老师没自动进“今天”：老师端 '+JSON.stringify(await peek(newTeacher,['teacher-students']))+'；学生端 '+JSON.stringify(await peek(student,['student-roster-pending','student-roster-joined']))+'；老师页面：'+(await newTeacher.locator('body').innerText()).replace(/\s*\n\s*/g,' | ').slice(0,400),{cause})

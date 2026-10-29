@@ -175,7 +175,7 @@ describe('预约信封和状态机', () => {
   it('同一时段容量为 3、四人都接受时前三人确认，第四人收到约满取消', async () => {
     const teacher = createIdentity(), teacherStore = await openStore(teacher, { factory: new IDBFactory() })
     await teacherStore.put('settings', 'role', { role: 'teacher' })
-    const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'
+    const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'; schedule.capacity = 3
     await teacherStore.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: ['schedule'] } as unknown as StoreValue)
     const students = await Promise.all(Array.from({ length: 4 }, async () => {
       const identity = createIdentity(), store = await openStore(identity, { factory: new IDBFactory() })

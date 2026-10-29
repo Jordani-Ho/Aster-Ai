@@ -44,13 +44,14 @@ export async function openCommunity(page:Page):Promise<string>{
  await page.getByLabel('一句介绍',{exact:true}).fill('一起照顾日常作息。')
  await page.getByRole('button',{name:'就用这个名字',exact:true}).click()
  await expect(page.getByText('✓ 模型已接好',{exact:true})).toBeVisible()
- await expect(page.getByRole('button',{name:'开馆',exact:true})).toBeEnabled()
+ await expect(page.getByRole('button',{name:'开馆',exact:true})).toBeDisabled()
  for(const label of ['模板','排班','邀约方式','药材库','保留期限','模型']){
+  if(label==='药材库') await page.getByLabel('不备药',{exact:true}).check()
   await page.getByRole('button',{name:'就这样，保存'+label,exact:true}).click()
  }
  await expect(page.getByRole('button',{name:'开馆',exact:true})).toBeEnabled()
  await page.getByRole('button',{name:'开馆',exact:true}).click()
- await expect(page.getByRole('heading',{name:'请第一位学生进来',exact:true})).toBeVisible()
+ await expect(page.getByRole('heading',{name:'请第一位来面诊的学生当面扫码',exact:true})).toBeVisible()
  await page.locator('details.op-link-details > summary').click()
  const link=page.getByLabel('邀请链接',{exact:true})
  await expect(link).toBeVisible()
@@ -72,8 +73,10 @@ export const test=base.extend<{people:{teacher:Person;student:Person};seedLedger
    const link=await openCommunity(teacher.page)
    await student.page.goto(link);await expect(student.page.getByRole('button',{name:'开始使用',exact:true})).toBeVisible();await student.page.getByRole('button',{name:'开始使用',exact:true}).click();await connectModel(student.page);await expect(student.page.getByRole('heading',{name:'进馆：先填基础信息',exact:true})).toBeVisible()
    // V2-23：合成学生先把基础信息填好（门槛本身由 phone.browser 的 newstudent 场景验收）。
-   await student.page.evaluate(async()=>{const s='/src/core/store/index.ts',b='/src/core/basics/index.ts',{resumeStore}=await import(s),{saveBasics}=await import(b),session=await resumeStore();try{await saveBasics(session.store,{alias:'合成小王',gender:'male',birthDate:'1990-05-06',birthShichen:null,birthPlace:'北京市',city:'北京市',history:'无',meds:'无',allergies:'无',routine:{wake:'07:00',sleep:'23:00'}})}finally{session.store.close();session.identity.privateKey.fill(0)}});await student.page.reload();await expect(student.page.locator('[data-page=student-today]')).toBeVisible()
+   await student.page.evaluate(async()=>{const s='/src/core/store/index.ts',b='/src/core/basics/index.ts',{resumeStore}=await import(s),{saveBasics}=await import(b),session=await resumeStore();try{await saveBasics(session.store,{alias:'合成小王',gender:'male',birthDate:'1990-05-06',birthShichen:null,birthPlace:'北京市',city:'北京市',history:'无',meds:'无',allergies:'无',routine:{wake:'07:00',sleep:'23:00'}});const r='/src/core/roster/basics-ready.ts';await (await import(r)).queueStudentBasicsReady(session.store)}finally{session.store.close();session.identity.privateKey.fill(0)}});await student.page.reload();await expect(student.page.locator('[data-page=student-today]')).toBeVisible()
    // 学生连上社区后老师才认得他；建馆引导自动结束，进入正常首页。
+   await expect(teacher.page.getByText('合成小王已进馆', {exact:false})).toBeVisible({timeout:40000})
+   await teacher.page.getByRole('button',{name:'先不面诊，进工作台',exact:true}).click()
    await expect(teacher.page.getByRole('heading',{name:'今天',exact:true})).toBeVisible()
    setActors(await actualActor(teacher.page),await actualActor(student.page))
    for(const page of [teacher.page,student.page])await expect(page.getByText('中继：已连接',{exact:true})).toBeVisible()

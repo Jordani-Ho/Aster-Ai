@@ -3,7 +3,8 @@ import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { join, extname } from 'node:path'
-const dir = process.argv[2] ?? new URL('../app/dist', import.meta.url).pathname
+import { fileURLToPath } from 'node:url'
+const dir = process.argv[2] ?? fileURLToPath(new URL('../app/dist', import.meta.url))
 const types = { '.js':'text/javascript', '.html':'text/html', '.css':'text/css', '.json':'application/json', '.wasm':'application/wasm', '.svg':'image/svg+xml', '.png':'image/png', '.webmanifest':'application/manifest+json' }
 const server = createServer(async (req, res) => { let p = decodeURIComponent(new URL(req.url, 'http://x').pathname); if (p === '/') p = '/index.html'; try { const b = await readFile(join(dir, p)); res.writeHead(200, { 'content-type': types[extname(p)] ?? 'application/octet-stream' }); res.end(b) } catch { try { const b = await readFile(join(dir, 'index.html')); res.writeHead(200, { 'content-type': 'text/html' }); res.end(b) } catch { res.writeHead(404); res.end() } } })
 await new Promise(r => server.listen(0, r))

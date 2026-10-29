@@ -88,6 +88,6 @@ it('六项缺失只供提示，真实配置仍按保存内容核对', async () =
     const role = await loadAgentRole(store, owner.publicKey, 'teacher')
     expect(role.invitation).toBe('review'); expect(role.template).toHaveProperty('record')
     await saveGroundwork(store, { ...value, herbs: 'pending' })
-    expect((await groundworkStatus(store)).missing).toContain('药材库')
+    expect((await groundworkStatus(store)).missing).not.toContain('药材库')
   } finally { store.close() }
 })

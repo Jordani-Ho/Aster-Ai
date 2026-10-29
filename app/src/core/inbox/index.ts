@@ -1,3 +1,4 @@
+import { receiveStudentBasicsReady } from '../roster/basics-ready'
 import type { Identity } from '../identity'
 import { parseTongueAbstract } from '../../../../domain/tcm/tongue'
 import type { LocalStore, StoreValue } from '../store'
@@ -993,6 +994,7 @@ export function createInbox(options: InboxOptions) {
         if (object(payload)) await receiveStorefront(store, message, payload)
         return
       }
+      if (type === 'student.basics-ready' && await loadRole(store) === 'teacher') { await receiveStudentBasicsReady(store, message.sender, payload, message.at); return }
       if (type === 'student.city') { await receiveStudentCity(store, message); return }
       if (type === 'teacher.city') { await receiveTeacherCity(store, message); return }
       if (type.startsWith('ledger.') && options.ledger) await options.ledger.receive(message)
