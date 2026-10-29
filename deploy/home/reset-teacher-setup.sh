@@ -40,12 +40,10 @@ fi
 log "旧凭据已移到 $(pwd)/$DEST（没有删）。"
 
 log ""
+# V2-42：#109 之后 update.sh 会自己等网页就绪再跑 verify.sh；这里不要再立刻探测（会拿到 502）。
 log "重新生成口令并重建 relay / gateway / web（不碰 cloudflared，网址不变）…"
-NO_VERIFY=1 bash ./update.sh
-
-log ""
-log "跑一次验收探测…"
-bash ./verify.sh
+log "update.sh 会等网页、网关、中继就绪后再跑验收探测。"
+bash ./update.sh
 
 log ""
 log "重置完成："

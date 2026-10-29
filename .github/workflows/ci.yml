@@ -104,6 +104,8 @@ jobs:
         run: node e2e/hash-invite.browser.mjs
       - name: V2-39 invite error messages browser integration (429 / 401 各自说清楚)
         run: node e2e/v239.browser.mjs
+      - name: V2-42 pilot clear-device browser integration（内测开关、输入「清空」才执行）
+        run: node e2e/v242.browser.mjs
       - name: Student core-member registration and teacher invitations
         run: node e2e/core-student.browser.mjs
       - name: V2-30 posture tool browser integration (capture/import, metrics, drag+sign, trends, local assets)

@@ -1,5 +1,6 @@
 import { queueStudentBasicsReady, sendPendingStudentBasics } from './core/roster/basics-ready'
 import { PilotSettings } from './PilotSettings'
+import { PilotReset } from './PilotReset'
 import {createPersonalClient, loadPersonalModel, type PersonalModel} from './core/llm/personal'
 import {clearCommunityModel, communityError, createCommunityClient, loadCommunityModel, saveCommunityModel, testCommunityModel, type CommunityModel} from './core/llm/community'
 import {ModelSettings} from './ModelSettings'
@@ -484,6 +485,7 @@ export function App() {
       <details><summary>调整使用角色</summary><button disabled={role==='teacher'} onClick={()=>void chooseRole('teacher')}>我是老师</button><button onClick={()=>void chooseRole('student')}>我是学生</button></details>
       {modelSettings}<TongueLevelSettings store={store}/><TemplateSettings store={store}/><TeacherListSettings store={store}/><PilotSettings store={store}/>
       <PushSettings identity={identity}/>
+      <PilotReset/>
     </details>} /></Suspense></>
   return <main style={{fontFamily:'system-ui, sans-serif',padding:'24px 16px',maxWidth:480,margin:'0 auto'}}>
     <h1>知衡</h1>{modelNotice}
@@ -494,6 +496,7 @@ export function App() {
       {modelSettings}<TeacherListSettings store={store}/>{role==='teacher'&&<PilotSettings store={store}/>}
       <LedgerSettings managed identity={identity} store={store} ledger={stack?.ledger} status={stackStatus} members={memberOptions}/>
       <PushSettings identity={identity}/>
+      <PilotReset/>
     </details>}
   </main>
 }

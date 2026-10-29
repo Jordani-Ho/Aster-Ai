@@ -88,13 +88,13 @@ export async function startEnvironment(build) {
   } catch (error) { await close(); throw error }
 }
 
-export async function startWebApp({ gatewayUrl, relayUrl }) {
+export async function startWebApp({ gatewayUrl, relayUrl, pilotMode = false }) {
   const requireApp = createRequire(new URL('../app/package.json', import.meta.url))
   const { createServer: createVite } = await import(pathToFileURL(requireApp.resolve('vite')).href)
   const { default: react } = await import(pathToFileURL(requireApp.resolve('@vitejs/plugin-react')).href)
   const webPort = await port()
   const app = await createVite({ configFile: false, root: path.join(root, 'app'), plugins: [react()],
-    define: { 'import.meta.env.VITE_COMMUNITY_RELAYS': JSON.stringify(relayUrl), 'import.meta.env.VITE_MODEL_GATEWAY_URL': JSON.stringify('http://localhost:' + webPort + '/v1') },
+    define: { 'import.meta.env.VITE_COMMUNITY_RELAYS': JSON.stringify(relayUrl), 'import.meta.env.VITE_MODEL_GATEWAY_URL': JSON.stringify('http://localhost:' + webPort + '/v1'), 'import.meta.env.VITE_PILOT_MODE': JSON.stringify(pilotMode ? '1' : '0') },
     resolve: { dedupe: ['lunar-typescript', 'timezonecomplete', 'tzdata'] },
     server: { host: '127.0.0.1', port: webPort, strictPort: true, fs: { allow: [root] }, proxy: { '/v1': { target: gatewayUrl, changeOrigin: false }, '/push': { target: gatewayUrl, changeOrigin: false }, '/invite': { target: gatewayUrl, changeOrigin: false } } },
   })

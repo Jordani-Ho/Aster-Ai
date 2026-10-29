@@ -6,7 +6,7 @@ import {spawnSync} from 'node:child_process'
 import {createHash} from 'node:crypto'
 import {root} from './process.mjs'
 const linux=p=>p.replace(/^([A-Z]):/i,(_,letter)=>'/mnt/'+letter.toLowerCase()).replaceAll('\\','/')
-const FILES=['deploy/home/setup.sh','deploy/home/update.sh','deploy/home/verify.sh','deploy/home/reset-teacher-setup.sh','deploy/home/scripts/generate-gateway.mjs','deploy/home/scripts/safeguard-data.mjs','deploy/home/scripts/setup-link.mjs','deploy/home/scripts/vendor/qrcode-generator-1.4.4.cjs','gateway/members.js','relay/configure.mjs','package.json']
+const FILES=['deploy/home/setup.sh','deploy/home/update.sh','deploy/home/verify.sh','deploy/home/reset-teacher-setup.sh','deploy/home/fresh-round.sh','deploy/home/scripts/generate-gateway.mjs','deploy/home/scripts/safeguard-data.mjs','deploy/home/scripts/setup-link.mjs','deploy/home/scripts/vendor/qrcode-generator-1.4.4.cjs','gateway/members.js','relay/configure.mjs','package.json']
 async function workspace(){await mkdir(path.join(root,'.cache/e2e'),{recursive:true});const dir=await mkdtemp(path.join(root,'.cache/e2e/setup-'));for(const file of FILES){await mkdir(path.dirname(path.join(dir,file)),{recursive:true});await copyFile(path.join(root,file),path.join(dir,file))}return dir}
 function bash(script,env){const result=process.platform==='win32'?spawnSync('wsl.exe',['-d','Ubuntu','--exec','env',...Object.entries(env).map(([k,v])=>k+'='+v),'bash',linux(script)],{encoding:'utf8'}):spawnSync('bash',[script],{encoding:'utf8',env:{...process.env,...env}});assert.equal(result.status,0,result.stderr);return result.stdout}
 // 期望失败时用这个：不 assert 退出码，返回 status/stdout/stderr 自己判断。
@@ -361,5 +361,60 @@ test('update 等网页就绪：一直 502 时判为失败，并提示稍后单�
   // 环境本身已经更新完、名单也核对过，只是没有跑验收探测。
   assert.match(text,/更新完成/)
   assert.ok(!text.includes('全部通过'))
+ }finally{await rm(dir,{recursive:true,force:true})}
+})
+// V2-42：fresh-round.sh 一条命令清场。凭据与名单存在才移、不删；生成新口令；名单只剩验收自测成员；连跑两次不互相覆盖。
+test('V2-42 fresh-round：清场不删、生成新口令、名单只剩自测成员，连跑两次备份不覆盖',async()=>{
+ const dir=await workspace(),home=path.join(dir,'deploy/home'),bin=await fakeBin(dir)
+ try{
+  await writeFile(path.join(home,'.env'),ENV_TEXT)
+  bash(path.join(home,'setup.sh'),envFor(bin))
+  const self={secret:'1'.repeat(64),pubkey:'2'.repeat(64)}
+  const hash=text=>createHash('sha256').update(text).digest('hex')
+  await writeFile(path.join(home,'data/self-member.json'),JSON.stringify(self))
+  await writeFile(path.join(home,'data/gateway/members.json'),JSON.stringify([self.pubkey,'a'.repeat(64)]))
+  // 造出“上一轮已经用过”的样子：老师口令已用、核心成员已登记、备份里留着上一轮的成对文件。
+  const oldToken='OLD_ROUND_TEACHER_TOKEN'
+  const usedSeed=JSON.stringify({tokenHash:hash(oldToken),usedFor:'a'.repeat(64)})
+  const oldCore=JSON.stringify({tokenHash:hash('OLD_CORE_TOKEN'),usedFor:'b'.repeat(64)})
+  await writeFile(path.join(home,'data/gateway/seed.json'),usedSeed)
+  await writeFile(path.join(home,'data/setup/teacher-setup-code.txt'),oldToken)
+  await writeFile(path.join(home,'data/gateway/core-seed.json'),oldCore)
+  await writeFile(path.join(home,'data/setup/core-member-code.txt'),'OLD_CORE_TOKEN')
+  await mkdir(path.join(home,'data/backup/last'),{recursive:true})
+  await writeFile(path.join(home,'data/backup/last/seed.json'),usedSeed)
+  await writeFile(path.join(home,'data/backup/last/teacher-setup-code.txt'),oldToken)
+  await writeFile(path.join(home,'data/backup/last/members.json'),JSON.stringify([self.pubkey,'a'.repeat(64)]))
+  await writeFile(path.join(home,'data/backup/last/core-seed.json'),oldCore)
+  const env={...envFor(bin),SKIP_BROWSER:'1'}
+  const out=bash(path.join(home,'fresh-round.sh'),env)
+  assert.match(out,/清场完成/)
+  assert.match(out,/fresh-/)
+  assert.match(out,/两台手机各点一次/)
+  assert.match(out,/清空这台设备上的知衡/)
+  // 新口令：没有 usedFor、哈希与新口令一致；核心成员也能重新登记。
+  const code=(await readFile(path.join(home,'data/setup/teacher-setup-code.txt'),'utf8')).trim()
+  assert.ok(code.length>=40)
+  assert.notEqual(code,oldToken)
+  const seed=JSON.parse(await readFile(path.join(home,'data/gateway/seed.json'),'utf8'))
+  assert.equal(seed.usedFor,undefined)
+  assert.equal(seed.tokenHash,hash(code))
+  const core=JSON.parse(await readFile(path.join(home,'data/gateway/core-seed.json'),'utf8'))
+  assert.equal(core.usedFor,undefined)
+  // 名单只剩验收自测成员。
+  assert.deepEqual(JSON.parse(await readFile(path.join(home,'data/gateway/members.json'),'utf8')),[self.pubkey])
+  // 旧文件都在 fresh-*/ 里，没有删。
+  const fresh1=(await readdir(path.join(home,'data/backup'))).filter(name=>name.startsWith('fresh-'))
+  assert.equal(fresh1.length,1)
+  const moved=await readdir(path.join(home,'data/backup',fresh1[0]))
+  for(const name of ['seed.json','members.json','teacher-setup-code.txt','core-seed.json'])assert.ok(moved.includes(name),'备份里应保留 '+name)
+  // 连跑第二次：也成功，备份目录不互相覆盖，成员还是只剩自测成员。
+  const out2=bash(path.join(home,'fresh-round.sh'),env)
+  assert.match(out2,/清场完成/)
+  const fresh2=(await readdir(path.join(home,'data/backup'))).filter(name=>name.startsWith('fresh-'))
+  assert.equal(fresh2.length,2)
+  const code2=(await readFile(path.join(home,'data/setup/teacher-setup-code.txt'),'utf8')).trim()
+  assert.notEqual(code2,code)
+  assert.deepEqual(JSON.parse(await readFile(path.join(home,'data/gateway/members.json'),'utf8')),[self.pubkey])
  }finally{await rm(dir,{recursive:true,force:true})}
 })

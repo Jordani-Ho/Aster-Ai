@@ -46,3 +46,10 @@
 4. 只用合成数据；CI 三项全过。
 
 ## 实施记录
+
+- `deploy/home/fresh-round.sh`：存在才移、不删，移到 `data/backup/fresh-<时间>/`。除卡片列的六份老师凭据和成员名单（含 `data/backup/last` 同名文件）外，也把核心成员凭据（`core-seed.json`、`core-member-code.txt`、`core-member.html` 及备份里的同名文件）一起移走——否则 `safeguard` 会保留已登记的核心成员种子，这一轮没法重新登记核心成员。时间戳撞名时加后缀，连跑两次备份目录不覆盖。
+- 然后跑 `update.sh`（#109 之后它会等网页就绪再验收）。老师浏览器：用 `powershell.exe` 从 WSL 调 Windows，新建空的配置目录 `%LOCALAPPDATA%\Aster-Test\知衡内测-老师-<时间>`，把桌面快捷方式「知衡内测-老师Chrome」改成指向它并用新配置打开老师登记扫码页；旧目录不删。`SKIP_BROWSER=1` 跳过（部署测试用）。
+- `reset-teacher-setup.sh`：最后那次 `verify.sh` 改成交给 `update.sh` 等就绪后再跑（去掉先前的 `NO_VERIFY=1` + 立刻 `verify.sh`）。
+- 清空按钮：`app/src/PilotReset.tsx`，只在 `VITE_PILOT_MODE=1` 时出现；`deploy/home/compose.yaml` 给内测部署打开这个开关（默认 1，正式版本不传）。接入老师端设置（`App.tsx`）、学生端设置（`StudentMe.tsx`）和选角色前的设置。先讲清后果、输入「清空」才执行；清空走两步：带 `?pilot-clear=1` 重载，由 `main.tsx` 在应用打开本地存储前删 IndexedDB / 本地存储 / 后台脚本，再回到干净网址——避免被应用自己占着的数据库连接挡住。
+- 《内测怎么开始》：第三节第 4 项改成「每一轮从头再来（清场）」，第五节加第 5 步手机清空说明。
+- 测试：`e2e/deployment.test.mjs` 新增 `fresh-round` 用例（清场后种子无 `usedFor`、新口令哈希一致、核心种子重置、名单只剩验收自测成员、旧文件都在 `fresh-*` 里、连跑两次备份不覆盖）；`e2e/v242.browser.mjs` 覆盖开关关/开、必须输入「清空」、清空后回到首次打开、老师设置里有按钮；CI 加这一步。
