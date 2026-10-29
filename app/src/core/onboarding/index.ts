@@ -6,6 +6,13 @@ import {nip98Authorization} from '../llm/nip98'
 import {addTeacher} from '../inbox'
 import {createLedgerSync} from '../ledger/sync'
 export const INVITE_ERROR='邀请暂不可用，请向老师要一个新链接'
+// V2-39：429 和 401 单独说清楚，不要和断网、5xx 混在“暂时未能加入社区”一句里。
+export const RATE_LIMIT_ERROR='请求太频繁，请稍等一分钟再点。'
+export const CLOCK_ERROR='登录校验没通过，请检查手机时间是否为自动设置。'
+export function onboardingErrorText(cause:unknown,fallback='暂时未能加入社区，请稍后重新打开邀请。'):string{
+ const message=cause instanceof Error?cause.message:''
+ return message===INVITE_ERROR||message===RATE_LIMIT_ERROR||message===CLOCK_ERROR?message:fallback
+}
 // V2-15：第一个邀请 1 小时内有效；有效期是参数，默认仍是 7 天。协议格式不变。
 export function makeInvite(identity:Identity,url:string,now=Math.floor(Date.now()/1000),expiresInSeconds=7*86400):Event{
  return JSON.parse(JSON.stringify(finalizeEvent({kind:27235,created_at:now,tags:[['u',url],['method','POST'],['expiration',String(now+expiresInSeconds)],['nonce',crypto.randomUUID()]],content:'{"type":"aster.invite","version":1}'},identity.privateKey)))
@@ -19,7 +26,7 @@ export function gatewayBase(modelUrl:string):string{return modelUrl.replace(/\/v
 // V2-28：从终端/微信复制的一次性口令常带换行或空格（网关会把多出来的字符算进哈希，直接 403）。
 // 口令本体是 base64url，不含空白，所以粘贴时去掉所有空格、换行、制表符是安全的。
 export function normalizeSetupToken(value:string):string{return value.replace(/\s+/g,'')}
-export async function onboardingRequest(identity:Identity,url:string,payload:unknown):Promise<void>{const body=JSON.stringify(payload),authorization=await nip98Authorization(identity.privateKey,url,'POST',body);const res=await fetch(url,{method:'POST',headers:{'content-type':'application/json',authorization},body});if(!res.ok){let detail='';try{const value=await res.json() as {error?:unknown};if(typeof value.error==='string')detail=value.error}catch{};throw Error(detail||(res.status===403?INVITE_ERROR:'暂时未能加入社区，请稍后重试。'))}}
+export async function onboardingRequest(identity:Identity,url:string,payload:unknown):Promise<void>{const body=JSON.stringify(payload),authorization=await nip98Authorization(identity.privateKey,url,'POST',body);const res=await fetch(url,{method:'POST',headers:{'content-type':'application/json',authorization},body});if(!res.ok){let detail='';try{const value=await res.json() as {error?:unknown};if(typeof value.error==='string')detail=value.error}catch{};if(res.status===429)throw Error(RATE_LIMIT_ERROR);if(res.status===401)throw Error(CLOCK_ERROR);throw Error(detail||(res.status===403?INVITE_ERROR:'暂时未能加入社区，请稍后重试。'))}}
 export async function acceptInvite(identity:Identity,store:LocalStore,event:Event,url:string){
  if(!validateInvite(event,url))throw Error(INVITE_ERROR)
  const departed=await store.get('student-roster-leaves',event.pubkey) as {at?:unknown}|undefined

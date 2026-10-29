@@ -6,7 +6,7 @@ import {spawnSync} from 'node:child_process'
 import {createHash} from 'node:crypto'
 import {root} from './process.mjs'
 const linux=p=>p.replace(/^([A-Z]):/i,(_,letter)=>'/mnt/'+letter.toLowerCase()).replaceAll('\\','/')
-const FILES=['deploy/home/setup.sh','deploy/home/update.sh','deploy/home/verify.sh','deploy/home/scripts/generate-gateway.mjs','deploy/home/scripts/safeguard-data.mjs','deploy/home/scripts/setup-link.mjs','deploy/home/scripts/vendor/qrcode-generator-1.4.4.cjs','gateway/members.js','relay/configure.mjs','package.json']
+const FILES=['deploy/home/setup.sh','deploy/home/update.sh','deploy/home/verify.sh','deploy/home/reset-teacher-setup.sh','deploy/home/scripts/generate-gateway.mjs','deploy/home/scripts/safeguard-data.mjs','deploy/home/scripts/setup-link.mjs','deploy/home/scripts/vendor/qrcode-generator-1.4.4.cjs','gateway/members.js','relay/configure.mjs','package.json']
 async function workspace(){await mkdir(path.join(root,'.cache/e2e'),{recursive:true});const dir=await mkdtemp(path.join(root,'.cache/e2e/setup-'));for(const file of FILES){await mkdir(path.dirname(path.join(dir,file)),{recursive:true});await copyFile(path.join(root,file),path.join(dir,file))}return dir}
 function bash(script,env){const result=process.platform==='win32'?spawnSync('wsl.exe',['-d','Ubuntu','--exec','env',...Object.entries(env).map(([k,v])=>k+'='+v),'bash',linux(script)],{encoding:'utf8'}):spawnSync('bash',[script],{encoding:'utf8',env:{...process.env,...env}});assert.equal(result.status,0,result.stderr);return result.stdout}
 // 期望失败时用这个：不 assert 退出码，返回 status/stdout/stderr 自己判断。
@@ -283,4 +283,46 @@ test('第二版部署目录与 README 里没有第一版已删功能的字样',a
  const found=[]
  for(const file of files){const text=await readFile(file,'utf8');for(const [pattern,label] of banned)if(pattern.test(text))found.push(path.relative(root,file)+' → '+label)}
  assert.deepEqual(found,[])
+})
+// V2-39：正式的重置老师登记命令。只挪凭据不删、生成新口令、成员名单人数不变、旧文件留档。
+test('V2-39 reset-teacher-setup：旧凭据移到 pre-reset，生成新口令，成员名单不变',async()=>{
+ const dir=await workspace(),home=path.join(dir,'deploy/home'),bin=await fakeBin(dir)
+ try{
+  await writeFile(path.join(home,'.env'),ENV_TEXT)
+  const env=envFor(bin)
+  bash(path.join(home,'setup.sh'),env)
+  // 模拟“已经登记过老师”：种子有 usedFor，一次性口令与扫码页已经用过被删。
+  const oldToken='OLD_TEACHER_TOKEN_'+'x'.repeat(16)
+  const usedSeed=JSON.stringify({tokenHash:createHash('sha256').update(oldToken).digest('hex'),usedFor:'a'.repeat(64)})
+  await writeFile(path.join(home,'data/gateway/seed.json'),usedSeed)
+  await rm(path.join(home,'data/setup/teacher-setup-code.txt'));await rm(path.join(home,'data/setup/teacher-setup.html'))
+  // verify 的自测成员预先在名单里，避免 verify 补人让“人数不变”这条失真。
+  const pubkey='2'.repeat(64),members=[pubkey,'b'.repeat(64),'c'.repeat(64)]
+  await writeFile(path.join(home,'data/self-member.json'),JSON.stringify({secret:'1'.repeat(64),pubkey}))
+  await writeFile(path.join(home,'data/gateway/members.json'),JSON.stringify(members))
+  // 备份里留着旧的成对文件（真实环境由 update.sh 的 prepare 写）。
+  await mkdir(path.join(home,'data/backup/last'),{recursive:true})
+  await writeFile(path.join(home,'data/backup/last/seed.json'),usedSeed)
+  await writeFile(path.join(home,'data/backup/last/teacher-setup-code.txt'),oldToken)
+  const out=bash(path.join(home,'reset-teacher-setup.sh'),env)
+  assert.match(out,/pre-reset-/)
+  assert.match(out,/全部通过/)
+  assert.match(out,/干净的浏览器身份/)
+  assert.match(out,/最新登记/)
+  // 新的一对凭据：口令在、种子没有 usedFor、哈希对得上。
+  const code=(await readFile(path.join(home,'data/setup/teacher-setup-code.txt'),'utf8')).trim()
+  assert.ok(code.length>=40)
+  assert.notEqual(code,oldToken)
+  const seed=JSON.parse(await readFile(path.join(home,'data/gateway/seed.json'),'utf8'))
+  assert.equal(seed.usedFor,undefined)
+  assert.equal(seed.tokenHash,createHash('sha256').update(code).digest('hex'))
+  // 成员名单人数不变。
+  assert.deepEqual(JSON.parse(await readFile(path.join(home,'data/gateway/members.json'),'utf8')),members)
+  // 旧凭据在 data/backup/pre-reset-* 里，没有删。
+  const pre=(await readdir(path.join(home,'data/backup'))).find(name=>name.startsWith('pre-reset-'))
+  assert.ok(pre)
+  const moved=await readdir(path.join(home,'data/backup',pre))
+  assert.ok(moved.includes('seed.json'))
+  assert.ok(moved.includes('teacher-setup-code.txt'))
+ }finally{await rm(dir,{recursive:true,force:true})}
 })

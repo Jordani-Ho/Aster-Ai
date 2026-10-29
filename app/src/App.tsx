@@ -18,7 +18,7 @@ import { startStatsSession } from './core/dashboard/session'
 import { sendDailyStats } from './core/dashboard/stats'
 
 import type { Identity } from './core/identity'
-import { bootstrapIdentity, readInviteLink, acceptInvite, gatewayBase, INVITE_ERROR, validateInvite, onboardingRequest } from './core/onboarding'
+import { bootstrapIdentity, readInviteLink, acceptInvite, gatewayBase, INVITE_ERROR, validateInvite, onboardingRequest, onboardingErrorText } from './core/onboarding'
 import { loadTeachers, type SendEnvelope } from './core/inbox'
 import { readReidentifyLink } from './core/reidentify'
 import { StudentReidentifyRequestPage, TeacherReidentifyPrompt } from './ReidentifyPages'
@@ -212,7 +212,7 @@ export function App() {
             }
           }
         }
-      } catch (cause) {setError(cause instanceof Error&&cause.message===INVITE_ERROR?INVITE_ERROR:'暂时未能加入社区，请稍后重新打开邀请。')}
+      } catch (cause) {setError(onboardingErrorText(cause))}
       if(cancelled){store.close();person.privateKey.fill(0);return}
       const saved=await store.get('settings','role') as {role?:Role}|undefined
       const nextRole=teacherTicket?'teacher':saved?.role??null
@@ -414,7 +414,7 @@ export function App() {
       setWelcome(null)
       setRole('student')
     } catch (cause) {
-      setError(cause instanceof Error && cause.message === INVITE_ERROR ? INVITE_ERROR : '暂时未能加入社区，请稍后重新打开邀请。')
+      setError(onboardingErrorText(cause))
     } finally { setWelcomeBusy(false) }
   }
 

@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest'
 import { createIdentity } from '../identity'
-import { makeInvite, readInviteLink, inviteLink, normalizeSetupToken, validateInvite } from './index'
+import { makeInvite, readInviteLink, inviteLink, normalizeSetupToken, validateInvite, onboardingRequest, onboardingErrorText, INVITE_ERROR, RATE_LIMIT_ERROR, CLOCK_ERROR } from './index'
 const teacher=createIdentity()
 const url='https://gw.example/invite/redeem',now=1800000000
 it('signed reusable invitations bind endpoint, expire in seven days and use a URL fragment',()=>{
@@ -24,4 +24,24 @@ it('rejects cached-verification mutations, duplicate tags and malformed links',(
  expect(validateInvite({...event,tags:[...event.tags,['expiration','9999999999']]},url,now)).toBe(false)
  expect(()=>readInviteLink('https://app.example/#invite=broken')).toThrow()
  expect(readInviteLink('https://app.example/')).toBe(null)
+})
+// V2-39：429 和 401 要单独说清楚，不要和断网、5xx 混在“暂时未能加入社区”一句里。
+it('邀请/登记失败时：429 说请求太频繁，401 提醒检查手机时间，其它仍是原来的兜底话',async()=>{
+ const identity=createIdentity()
+ const original=globalThis.fetch
+ try{
+  const cases:Array<{status:number;body:string;headers?:Record<string,string>;expected:string}>= [
+   {status:429,body:JSON.stringify({error:'too many requests'}),headers:{'content-type':'application/json'},expected:RATE_LIMIT_ERROR},
+   {status:401,body:JSON.stringify({error:'unauthorized'}),headers:{'content-type':'application/json'},expected:CLOCK_ERROR},
+   {status:502,body:'bad gateway',expected:'暂时未能加入社区，请稍后重试。'},
+  ]
+  for(const item of cases){
+   globalThis.fetch=(async()=>new Response(item.body,{status:item.status,headers:item.headers})) as typeof fetch
+   await expect(onboardingRequest(identity,url,{invite:{}})).rejects.toThrow(item.expected)
+  }
+  expect(onboardingErrorText(new Error(RATE_LIMIT_ERROR))).toBe(RATE_LIMIT_ERROR)
+  expect(onboardingErrorText(new Error(CLOCK_ERROR))).toBe(CLOCK_ERROR)
+  expect(onboardingErrorText(new Error(INVITE_ERROR))).toBe(INVITE_ERROR)
+  expect(onboardingErrorText(new Error('TypeError: Failed to fetch'))).toBe('暂时未能加入社区，请稍后重新打开邀请。')
+ }finally{globalThis.fetch=original}
 })
