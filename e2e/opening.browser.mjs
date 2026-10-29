@@ -117,6 +117,9 @@ try {
   await expect(page.getByText('合成小红已进馆', { exact: false })).toBeVisible()
   const choices = page.locator('[aria-label=已填好基础信息的学生]')
   await expect(choices.locator('button').first()).toContainText('合成小明')
+  // 主按钮必须有绿色底：建馆页不在 .nl-shell 里，曾因取不到 --nl-accent 变成白底白字。
+  const primaryBg = await choices.locator('button').first().evaluate(node => getComputedStyle(node).backgroundColor)
+  if (primaryBg !== 'rgb(47, 93, 74)') throw new Error('建馆页主按钮底色不对：' + primaryBg)
   await choices.getByRole('button', { name: /合成小红/ }).click()
   await expect(page.getByRole('heading', { name: '已进入老师首页', exact: true })).toBeVisible()
   await expect(page.getByText('b'.repeat(64), { exact: true })).toBeVisible()
