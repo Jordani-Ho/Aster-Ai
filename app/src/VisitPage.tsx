@@ -16,16 +16,24 @@ import { priorMaterials } from './core/drafting/materials'
 import { reviseEncounter } from './core/drafting/revise'
 import { recordSignedObservation, type ObservationNote } from './core/kangbi'
 import { formatHeavenTime, heavenNow, heavenStampOf, type HeavenTime } from './core/heaven'
-import { EXAM_KEYS, splitFourExams, type ExamKey } from './four-exams'
-import { confirmHeardExams, setExamDraft } from './review-model'
+import { EXAM_KEYS, type ExamKey } from './four-exams'
+import { confirmHeardExams } from './review-model'
 import { SignReview } from './SignReview'
 import { PostureTool } from './PostureTool'
+import { VisitRecorder } from './VisitRecorder'
+import { VisitAudioPlayer } from './VisitAudioPlayer'
+import { VisitPhotos } from './VisitPhotos'
+import { TongueCapture } from './TongueCapture'
+import { TonguePair } from './TonguePair'
+import { loadVisitOriginals, editVisitOriginal, appendVisitOriginal, type VisitOriginal } from './core/record/visit-originals'
+import { organizeVisitSegment } from './core/intake/visit-organizer'
+import { clearVisitRawMaterials } from './core/record/visit-cleanup'
+import { VISIT_ORGANIZATION_KEYS, validateVisitOrganization, mergeVisitOrganization, emptyVisitOrganization, type VisitOrganization } from './core/record/visit-organization'
 import { uiError } from './core/onboarding/ui'
 import { prescriptionStockNotes } from './core/herbs'
 import './newui.css'
 
-// V2-16 面诊进行中（02）：选学生 → 老师说一段、智能体拆进望闻问切四格 → 说完了看草稿。
-// 起草仍复用 M1-10，签字仍复用 M1-11 的面诊路径；不做应用内语音识别，话筒只是聚焦输入框。
+// 面诊中录音、本机保存原话，供老师核对整理草稿后签字。
 export interface VisitPageProps {
   identity: Identity
   store: LocalStore
@@ -54,10 +62,19 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
   const [adherence, setAdherence] = useState<StudentAdherence[]>([])
   const [savedDraft, setSavedDraft] = useState<Encounter | null>(null)
   const [encounter, setEncounter] = useState<Encounter | null>(null)
+  const encounterRef = useRef<Encounter | null>(null)
+  encounterRef.current = encounter
   const [draft, setDraft] = useState<Encounter | null>(null)
   const [materialNote, setMaterialNote] = useState<string[]>([])
   const [previous, setPrevious] = useState<LoadedTeacherRecord | null>(null)
   const [utterance, setUtterance] = useState('')
+  const [recording, setRecording] = useState(false)
+  const [stopRequest, setStopRequest] = useState(0)
+  const exitAfterStop = useRef(false)
+  const [audioRevision, setAudioRevision] = useState(0)
+  const [cleanupPending, setCleanupPending] = useState(false)
+  const [originals, setOriginals] = useState<VisitOriginal[]>([])
+  const [visitOrganization, setVisitOrganization] = useState<VisitOrganization | null>(null)
   const [heaven, setHeaven] = useState<HeavenTime | null>(null)
   const [editingExam, setEditingExam] = useState<ExamKey | null>(null)
   const [examText, setExamText] = useState('')
@@ -68,6 +85,8 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
   const [comparison, setComparison] = useState<ObservationNote>(null)
   const [postureOpen, setPostureOpen] = useState(false)
   const textarea = useRef<HTMLTextAreaElement | null>(null)
+  const saveQueue = useRef<Promise<void>>(Promise.resolve())
+  const originalEditQueue = useRef<Promise<void>>(Promise.resolve())
 
   useEffect(() => {
     let active = true
@@ -92,7 +111,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
         Object.assign(next.profile[key], { value, source: value === null ? 'unknown' : 'student' })
       }
       setRecords(rows); setPrevious(rows.at(0) ?? null); setEncounter(next); setHeaven(time); setDraft(null)
-      setMaterialNote([]); setComparison(null); setUtterance(''); setStatus(''); setPostSignNotice(''); setPhase('dictate')
+      setMaterialNote([]); setComparison(null); setVisitOrganization(null); setUtterance(''); setStatus(''); setPostSignNotice(''); setPhase('dictate')
       await saveInPersonDraft(store, next)
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
@@ -108,36 +127,65 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
   }
 
   const apply = (next: Encounter, notice = '') => {
-    setEncounter(next); setError('')
+    encounterRef.current = next; setEncounter(next); setError('')
     if (notice) setStatus(notice)
-    void saveInPersonDraft(store, next).catch(() => setError('草稿没有保存成功，请检查本机存储。'))
+    saveQueue.current = saveQueue.current.catch(() => {}).then(() => saveInPersonDraft(store, next))
+    void saveQueue.current.catch(() => setError('草稿没有保存成功，请检查本机存储。'))
   }
 
-  // “整理”这一段：智能体拆进望闻问切四格（模型失败用本地关键词拆分），同时把原话记进主诉/现病史。
+  // 打字内容同样编号，交给本馆模板整理，不按句子顺序猜主诉。
   const organize = async () => {
-    if (!encounter || busy) return
-    const text = utterance.trim()
-    if (text === '') return
+    if (!encounter || busy || !utterance.trim()) return
     setBusy(true); setError('')
     try {
-      const { fragments, usedModel } = await splitFourExams(text, llm)
-      let next = encounter
-      for (const key of EXAM_ORDER) {
-        const added = fragments[key]
-        if (added.length === 0) continue
-        next = setExamDraft(next, key, added.join('；'))
-      }
-      // 老师代录：第一句作主诉，后面的补进现病史（V2-18：不做急症判断）。
-      const chief = next.intake.chiefComplaint.value
-      if (chief === null || chief === '') {
-        next = recordIntakeField(next, 'chiefComplaint', text)
-      } else {
-        const prior = next.intake.presentIllness.value
-        next = recordIntakeField(next, 'presentIllness', prior ? prior + '\n' + text : text)
-      }
-      apply(next, usedModel ? '已把这一段拆进四格，逐格确认后可改。' : '模型暂不可用，已按关键词拆进四格，可逐格修改。')
-      setUtterance('')
+      await appendVisitOriginal(store, encounter.id, utterance.trim())
+      setUtterance(''); refreshOriginals()
+      await organizeRecording()
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
+  }
+
+  const refreshOriginals = () => { if (encounter) void loadVisitOriginals(store, encounter.id).then(setOriginals).catch(() => setError('原话读取失败，请重试。')) }
+  useEffect(() => {
+    if (!encounter) { setOriginals([]); setVisitOrganization(null); return }
+    let active = true
+    void Promise.all([loadVisitOriginals(store, encounter.id), store.get('visit-organized', encounter.id)]).then(([lines, saved]) => { if (active) { setOriginals(lines); setVisitOrganization(saved && typeof saved === 'object' && !Array.isArray(saved) ? validateVisitOrganization((saved as {organized?:unknown}).organized, lines) : null) } }).catch(() => { if (active) setError('原话读取失败，请重试。') })
+    return () => { active = false }
+  }, [store, encounter?.id])
+  const organizeRecording = async () => {
+    if (!encounter) return
+    setBusy(true); setError(''); setStatus('正在整理录音原话…')
+    try {
+      await originalEditQueue.current
+      const lines = await loadVisitOriginals(store, encounter.id)
+      if (!lines.length) { setStatus('没有识别出文字，可以直接打字。'); return }
+      const saved = await store.get('visit-organized', encounter.id) as {organized?:unknown;through?:unknown} | undefined
+      const prior = saved ? validateVisitOrganization(saved.organized, lines) : null
+      const through = prior && Number.isSafeInteger(saved?.through) && (saved!.through as number) <= lines.length ? saved!.through as number : 0
+      if (through === lines.length) { setStatus('这一段已经整理过。'); return }
+      const result = await organizeVisitSegment(llm, lines, through, await loadTeacherTemplate(store))
+      const combined = mergeVisitOrganization(prior ?? emptyVisitOrganization(), result.organized, [])
+      if (!validateVisitOrganization(combined, lines)) throw Error('整理内容过长，请先核对并精简。')
+      await store.put('visit-organized', encounter.id, {organized: combined, through:lines.length} as unknown as import('./core/store').StoreValue)
+      setVisitOrganization(combined)
+      const current = encounterRef.current
+      if (current && current.id === encounter.id) {
+        let next = structuredClone(current)
+        for (const key of ['chiefComplaint', 'presentIllness'] as const) {
+          const value = combined[key].text
+          if (value && (next.intake[key].source === 'unknown' || next.intake[key].source === 'ai_draft')) next.intake[key] = {value,source:'ai_draft',note:'heard'}
+        }
+        for (const key of EXAM_ORDER) {
+          const value = combined[key].text
+          if (value && (next.fourExams[key].source === 'unknown' || next.fourExams[key].source === 'ai_draft')) next.fourExams[key] = {value,source:'ai_draft',note:'heard'}
+        }
+        apply(next)
+      }
+      setStatus(result.usedModel ? '已整理成草稿，请逐栏核对原话。' : '模型暂不可用，已按关键词整理，请逐栏核对原话。')
+    } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
+  }
+  const exitVisit = () => {
+    if (!recording) { onExit(); return }
+    if (window.confirm('正在录音，离开会停止录音并整理原话。确定离开吗？')) { exitAfterStop.current = true; setStopRequest(value => value + 1) }
   }
 
   const startExamEdit = (key: ExamKey) => {
@@ -198,6 +246,9 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
       await sendInPersonRecord(store, sendEnvelope, encounter.student, payload)
     }
     try {
+      // 等待草稿写入结束，避免签后清理与尚未完成的写入交错。
+      await originalEditQueue.current
+      await saveQueue.current
       const { signed, inventoryNotice } = await signAndHandoverInPersonWithHerbs({ encounter: final, privateKey: identity.privateKey, send: sendRecord, store, draft })
       try {
         await recordSignedObservation(store, {
@@ -205,7 +256,9 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
           teacherMinutes: 0, consultations: 1, teacherNote: chosen ?? null, report: null,
         })
       } catch { /* 观察记录暂未保存不影响已交还病历 */ }
-      setPostSignNotice(inventoryNotice ?? '')
+      let cleanupNotice = ''
+      try { await clearVisitRawMaterials(store, final); setCleanupPending(false) } catch { setCleanupPending(true); cleanupNotice = '本机原始材料未能全部清除，请重试清理。' }
+      setPostSignNotice([inventoryNotice, cleanupNotice].filter(Boolean).join(' '))
       setPhase('sent')
     } catch (cause) { throw cause }
   }
@@ -213,8 +266,9 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
   if (phase === 'sent') {
     return <div className="nl-shell"><div className="nl-page nl-signed">
       <h1>已签字交还</h1>
-      <p className="nl-quiet">签名病历已发给学生。照片与代录内容仍在本机，按保留期限统一清理。</p>
+      <p className="nl-quiet">签名病历已发给学生。</p>
       {postSignNotice && <p role="status" className="nl-quiet">{postSignNotice}</p>}
+      {cleanupPending && encounter && <button type="button" onClick={() => { void clearVisitRawMaterials(store, encounter).then(() => { setCleanupPending(false); setPostSignNotice('本机原始材料已清除。') }).catch(() => setPostSignNotice('仍未能清除，请检查本机存储后重试。')) }}>重试清理</button>}
       <button type="button" className="nl-primary" onClick={onExit}>返回今天</button>
     </div></div>
   }
@@ -251,7 +305,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
     const lastHomework = previous?.encounter.plan.homework.map(item => item.title).join('、')
     return <div className="nl-shell">
       <header className="nl-flow-head">
-        <button type="button" className="nl-back" aria-label="返回" onClick={onExit}>‹</button>
+        <button type="button" className="nl-back" aria-label="返回" onClick={exitVisit}>‹</button>
         <div><h1>{alias}</h1><small>{[
           [gender === 'male' ? '男' : gender === 'female' ? '女' : '', age != null ? age + ' 岁' : ''].filter(Boolean).join(' · '),
           '第 ' + (new Set(records.map(row => row.encounterId)).size + 1) + ' 次面诊',
@@ -270,6 +324,18 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
           {report && <p className="nl-quiet">这周练习 {report.practiceDays} 天{report.streak > 0 ? ' · 已连续 ' + report.streak + ' 天' : ''}</p>}
         </details>}
 
+        <VisitRecorder key={encounter.id} store={store} visitId={encounter.id} onChange={refreshOriginals} onRecording={setRecording} stopRequest={stopRequest} onStopped={() => { setAudioRevision(value => value + 1); void organizeRecording().then(() => { if (exitAfterStop.current) { exitAfterStop.current = false; onExit() } }) }} />
+        <VisitAudioPlayer store={store} visitId={encounter.id} revision={audioRevision} />
+        {originals.length > 0 && <section className="nl-card" aria-label="逐句原话"><h2>逐句原话</h2>{originals.map(line => <label key={line.id}>第 {line.id} 句{line.edited ? ' · 老师改' : ''}<textarea defaultValue={line.text} onBlur={event => { if (event.target.value !== line.text) { const text = event.target.value; originalEditQueue.current = originalEditQueue.current.catch(() => {}).then(async () => { await editVisitOriginal(store, encounter.id, line.id, text); await store.delete('visit-organized', encounter.id); setVisitOrganization(null); refreshOriginals() }); void originalEditQueue.current.catch(() => setError('原话没有保存，请检查内容后重试。')) } }} /></label>)}<button type="button" disabled={busy || recording} onClick={() => void organizeRecording()}>重新整理原话</button></section>}
+        {visitOrganization && <section className="nl-card" aria-label="录音整理草稿"><h2>录音整理 · 待您确认</h2>{VISIT_ORGANIZATION_KEYS.map(key => {
+          const field = visitOrganization[key]
+          if (!field.text) return null
+          const label = {chiefComplaint:'主诉',presentIllness:'现病史',look:'望',listenSmell:'闻',ask:'问',pulse:'切'}[key]
+          return <div key={key}><strong>{label} · 草稿</strong><p>{field.text}</p><small>依据：{field.citations.map(id => '第 ' + id + ' 句').join('、')}</small><button type="button" onClick={() => {
+            if (key === 'chiefComplaint' || key === 'presentIllness') apply(recordIntakeField(encounter, key, field.text!))
+            else apply({ ...encounter, fourExams: { ...encounter.fourExams, [key]: { value: field.text, source: 'teacher', note: 'heard' } } })
+          }}>采用这一栏</button></div>
+        })}</section>}
         <section className="nl-listen" aria-label="口述记录">
           <div className="nl-listen-head"><span className="nl-listen-dot" aria-hidden="true" />正在听 · 您说，智能体记</div>
           <textarea ref={textarea} rows={3} maxLength={2000} value={utterance} disabled={busy} aria-label="您说，智能体记"
@@ -280,6 +346,10 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
           </div>
         </section>
 
+        <section className="nl-card" aria-label="面诊基本记录">
+          <label>主诉{encounter.intake.chiefComplaint.source === 'ai_draft' && ' · 草稿，待您确认'}<textarea aria-label="主诉" value={encounter.intake.chiefComplaint.value ?? ''} onChange={event => apply(recordIntakeField(encounter, 'chiefComplaint', event.target.value))} /></label>
+          <label>现病史{encounter.intake.presentIllness.source === 'ai_draft' && ' · 草稿，待您确认'}<textarea aria-label="现病史" value={encounter.intake.presentIllness.value ?? ''} onChange={event => apply(recordIntakeField(encounter, 'presentIllness', event.target.value))} /></label>
+        </section>
         <div className="nl-exams">
           {EXAM_ORDER.map(key => {
             const field = encounter.fourExams[key]
@@ -299,6 +369,15 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
             </div>
           })}
         </div>
+        <section aria-label="望诊照片"><h2>望诊照片</h2>
+          <TongueCapture store={store} cityOverride={encounter.profile.city.value} disabled={busy || (encounter.intake.tongues?.length ?? 0) >= 1} onCaptured={async (tongue, _at, crop) => {
+            if (!tongue.crop || encounter.intake.attachments.length >= 4) throw Error('照片已满，请先删除一张。')
+            await store.put('attachments', tongue.crop.id, crop)
+            apply({ ...encounter, intake: { ...encounter.intake, tongues: [...(encounter.intake.tongues ?? []), tongue], attachments: [...encounter.intake.attachments, tongue.crop] } })
+          }} />
+          {encounter.intake.tongues?.map((tongue,index)=><TonguePair key={index} record={tongue} title="本次舌象" loadCrop={async()=>{const id=tongue.crop?.id;if(!id)return null;const data=await store.get('attachments',id);return data instanceof Uint8Array?data:null}} missingCropState="missing" />)}
+          <VisitPhotos store={store} encounter={encounter} onChange={next => apply(next)} />
+        </section>
         <p className="nl-help">点任意一格可以改。说完四诊，智能体按您以往的思想起草判断和方子。</p>
         <button type="button" className="nl-link-button" onClick={() => setPostureOpen(true)}>体态：拍一段 / 导入骨架（这次 {encounter.postures?.length ?? 0} 条）</button>
       </div>
@@ -306,7 +385,7 @@ export function VisitPage({ identity, store, llm, send: sendEnvelope, initialStu
         <button type="button" className="nl-mic" aria-label="话筒：唤起语音输入" onClick={() => { textarea.current?.focus() }}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V22h2v-3.1A7 7 0 0 0 19 12h-2Z" /></svg>
         </button>
-        <button type="button" className="nl-primary" disabled={busy || encounter.intake.chiefComplaint.value === null} onClick={() => void toReview()}>说完了，看草稿</button>
+        <button type="button" className="nl-primary" disabled={busy || recording || encounter.intake.chiefComplaint.value === null || encounter.intake.chiefComplaint.source === 'ai_draft' || encounter.intake.presentIllness.source === 'ai_draft'} onClick={() => void toReview()}>说完了，看草稿</button>
       </footer>
     </div>
   }

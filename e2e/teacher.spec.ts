@@ -56,7 +56,9 @@ test('M1-20 four pages: time order, three taps to sign, revision stays draft, fo
  await teacher.getByRole('button',{name:/学生 1/}).click()
  await teacher.getByLabel('您说，智能体记',{exact:true}).fill('SYNTHETIC_IN_PERSON')
  await teacher.getByRole('button',{name:'整理',exact:true}).click()
- await expect(teacher.getByRole('button',{name:'四诊 ask'})).toContainText('SYNTHETIC_IN_PERSON')
+ await expect(teacher.getByRole('region',{name:'录音整理草稿'})).toContainText('SYNTHETIC_IN_PERSON')
+ await teacher.getByRole('region',{name:'录音整理草稿'}).getByRole('button',{name:'采用这一栏'}).first().click()
+ await teacher.getByLabel('主诉',{exact:true}).fill('SYNTHETIC_IN_PERSON')
  await picture(teacher,'in-person')
  await teacher.getByRole('button',{name:'说完了，看草稿',exact:true}).click()
  await expect(teacher.getByRole('heading',{name:/· 核对$/})).toBeVisible()
@@ -81,7 +83,7 @@ test('M1-20 four pages: time order, three taps to sign, revision stays draft, fo
  const text=await student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return JSON.stringify(await s.store.list('student-records'))}finally{s.store.close();s.identity.privateKey.fill(0)}})
  expect(text).not.toContain('ai_draft');expect(text).toContain('ai_accepted');expect(text).toContain('SYNTHETIC_KEEP');expect(text).not.toContain('SYNTHETIC_HERB')
 })
-test('M1-20 in person uses conversational intake, same drafting/revision/signature, keeps local raw until retention',async({people})=>{
+test('M1-20 in person uses conversational intake, same drafting/revision/signature, clears local raw after handover',async({people})=>{
  const teacher=people.teacher.page
  await consultations(people.student.page)
  await teacher.getByRole('button',{name:/开始面诊/}).click()
@@ -89,8 +91,9 @@ test('M1-20 in person uses conversational intake, same drafting/revision/signatu
  await expect(teacher.getByLabel('您说，智能体记',{exact:true})).toBeVisible()
  await teacher.getByLabel('您说，智能体记',{exact:true}).fill('SYNTHETIC_FACE_RAW')
  await teacher.getByRole('button',{name:'整理',exact:true}).click()
- // V2 原图不留：面诊直接看本人，不再提供老师拍照落盘入口。
- await expect(teacher.locator('input[type=file]')).toHaveCount(0)
+ await expect(teacher.getByRole('region',{name:'录音整理草稿'})).toContainText('SYNTHETIC_FACE_RAW')
+ await teacher.getByLabel('主诉',{exact:true}).fill('SYNTHETIC_FACE_RAW')
+ await expect(teacher.getByRole('button',{name:'拍患处'})).toBeVisible()
  await teacher.getByRole('button',{name:'说完了，看草稿',exact:true}).click()
  await teacher.getByText('让智能体按一句话改草稿',{exact:true}).click()
  await teacher.getByRole('textbox',{name:'说说怎么改'}).fill('SYNTHETIC_REMOVE_HERB')
@@ -100,7 +103,7 @@ test('M1-20 in person uses conversational intake, same drafting/revision/signatu
  await teacher.getByRole('button',{name:'签字发出',exact:true}).click()
  await expect(teacher.getByRole('heading',{name:'已签字交还',exact:true})).toBeVisible()
  const result=await teacher.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return {drafts:await s.store.list('in-person-draft'),indices:await s.store.list('teacher-records'),photos:await s.store.list('attachments')}}finally{s.store.close();s.identity.privateKey.fill(0)}})
- expect(result.drafts).toHaveLength(1);expect(JSON.stringify(result.drafts)).toContain('SYNTHETIC_FACE_RAW');expect(result.indices).toHaveLength(1);expect(result.photos).toHaveLength(0)
+ expect(result.drafts).toHaveLength(0);expect(result.indices).toHaveLength(1);expect(result.photos).toHaveLength(0)
  const student=people.student.page
  await expect.poll(()=>student.evaluate(async()=>{const p='/src/core/store/index.ts',s=await(await import(p)).resumeStore();try{return (await s.store.list('student-records')).length}finally{s.store.close();s.identity.privateKey.fill(0)}})).toBeGreaterThan(0)
  await student.getByRole('navigation',{name:'学生底部标签'}).getByRole('button',{name:'记录',exact:true}).click()

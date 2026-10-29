@@ -94,3 +94,5 @@ V2-21：`agent-runs` 保存任务对象、当地日期、生成时刻、draft/de
 V2-22：settings/teacher-templates 是四类模板版本快照（含归档链），settings/hall-groundwork 是老师时区、排班、日期例外、邀约方式、药材库准备状态与六项确认。老师本机保留配置，不上传、不迁移旧设置；模型与保留期限仍只用原设置。
 
 V2-38：`student-basics-pending` 保存发给各老师的五项待发资料；`teacher-student-basics` 按学生公钥保存已验证名单学生最新的五项；资料先于进馆消息到达时，`teacher-basics-waiting` 暂存，邀请验证后才启用。
+
+V2-40：`visit-originals`、`visit-organized`、`visit-audio-index` 和 `visit-audio-chunks` 按面诊编号保存本机原话、整理草稿和分段录音；签字病历及照片成功发出后清理本次原始材料。`settings/visit-speech-language` 记住识别语言。

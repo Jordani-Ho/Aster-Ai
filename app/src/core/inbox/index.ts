@@ -177,6 +177,7 @@ function isRef(value: unknown): value is AttachmentRef {
     && (value.type === 'photo' || value.type === 'audio')
     && typeof value.sha256 === 'string' && HEX64.test(value.sha256)
     && Number.isSafeInteger(value.bytes) && (value.bytes as number) > 0
+    && (value.description === undefined || (value.type === 'photo' && typeof value.description === 'string' && value.description.length <= 200))
     && (value.mimeType === undefined || value.mimeType === 'audio/mp4' || value.mimeType === 'audio/webm' || value.mimeType === 'audio/ogg')
     && (value.durationMs === undefined || (Number.isSafeInteger(value.durationMs) && (value.durationMs as number) > 0))
     && (value.type !== 'audio' || (value.mimeType === undefined && value.durationMs === undefined)
