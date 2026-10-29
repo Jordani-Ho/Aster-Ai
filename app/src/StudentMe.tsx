@@ -11,6 +11,7 @@ import { FamilySettings } from './FamilySettings'
 import { LedgerSettings } from './LedgerSettings'
 import { TimeSettings } from './TimeSettings'
 import { PushSettings } from './PushSettings'
+import { PilotReset } from './PilotReset'
 import { SelfCheck } from './SelfCheck'
 import { VersionLine } from './VersionLine'
 import { CoreMemberActions } from './CoreMemberActions'
@@ -79,6 +80,7 @@ export function StudentMe({ store, identity, family, onSwitch, venue, ledger, st
       <PushSettings identity={identity} />
     </details>
     <SelfCheck store={store} identity={identity} teacher={venue.active} />
+    <PilotReset />
     <VersionLine />
   </SubPage>
 
