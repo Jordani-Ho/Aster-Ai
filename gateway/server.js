@@ -29,7 +29,15 @@ export function createGateway(config, { fetchUpstream = fetch } = {}) {
   const upstreamTimeoutMs = config.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS
   const push = config.push ? createPushService({ file: config.push.subscriptionsFile ?? './push-subscriptions.json', endpointHosts: config.push.endpointHosts, send: config.push.send }) : null
   const proxyUrls = new Set([...providers.filter(p => p.baseUrl).map(p => p.baseUrl + '/chat/completions'), ...(config.proxyAllowedUrls ?? [])])
-  const hits = new Map()
+  // V2-39：限流按路由分组，每组各自一个额度；推送请求再多也不会挤掉进馆、登记和模型请求。
+  const rateLimit = config.rateLimit ?? {}
+  const rateWindowMs = typeof rateLimit.windowMs === 'number' ? rateLimit.windowMs : 60000
+  const legacyMax = typeof rateLimit.maxPerWindow === 'number' ? rateLimit.maxPerWindow : null
+  const scopes = {
+    invite: { max: rateLimit.invites?.maxPerWindow ?? legacyMax ?? 10, hits: new Map() },
+    push: { max: rateLimit.push?.maxPerWindow ?? legacyMax ?? 60, hits: new Map() },
+    model: { max: rateLimit.model?.maxPerWindow ?? legacyMax ?? 20, hits: new Map() },
+  }
   const seen = new Map()
   const log = record => {
     const line = JSON.stringify(record) + '\n'
@@ -93,13 +101,15 @@ export function createGateway(config, { fetchUpstream = fetch } = {}) {
     }
   }
 
-  function allowed(pubkey) {
+  // 每组额度按公钥单独计数：同一公钥在两个分组里互不影响。
+  const scopeFor = url => INVITE_ROUTES.includes(url) ? scopes.invite : PUSH_ROUTES.includes(url) ? scopes.push : scopes.model
+  function allowed(url, pubkey) {
     const now = Date.now()
-    const { windowMs, maxPerWindow } = config.rateLimit
-    const recent = (hits.get(pubkey) ?? []).filter(at => now - at < windowMs)
-    const permitted = recent.length < maxPerWindow
+    const scope = scopeFor(url)
+    const recent = (scope.hits.get(pubkey) ?? []).filter(at => now - at < rateWindowMs)
+    const permitted = recent.length < scope.max
     if (permitted) recent.push(now)
-    hits.set(pubkey, recent)
+    scope.hits.set(pubkey, recent)
     return permitted
   }
 
@@ -199,7 +209,7 @@ export function createGateway(config, { fetchUpstream = fetch } = {}) {
           pubkey = auth.pubkey ?? ''
           if (status === 401) reply(res, 401, 'unauthorized')
           else if (status === 403) reply(res, 403, 'not a member')
-          else if (!allowed(pubkey)) {
+          else if (!allowed(req.url, pubkey)) {
             status = 429
             reply(res, 429, 'too many requests')
             } else if (INVITE_ROUTES.includes(req.url)) {
