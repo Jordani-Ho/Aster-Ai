@@ -14,7 +14,7 @@ function bashRaw(script,env){return process.platform==='win32'?spawnSync('wsl.ex
 const CODE='data/setup/teacher-setup-code.txt',HTML='data/setup/teacher-setup.html'
 const CORE_CODE='data/setup/core-member-code.txt',CORE_HTML='data/setup/core-member.html'
 const ENV_TEXT='APP_DOMAIN=app.example\nRELAY_DOMAIN=relay.example\nVAPID_SUBJECT=mailto:synthetic@example.invalid\nVAPID_PUBLIC_KEY=synthetic\nVAPID_PRIVATE_KEY=synthetic\nMODEL_FALLBACK_ENABLED=false\nMODEL_PROXY_ALLOWED_URLS=https://synthetic.example/v1/chat/completions\nRELAY_COMMUNITY_OPEN=true\n'
-async function fakeBin(dir){const bin=path.join(dir,'fake-bin');await mkdir(bin,{recursive:true});await writeFile(path.join(bin,'docker'),'#!/bin/sh\nif [ -n "${DOCKER_FAKE_LOG:-}" ]; then printf \'%s\\n\' "$*" >> "$DOCKER_FAKE_LOG"; fi\nexit 0\n',{mode:0o755});if(process.platform==='win32'){const result=spawnSync('wsl.exe',['-d','Ubuntu','--exec','chmod','+x',linux(path.join(bin,'docker'))]);assert.equal(result.status,0)}return bin}
+async function fakeBin(dir){const bin=path.join(dir,'fake-bin');await mkdir(bin,{recursive:true});await writeFile(path.join(bin,'docker'),'#!/bin/sh\nif [ -n "${DOCKER_FAKE_LOG:-}" ]; then printf \'%s\\n\' "$*" >> "$DOCKER_FAKE_LOG"; fi\nexit 0\n',{mode:0o755});await writeFile(path.join(bin,'curl'),'#!/bin/sh\nexit 0\n',{mode:0o755});if(process.platform==='win32'){const result=spawnSync('wsl.exe',['-d','Ubuntu','--exec','chmod','+x',linux(path.join(bin,'docker')),linux(path.join(bin,'curl'))]);assert.equal(result.status,0)}return bin}
 function envFor(bin){return {SKIP_BUILD:'1',PATH:process.platform==='win32'?linux(bin)+':/usr/local/bin:/usr/bin:/bin':bin+':'+process.env.PATH}}
 test('第二版 setup 不写成员白名单：开放模式起中继、生成一次性口令、重跑保留成员与口令；不用真实 Docker',async()=>{
  const dir=await workspace(),home=path.join(dir,'deploy/home'),bin=await fakeBin(dir)
@@ -324,5 +324,42 @@ test('V2-39 reset-teacher-setup：旧凭据移到 pre-reset，生成新口令，
   const moved=await readdir(path.join(home,'data/backup',pre))
   assert.ok(moved.includes('seed.json'))
   assert.ok(moved.includes('teacher-setup-code.txt'))
+ }finally{await rm(dir,{recursive:true,force:true})}
+})
+// update.sh 重建容器后 web 还要在容器里构建前端：先每 5 秒探一次页面，就绪后才跑验收探测。
+// 前几次 502、之后 200 时不能误判成验收失败。
+test('update 等网页就绪：前几次探测 502、之后 200 时按通过处理',async()=>{
+ const dir=await workspace(),home=path.join(dir,'deploy/home'),bin=await fakeBin(dir)
+ try{
+  await writeFile(path.join(home,'.env'),ENV_TEXT)
+  // 先跑一遍 setup 建目录，再把 verify 的自测成员预置好，让内部 verify 能真正跑完（否则假 docker 生不出密钥）。
+  bash(path.join(home,'setup.sh'),envFor(bin))
+  await writeFile(path.join(home,'data/self-member.json'),JSON.stringify({secret:'1'.repeat(64),pubkey:'2'.repeat(64)}))
+  await writeFile(path.join(home,'data/gateway/members.json'),JSON.stringify(['2'.repeat(64)]))
+  const counter=path.join(bin,'curl-count.txt')
+  const script='#!/bin/sh\ncount_file="$(dirname "$0")/curl-count.txt"\nn=0\n[ -f "$count_file" ] && n=$(cat "$count_file")\nn=$((n+1))\nprintf \'%s\' "$n" > "$count_file"\nif [ "$n" -le 3 ]; then exit 22; fi\nexit 0\n'
+  await writeFile(path.join(bin,'curl'),script,{mode:0o755})
+  if(process.platform==='win32'){const result=spawnSync('wsl.exe',['-d','Ubuntu','--exec','chmod','+x',linux(path.join(bin,'curl'))]);assert.equal(result.status,0)}
+  const out=bash(path.join(home,'update.sh'),{...envFor(bin),READY_INTERVAL:'1',READY_TIMEOUT:'20'})
+  assert.match(out,/等网页、网关、中继就绪/)
+  assert.match(out,/网页已就绪/)
+  assert.match(out,/全部通过/)
+  // 前三次探测失败、第四次成功：确实重试过，不是一次就过。
+  assert.ok(Number(await readFile(counter,'utf8'))>=4)
+ }finally{await rm(dir,{recursive:true,force:true})}
+})
+test('update 等网页就绪：一直 502 时判为失败，并提示稍后单独跑 verify.sh',async()=>{
+ const dir=await workspace(),home=path.join(dir,'deploy/home'),bin=await fakeBin(dir)
+ try{
+  await writeFile(path.join(home,'.env'),ENV_TEXT)
+  await writeFile(path.join(bin,'curl'),'#!/bin/sh\nexit 22\n',{mode:0o755})
+  if(process.platform==='win32'){const result=spawnSync('wsl.exe',['-d','Ubuntu','--exec','chmod','+x',linux(path.join(bin,'curl'))]);assert.equal(result.status,0)}
+  const out=bashRaw(path.join(home,'update.sh'),{...envFor(bin),READY_INTERVAL:'1',READY_TIMEOUT:'2'})
+  assert.notEqual(out.status,0)
+  const text=(out.stdout??'')+(out.stderr??'')
+  assert.match(text,/构建还没完成，稍后单独跑 \.\/verify\.sh/)
+  // 环境本身已经更新完、名单也核对过，只是没有跑验收探测。
+  assert.match(text,/更新完成/)
+  assert.ok(!text.includes('全部通过'))
  }finally{await rm(dir,{recursive:true,force:true})}
 })

@@ -5,8 +5,10 @@
 # 可选环境变量：
 #   SKIP_BUILD=1  不重建镜像（只重启容器；网页会在容器启动时按当前代码重建）
 #   NO_VERIFY=1   不跑 verify.sh（默认更新后跑一次验收探测）
+#   READY_INTERVAL / READY_TIMEOUT  等网页就绪的探测间隔与上限（默认 5 秒 / 180 秒；主要给测试用）
 # 关键点：成员名单 data/gateway/members.json、一次性口令 data/gateway/seed.json 与
 #   data/setup/teacher-setup-code.txt 由 scripts/safeguard-data.mjs 成对处理；更新后再核对没变。
+#   web 容器启动时还要在容器里重新构建前端，重建后立刻探测会拿到 502：先等页面就绪再验收。
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -16,6 +18,8 @@ die() { printf '错误：%s\n' "$*" >&2; exit 1; }
 [ -f .env ] || die "缺少 .env（第一次部署请先 cp .env.example .env）。"
 command -v docker >/dev/null 2>&1 || die "未找到 docker。"
 command -v node >/dev/null 2>&1 || die "缺少 node（setup.sh 也要求 Node 22）。"
+command -v curl >/dev/null 2>&1 || die "缺少 curl（部署脚本用它探测网页是否就绪）：sudo apt-get install -y curl"
+APP_DOMAIN="$(sed -n 's/^APP_DOMAIN=//p' .env | tail -1 | tr -d '\r')"
 
 hash_of() {
   node -e "try{process.stdout.write(require('crypto').createHash('sha256').update(require('fs').readFileSync(process.argv[1],'utf8')).digest('hex'))}catch{process.stdout.write('')}" "$1"
@@ -51,11 +55,36 @@ else
   log "临时隧道的 cloudflared 容器没有重建，网址保持不变。"
 fi
 
-# 4) 验收探测（只读；不想跑就 NO_VERIFY=1）。
+# 4) 等网页、网关、中继就绪，再做验收探测（只读；不想跑就 NO_VERIFY=1）。
+#    web 容器每次启动都要在容器里重新构建前端，重建后立刻探测会拿到 502；
+#    这里每 5 秒探一次应用首页，最多等 3 分钟，超时才报失败并提示稍后单独跑 verify.sh。
 #    V2-31：verify.sh 会幂等把验收自测成员补进成员名单（名单被重置过也自愈）。
+ready_failed=0
 if [ "${NO_VERIFY:-0}" != "1" ]; then
-  log "跑一次验收探测 verify.sh…"
-  ./verify.sh || printf '提醒：验收探测没有全过，看上面的 FAIL 行；环境已经更新完。\n' >&2
+  if [ -z "$APP_DOMAIN" ] || [ "${APP_DOMAIN:-placeholder.invalid}" = "placeholder.invalid" ]; then
+    log "提醒：.env 里还没有可用的 APP_DOMAIN，跳过就绪等待，直接跑 verify.sh。"
+    ./verify.sh || printf '提醒：验收探测没有全过，看上面的 FAIL 行；环境已经更新完。\n' >&2
+  else
+    READY_INTERVAL="${READY_INTERVAL:-5}"
+    READY_TIMEOUT="${READY_TIMEOUT:-180}"
+    APP_URL="https://${APP_DOMAIN}"
+    log "等网页、网关、中继就绪（每 ${READY_INTERVAL} 秒探测 $APP_URL，最多 ${READY_TIMEOUT} 秒）…"
+    ready=0
+    waited=0
+    while :; do
+      if curl -fsS --max-time 5 "$APP_URL/" >/dev/null 2>&1; then ready=1; break; fi
+      if [ "$waited" -ge "$READY_TIMEOUT" ]; then break; fi
+      sleep "$READY_INTERVAL"
+      waited=$((waited + READY_INTERVAL))
+    done
+    if [ "$ready" = "1" ]; then
+      log "网页已就绪（约等了 ${waited} 秒），跑一次验收探测 verify.sh…"
+      ./verify.sh || printf '提醒：验收探测没有全过，看上面的 FAIL 行；环境已经更新完。\n' >&2
+    else
+      ready_failed=1
+      printf '错误：网页 %s 秒还没就绪（每 %s 秒探测一次）。构建还没完成，稍后单独跑 ./verify.sh 再验收。\n' "$READY_TIMEOUT" "$READY_INTERVAL" >&2
+    fi
+  fi
 fi
 
 # 5) 核对：名单人数不能变少、一次性口令种子不能变；不对就恢复并停下。
@@ -69,3 +98,8 @@ log "更新完成："
 log "  成员名单：${after_members} 人（更新前 ${before_members} 人）"
 log "  一次性登记口令没有变（旧邀请仍然有效）"
 log "  备份目录：data/backup/last（只在本机，确认无误后可删）"
+
+if [ "$ready_failed" = "1" ]; then
+  printf '失败：构建还没完成，稍后单独跑 ./verify.sh 再验收。\n' >&2
+  exit 1
+fi
