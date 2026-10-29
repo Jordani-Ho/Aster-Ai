@@ -5,7 +5,7 @@ import { createVisionClient } from './core/llm/vision'
 import { captureTongue } from './core/tongue'
 import { isTongueFailure, recordTongueFailure } from './core/tongue/failures'
 import { loadProfile } from './core/intake/session'
-import { heavenNow } from './core/heaven'
+import { heavenNow, heavenAt, cityByName } from './core/heaven'
 import type { TongueAbstract } from '../../domain/tcm/tongue'
 import './tongue.css'
 
@@ -13,9 +13,10 @@ import './tongue.css'
 // 处理只留舌头框内的裁剪图（长边 ≤512），原图在裁剪后当场清零，不写本机、不发中继。
 // V2-20：送模型前先规范成 ≤1600 JPEG（去 EXIF）；失败按类别说清楚，本机只记失败类别。
 // V2-28：舌象区不再选居住城市（城市来自基础信息；V2-23 落地前先读现有 profile.city 兜底）。
-export function TongueCapture({ store, modelStore = store, onCaptured, disabled = false, onBusyChange, minimal = false }: {
+export function TongueCapture({ store, modelStore = store, onCaptured, disabled = false, onBusyChange, minimal = false, cityOverride }: {
   store: LocalStore
   modelStore?: LocalStore
+  cityOverride?: string | null
   onCaptured: (record: TongueAbstract, at: Date, crop: Uint8Array) => Promise<void>
   disabled?: boolean
   onBusyChange?: (busy: boolean) => void
@@ -25,7 +26,7 @@ export function TongueCapture({ store, modelStore = store, onCaptured, disabled 
   const input = useRef<HTMLInputElement>(null), mounted = useRef(true), lock = useRef(false)
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [city, setCity] = useState('')
-  useEffect(() => { void loadProfile(store).then(profile => { if (mounted.current) setCity(profile.city.value ?? '') }).catch(() => {}) }, [store])
+  useEffect(() => { void loadProfile(store).then(profile => { if (mounted.current) setCity(cityOverride === undefined ? profile.city.value ?? '' : cityOverride ?? '') }).catch(() => {}) }, [store, cityOverride])
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const capture = async (element: HTMLInputElement) => {
     let file: File | null = element.files?.[0] ?? null
@@ -38,8 +39,9 @@ export function TongueCapture({ store, modelStore = store, onCaptured, disabled 
       bytes = new Uint8Array(await file.arrayBuffer()); file = null
       const [config, profile] = await Promise.all([loadPersonalModel(modelStore), loadProfile(store)])
       if (!config) throw Error('请先接入支持看图的模型')
-      if (!profile.city.value) throw Error('请先填居住城市：在「我」→「我的时间」里选一下')
-      const at = new Date(), time = await heavenNow(store, at)
+      const selectedCity = cityOverride === undefined ? profile.city.value : cityOverride
+      if (!selectedCity) throw Error('请先填写学生的居住城市')
+      const at = new Date(), time = cityOverride === undefined ? await heavenNow(store, at) : heavenAt(at, cityByName(selectedCity))
       if (!time.city) throw Error('请先填居住城市：在「我」→「我的时间」里选一下')
       const context = { shichen: time.shichen, jieqi: time.jieqi, city: time.city }
       // captureTongue 在裁剪完成后清原图（含送模型前的临时副本）；失败时也会清。

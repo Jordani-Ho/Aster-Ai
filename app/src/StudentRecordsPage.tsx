@@ -4,7 +4,7 @@ import { PostureSummary } from './PostureTool'
 import { useEffect, useState } from 'react'
 import type { Identity } from './core/identity'
 import { INTAKE_COLLECTIONS } from './core/intake'
-import { groupReceivedRecords, listReceivedRecords, type GroupedRecord, type ReceivedRecord } from './core/inbox'
+import { groupReceivedRecords, listReceivedRecords, recordPhotos, type GroupedRecord, type ReceivedRecord } from './core/inbox'
 import { intakeDisplayLabel } from './core/record/in-person'
 import type { Encounter } from './core/record/types'
 import type { LocalStore } from './core/store'
@@ -28,6 +28,7 @@ function revisionLabel(encounter: Encounter): string {
 
 function RecordBody({ record, store }: { record: ReceivedRecord; store: LocalStore }) {
   const encounter = record.encounter
+  const recordOuter = record
   return <>
     <p className="record-meta">{new Date(encounter.createdAt).toLocaleString()} · 老师 {encounter.teacher.slice(0, 8)}… · {revisionLabel(encounter)}</p>
     <section className="record-section">
@@ -36,7 +37,7 @@ function RecordBody({ record, store }: { record: ReceivedRecord; store: LocalSto
       {encounter.intake.presentIllness.value !== null && <p className="record-detail">现病史：{textField(encounter.intake.presentIllness)}</p>}
       {encounter.intake.history.value !== null && <p className="record-detail">既往史：{textField(encounter.intake.history)}</p>}
       {encounter.intake.medsAllergies.value !== null && <p className="record-detail">在吃的药、过敏：{textField(encounter.intake.medsAllergies)}</p>}
-      {encounter.intake.tongues?.map((record,index)=><TonguePair key={index} record={record} title={`舌象 ${index+1} · ${record.shichen}时`} loadCrop={async()=>{const id=record.crop?.id;if(!id)return null;const data=await store.get(INTAKE_COLLECTIONS.attachmentData,id);return data instanceof Uint8Array?data:null}} missingCropState="expired"/>)}
+      {encounter.intake.tongues?.map((record,index)=><TonguePair key={index} record={record} title={`舌象 ${index+1} · ${record.shichen}时`} loadCrop={async()=>{const id=record.crop?.id;if(!id)return null;const data=await store.get(INTAKE_COLLECTIONS.attachmentData,id);if(data instanceof Uint8Array)return data;return (await recordPhotos(store,recordOuter)).find(photo=>photo.ref.id===id)?.data??null}} missingCropState="expired"/>)}
       {encounter.intake.attachments.length > 0 && <RecordPhotos record={record} store={store}/>}
       <PostureSummary postures={encounter.postures} title="体态记录" showValues={false} />
     </section>

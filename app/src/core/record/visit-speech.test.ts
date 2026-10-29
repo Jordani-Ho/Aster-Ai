@@ -23,6 +23,12 @@ describe('面诊语音识别适配器', () => {
     expect(lines).toEqual(['合成问诊', '合成问诊']); expect(errors).toEqual([])
     tool.stop(); fake.onend?.(); expect(fake.starts).toBe(2)
   })
+  it('停止后识别器结束前仍接收最后一句定稿，结束后不再接收', () => {
+    const fake = new FakeRecognition(), lines: string[] = []
+    const tool = createVisitSpeech(() => fake, { onFinal: text => lines.push(text), onError: () => {} })
+    tool.start('zh-CN'); tool.stop(); tool.stop(); expect(fake.stops).toBe(1); fake.result(0, '停止时最后一句'); fake.onend?.(); fake.result(1, '不应出现')
+    expect(lines).toEqual(['停止时最后一句']); expect(fake.starts).toBe(1)
+  })
   it('粤语选项传给识别器，识别失败不重启并报告给录音层', () => {
     const fake = new FakeRecognition(), errors: string[] = []
     const tool = createVisitSpeech(() => fake, { onFinal: () => {}, onError: error => errors.push(error) })

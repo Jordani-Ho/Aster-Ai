@@ -90,6 +90,8 @@ export interface AttachmentRef {
   type: 'photo' | 'audio'
   sha256: string
   bytes: number
+  /** 面诊照片的老师说明。 */
+  description?: string
   /** V2-26：新录音的白名单 MIME 类型和录制时长；旧附件引用可没有。 */
   mimeType?: 'audio/mp4' | 'audio/webm' | 'audio/ogg'
   durationMs?: number

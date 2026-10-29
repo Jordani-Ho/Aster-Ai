@@ -30,3 +30,5 @@
 - V2 起发不出就保留资料、由老师在当前会话重试，不再有 `record-outbox` 待发集合与多步销毁。
 
 M1-20：面诊页面将 record.signed 接入共享 transport；发送失败保留原文，可在当前会话重发。面诊照片由 core/inbox.sendInPersonRecord 在签名病历后逐张加密交还；每张带同一签名病历，学生验签、核对本人收件人和原引用的 SHA-256/长度后落盘。发送成功后老师端保留原件（按保留期限删除）。
+
+V2-40：`visit-speech.ts` 是可替换语音识别适配器；`visit-audio.ts` 和 `visit-originals.ts` 保存面诊分段录音与原话；`visit-organization.ts` 校验六栏依据；`visit-cleanup.ts` 在成功交还后清理本次原始材料。

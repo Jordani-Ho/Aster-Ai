@@ -12,19 +12,19 @@ export interface RecognitionPort {
 }
 export interface VisitSpeech { start(language: VisitLanguage): void; stop(): void }
 
-export function createVisitSpeech(factory: (() => RecognitionPort) | null, callbacks: { onFinal: (text: string) => void; onError: (error: string) => void }): VisitSpeech {
-  let current: RecognitionPort | null = null, running = false, seen = new Set<number>()
+export function createVisitSpeech(factory: (() => RecognitionPort) | null, callbacks: { onFinal: (text: string) => void; onError: (error: string) => void; onEnd?: () => void }): VisitSpeech {
+  let current: RecognitionPort | null = null, running = false, stopping = false, seen = new Set<number>()
   return {
     start(language) {
       if (language !== 'zh-CN' && language !== 'yue-Hant-HK') throw Error('识别语言无效')
-      if (running) throw Error('语音识别已经开始')
+      if (current) throw Error('语音识别正在结束')
       if (!factory) { callbacks.onError('unsupported'); return }
       try {
         const recognition = factory()
-        current = recognition; running = true; seen = new Set()
+        current = recognition; running = true; stopping = false; seen = new Set()
         recognition.lang = language; recognition.continuous = true; recognition.interimResults = true
         recognition.onresult = event => {
-          if (!running || current !== recognition) return
+          if (current !== recognition) return
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const result = event.results[i]
             if (result?.isFinal && !seen.has(i)) {
@@ -35,13 +35,14 @@ export function createVisitSpeech(factory: (() => RecognitionPort) | null, callb
         }
         recognition.onerror = event => { if (current === recognition && running) { running = false; callbacks.onError(event.error) } }
         recognition.onend = () => {
-          if (!running || current !== recognition) return
+          if (current !== recognition) return
+          if (!running) { current = null; callbacks.onEnd?.(); return }
           seen = new Set()
           try { recognition.start() } catch { running = false; callbacks.onError('restart-failed') }
         }
         recognition.start()
       } catch { running = false; current = null; callbacks.onError('start-failed') }
     },
-    stop() { const recognition = current; running = false; current = null; if (recognition) { try { recognition.stop() } catch { /* 浏览器已停止 */ } } },
+    stop() { const recognition = current; running = false; if (recognition && !stopping) { stopping = true; try { recognition.stop() } catch { current = null; callbacks.onEnd?.() } } },
   }
 }

@@ -92,6 +92,8 @@ jobs:
         run: node e2e/nudge.browser.mjs
       - name: V2-09 storefront browser integration
         run: node e2e/storefront.browser.mjs
+      - name: V2-40 in-person recording browser integration
+        run: node e2e/visit.browser.mjs
       - name: V2-15 opening-guide browser integration
         run: node e2e/opening.browser.mjs
       - name: V2-28 open-hall foolproof browser integration (open hall, community model, bottom bar)
