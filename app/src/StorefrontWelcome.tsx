@@ -43,8 +43,8 @@ export function StorefrontWelcome({ storefront, teacher, onStart, busy = false, 
       </div>
     </section>
   }
-  return <main className="storefront-welcome sf-welcome" style={{ background: style.background, color: '#26221c' }}>
-    <div className="sf-body" style={{ ['--venue-primary' as string]: style.primary }}>
+  return <main className="storefront-welcome sf-welcome" style={{ background: style.background, color: '#26221c', ['--venue-primary' as string]: style.primary }}>
+    <div className="sf-body">
       <span className="sf-emblem"><VenueEmblem emblem={storefront?.emblem ?? ''} /></span>
       <p className="storefront-invite">{inviteTitle(storefront, teacher)}</p>
       <h1 className="storefront-name">{storefront?.name || '知衡'}</h1>

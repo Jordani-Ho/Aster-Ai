@@ -1,6 +1,6 @@
 /* V2-17 第二批界面：建馆五步、学生名单/一位学生、我的馆、进馆首屏、问诊三步、记录、我。
    与 V2-16 共用 .nl-shell 的主题变量与字体；这里只补新页面的排版。 */
-.op-page { position: relative; max-width: 480px; margin: 0 auto; min-height: 100dvh; box-sizing: border-box; background: var(--nl-bg, #faf8f3); color: var(--nl-ink, #1f2a24); font-family: var(--nl-sans, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif); padding: calc(10px + env(safe-area-inset-top)) 20px calc(104px + env(safe-area-inset-bottom)); }
+.op-page { --nl-bg: #faf8f3; --nl-ink: #1f2a24; --nl-accent: #2f5d4a; --nl-accent-deep: #1f4335; position: relative; max-width: 480px; margin: 0 auto; min-height: 100dvh; box-sizing: border-box; background: var(--nl-bg, #faf8f3); color: var(--nl-ink, #1f2a24); font-family: var(--nl-sans, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif); padding: calc(10px + env(safe-area-inset-top)) 20px calc(104px + env(safe-area-inset-bottom)); }
 .op-page h1, .op-page h2 { font-family: var(--nl-serif, "Songti SC", "Noto Serif SC", serif); }
 .op-page label { display: block; margin: 14px 0 0; font-size: 15px; color: #3d4a42; }
 .op-page input, .op-page textarea { width: 100%; box-sizing: border-box; font-size: 17px; min-height: 48px; padding: 12px 14px; border-radius: 16px; }

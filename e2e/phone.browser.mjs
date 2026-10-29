@@ -7,7 +7,7 @@ const server = await createServer({ configFile: root + 'app/vite.config.ts', roo
 await server.listen()
 const browser = await chromium.launch({ headless: true })
 
-async function open(scene) {
+async function open(scene, theme = 'warm') {
   const context = await browser.newContext({ viewport: { width: 375, height: 812 }, permissions: ['clipboard-read', 'clipboard-write'], ...(scene === 'student' ? { timezoneId: 'UTC' } : {}) })
   await context.addInitScript(() => { window.__shared = null; if (navigator.share) return; Object.defineProperty(navigator, 'share', { configurable: true, value: async data => { window.__shared = data } }) })
   const page = await context.newPage()
@@ -17,7 +17,7 @@ async function open(scene) {
   page.on('pageerror', error => errors.push(error.message))
   await page.route('**/chat/completions', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: '合成模型回答' } }] }) }))
   await page.route('https://phone.synthetic.invalid/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }))
-  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/@fs/${root}e2e/phone.html?scene=${scene}`)
+  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/@fs/${root}e2e/phone.html?scene=${scene}&theme=${theme}`)
   await page.waitForLoadState('networkidle')
   await page.waitForTimeout(scene === 'today' ? 2500 : 600)
   return { context, page, errors }
@@ -177,6 +177,12 @@ try {
     await expect(page.getByText('接下来，接入你自己的模型。', { exact: true })).toBeVisible()
     await layout(page)
     await shot(page, 'phone-student-welcome')
+    expect(errors).toEqual([])
+    await context.close()
+  }
+  {
+    const { context, page, errors } = await open('welcome', 'cool')
+    await expect(page.getByRole('button', { name: '开始使用', exact: true })).toHaveCSS('background-color', 'rgb(29, 79, 145)')
     expect(errors).toEqual([])
     await context.close()
   }

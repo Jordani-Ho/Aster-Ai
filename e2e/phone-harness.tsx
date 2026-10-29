@@ -345,7 +345,7 @@ async function main() {
     if (scene === 'dashboard') return <CommunityDashboard relays={[]} />
     // V2-29：只渲染版本行，用来验证“宿主机 APP_VERSION → Vite define → 页面”这条链路。
     if (scene === 'version') return <div className="nl-shell"><VersionLine /></div>
-    if (scene === 'welcome') return <StorefrontWelcome storefront={STOREFRONT} teacher={teacher.identity.publicKey} onStart={() => {}} />
+    if (scene === 'welcome') return <StorefrontWelcome storefront={{ ...STOREFRONT, theme: new URLSearchParams(location.search).get('theme') === 'cool' ? 'cool' : 'warm' }} teacher={teacher.identity.publicKey} onStart={() => {}} />
     if (scene === 'long') return <SignReview encounter={long} alias="合成小王" previousPrescription={null} onSign={() => {}} onBack={() => {}} />
     if (scene === 'tongue') return <div className="nl-shell"><main className="nl-page"><TonguePair record={tongue} crop={cropped} editable title="舌象 1 · 辰时 · 霜降 · 北京" /></main></div>
     if (studentScene) return <StudentShell store={pagesStore} identity={pagesIdentity} llm={stubLlm} stack={stack} stackStatus="ready" modelSettings={modelSettingsNode} memberStore={pagesStore} memberIdentity={pagesIdentity} family={familyOptions} active={0} onSwitch={() => {}} sendEnvelope={async () => {}} />
