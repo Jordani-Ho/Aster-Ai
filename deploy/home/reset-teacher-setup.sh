@@ -41,11 +41,11 @@ log "旧凭据已移到 $(pwd)/$DEST（没有删）。"
 
 log ""
 log "重新生成口令并重建 relay / gateway / web（不碰 cloudflared，网址不变）…"
-NO_VERIFY=1 ./update.sh
+NO_VERIFY=1 bash ./update.sh
 
 log ""
 log "跑一次验收探测…"
-./verify.sh
+bash ./verify.sh
 
 log ""
 log "重置完成："
