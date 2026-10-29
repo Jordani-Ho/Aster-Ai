@@ -473,7 +473,8 @@ test('V2-27 本机真实作业到点后显示督促，打卡后记录已行动�
         homework: { id: 'nudge-synthetic', title: '合成伸展', detail: '合成示例', schedule: { kind: 'daily', time }, source: 'teacher' },
         startsOn: localDay(due),
       })
-      const minute = new Date(Date.now() + 60_000), wake = new Date(Date.now() + 120_000)
+      // 睡觉时间放到几小时以后，CI 慢时也不会正好落进“该睡了”的那一段（那段只提醒睡觉）。
+      const minute = new Date(Date.now() + 3 * 3_600_000), wake = new Date(Date.now() + 4 * 3_600_000)
       const hhmm = (date: Date) => String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0')
       await session.store.put('settings', 'agent-routine', { sleep: hhmm(minute), wake: hhmm(wake) })
     } finally { session.store.close(); session.identity.privateKey.fill(0) }
