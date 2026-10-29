@@ -52,5 +52,6 @@
 | [V2-35](V2-35-groundwork-optional.md) | 开馆准备不做硬性要求 | Codex | V2-34 |
 | [V2-36](V2-36-roster-leave.md) | 学生多久不打卡就请出名单（老师设） | Codex | V2-35 |
 | [V2-37](V2-37-teacher-invite.md) | 老师邀请制：核心成员推荐新老师 | Codex | V2-31 |
+| [V2-38](V2-38-open-hall-in-order.md) | 建馆按顺序来：六项逐项确认，再开馆接第一位面诊的学生 | Codex | V2-35 |
 
 第二批（地基合并后再展开）：自我调整（表层配置化）、门面、物流（本地资源）、观察。
