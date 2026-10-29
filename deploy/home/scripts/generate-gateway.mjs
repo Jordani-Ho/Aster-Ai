@@ -40,7 +40,14 @@ const config = {
   setupDir: '/app/setup',
   maxBodyBytes: 1048576,
   upstreamTimeoutMs: 120000,
-  rateLimit: { windowMs: 60000, maxPerWindow: 20 },
+  // V2-39：限流按路由分组。进馆/登记要够一个人反复重试；推送请求多，单独给额度；
+  // 模型转发保持原来的数量级。数值只在这里改，网关 README 同步。
+  rateLimit: {
+    windowMs: 60000,
+    invites: { maxPerWindow: 10 },
+    push: { maxPerWindow: 60 },
+    model: { maxPerWindow: 20 },
+  },
   push: { subscriptionsFile: '/app/data/push-subscriptions.json' },
   // 网关只记“时间/公钥前 8 位/耗时/状态码”的指标日志；这里写到 /dev/null，日志一律不落盘。
   logFile: '/dev/null',
