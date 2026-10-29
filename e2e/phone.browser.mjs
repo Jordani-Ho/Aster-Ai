@@ -354,16 +354,18 @@ try {
   {
     const { context, page, errors } = await open('visit')
     await page.getByRole('button', { name: /开始面诊/ }).click()
-    await page.getByRole('button', { name: /学生 1/ }).click()
+    await page.getByRole('button', { name: /合成小王/ }).click()
     await expect(page.getByLabel('您说，智能体记', { exact: true })).toBeVisible()
     await page.getByLabel('您说，智能体记', { exact: true }).fill('舌淡红，苔薄白；入睡难；脉细弱')
     await page.getByRole('button', { name: '整理', exact: true }).click()
     await expect(page.getByRole('button', { name: '四诊 look' })).toContainText('舌淡红，苔薄白')
     // V2-40：没接模型时整理不凭空写主诉，老师自己写一句主诉后才能看草稿。
     await expect(page.getByRole('button', { name: '说完了，看草稿', exact: true })).toBeDisabled()
+    await expect(page.getByText('先写主诉', {exact:true})).toBeVisible()
     await page.getByLabel('主诉', { exact: true }).fill('入睡难一月')
     await page.getByRole('button', { name: '说完了，看草稿', exact: true }).click()
     await expect(page.getByRole('heading', { name: /· 核对$/ })).toBeVisible()
+    for (const name of ['判断','方子','作业','医嘱']) await expect(page.getByRole('region',{name})).toBeVisible()
     await layout(page)
     expect(errors).toEqual([])
     await context.close()
@@ -384,7 +386,7 @@ try {
   {
     const { context, page, errors } = await open('long')
     await expect(page.locator('[data-long-record="yes"]')).toBeVisible()
-    expect(await page.locator('details.nl-review-block').count()).toBe(3)
+    await expect(page.locator('details.nl-review-block')).toHaveCount(5)
     expect(errors).toEqual([])
     await context.close()
   }

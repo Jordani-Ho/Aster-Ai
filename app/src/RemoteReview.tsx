@@ -319,7 +319,7 @@ export function RemoteReview({ identity, store, consult, llm, send, ledger, onEx
   return <SignReview
     encounter={draft}
     alias={alias}
-    subtitle="四诊已记好 · 下面是智能体的草稿"
+    subtitle={llm ? '四诊已记好 · 下面是智能体的草稿' : '没接模型，智能体这次没有起草，请您直接写；接模型在设置里'}
     materialNote={materialNote}
     homeHerbs={homeHerbs}
     herbUnits={herbUnits}

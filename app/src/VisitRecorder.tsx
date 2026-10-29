@@ -5,8 +5,8 @@ import { appendVisitOriginal } from './core/record/visit-originals'
 import { createVisitSpeech, type RecognitionPort, type VisitLanguage, type VisitSpeech } from './core/record/visit-speech'
 
 /** 面诊录音与可替换识别器；录音分块只写本机。 */
-export function VisitRecorder({ store, visitId, onChange, onRecording, onStopped, stopRequest }: {
-  store:LocalStore; visitId:string; onChange:()=>void; onRecording:(value:boolean)=>void; onStopped:()=>void; stopRequest:number
+export function VisitRecorder({ store, visitId, onChange, onRecording, onStopped, stopRequest, highlight }: {
+  store:LocalStore; visitId:string; onChange:()=>void; onRecording:(value:boolean)=>void; onStopped:()=>void; stopRequest:number; highlight:boolean
 }) {
   const [recording,setRecording]=useState(false), [busy,setBusy]=useState(false), [seconds,setSeconds]=useState(0)
   const [language,setLanguage]=useState<VisitLanguage>('zh-CN'), [notice,setNotice]=useState('')
@@ -74,6 +74,6 @@ export function VisitRecorder({ store, visitId, onChange, onRecording, onStopped
     <label>识别语言<select aria-label="识别语言" value={language} disabled={recording||busy} onChange={event=>{const value=event.target.value as VisitLanguage;setLanguage(value);void store.put('settings','visit-speech-language',value)}}><option value="zh-CN">普通话</option><option value="yue-Hant-HK">粤语</option></select></label>
     {recording&&<p role="status">🔴 正在录音 · {Math.floor(seconds/60)}:{String(seconds%60).padStart(2,'0')}</p>}
     {notice&&<p role="status">{notice}</p>}
-    <button type="button" className="nl-primary" disabled={busy} onClick={()=>recording?stop():void start()}>{recording?'停止录音':'开始录音'}</button>
+    <button type="button" className={recording || highlight ? 'nl-primary' : 'nl-secondary'} disabled={busy} onClick={()=>recording?stop():void start()}>{recording?'停止录音':'开始录音'}</button>
   </section>
 }
