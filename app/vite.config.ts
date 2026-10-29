@@ -51,5 +51,8 @@ export default defineConfig({
   resolve: { dedupe: ['lunar-typescript', 'timezonecomplete', 'tzdata'] },
   server: { fs: { allow: ['..'] } },
   define: { __APP_VERSION__: JSON.stringify(buildVersion()) },
+  // 生产分块之间有循环依赖（学生端静态引入、老师端按需引入同一批模块）；不开严格执行顺序时，
+  // 某个分块顶层会拿到还没初始化的绑定，整页白屏（2026-10-28 部署实测）。e2e/prod-smoke.browser.mjs 守着这一条。
+  build: { rolldownOptions: { output: { strictExecutionOrder: true } } },
   test: { environment: 'node' },
 })
