@@ -1,3 +1,5 @@
+import { sendPendingRosterJoin } from './core/roster'
+import { queueStudentBasicsReady, sendPendingStudentBasics } from './core/roster/basics-ready'
 import { useEffect, useState } from 'react'
 import type { LocalStore } from './core/store'
 import type { Identity } from './core/identity'
@@ -90,6 +92,10 @@ export function StudentBasicsPage({ store, title = '基础信息', note, onBack,
         } catch { setStatus('已保存。城市更新暂时没发给老师，连接中继后请再改一次城市。') }
       }
       if (previousCity !== nextCity) window.dispatchEvent(new Event('aster:data-changed'))
+      if (result.missing.length === 0 && settingsStore === store) {
+        await queueStudentBasicsReady(store)
+        if (sendEnvelope) void sendPendingRosterJoin(store, sendEnvelope).then(() => sendPendingStudentBasics(store, sendEnvelope)).catch(() => {})
+      }
       onSaved?.(result.missing)
     } catch (cause) {
       if (cause instanceof BirthChangeNeedsConfirm) setConfirmBirth(true)

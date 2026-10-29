@@ -1,3 +1,4 @@
+import { teacherStudents } from './core/records/teacher'
 import { useEffect, useRef, useState } from 'react'
 import { toDataURL } from 'qrcode'
 import type { Identity } from './core/identity'
@@ -16,7 +17,7 @@ import {
   loadStorefrontDraft, type Storefront, type StorefrontTheme,
 } from './core/storefront'
 import {
-  completeHall, createFirstInvite, guideInviteExpired, hasFirstStudent,
+  completeHall, createFirstInvite, guideInviteExpired,
   loadGuide, loadHall, markHallOpened, saveGuide,
   type GuideInvite, type GuideState, type GuideStep,
 } from './core/hall'
@@ -24,6 +25,7 @@ import { StorefrontWelcome, VenueEmblem } from './StorefrontWelcome'
 import './newui.css'
 import './newui2.css'
 import { HallGroundwork } from './HallGroundwork'
+import { groundworkStatus } from './core/hall/groundwork'
 
 // V2-17 建馆五步（05a–05e）：逻辑沿用 V2-15（断点续走、第一位学生 1 小时邀请、“先进去看看”），
 // 只换界面：模型 → 登记 → 起馆名 → 开馆 → 邀请第一位学生。
@@ -35,7 +37,7 @@ export interface OpeningGuideProps {
   modelGateway: ModelGateway | null
   modelConfig: PersonalModel | null | undefined
   onModelSaved: (model: PersonalModel) => void
-  onDone: () => void
+  onDone: (student?: string) => void
   setupToken?: string
   teacherRecommendation?: Event | null
   onRegistrationComplete?: () => void
@@ -64,6 +66,8 @@ function clockLabel(at: number): string {
 
 export function OpeningGuide({ identity, store, gateway, send, modelGateway, modelConfig, onModelSaved, onDone, setupToken='', teacherRecommendation=null, onRegistrationComplete }: OpeningGuideProps) {
   const [loaded, setLoaded] = useState(false)
+  const [groundworkReady, setGroundworkReady] = useState(false)
+  const [firstStudent, setFirstStudent] = useState<{ student: string; alias: string | null } | null>(null)
   const [step, setStep] = useState<GuideStep>(1)
   // 本次引导里刚测通的模型；上层 modelConfig 可能还没刷新，第 2、4 步的提示以两者任一为准。
   const [modelSaved, setModelSaved] = useState(false)
@@ -148,16 +152,23 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
     return () => { active = false }
   }, [step, invite, expired])
 
-  const finish = async () => {
+  const finish = async (student?: string) => {
     if (finishing.current) return
     finishing.current = true
     try { await completeHall(store) } catch { /* 状态写失败也先进入首页，学生已经加入。 */ }
-    onDone()
+    onDone(student)
   }
   useEffect(() => {
     if (step !== 5) return
     let active = true
-    const check = () => { void hasFirstStudent(store).then(found => { if (active && found) void finish() }).catch(() => {}) }
+    const check = () => { void (async () => {
+      const students = await teacherStudents(store)
+      const arrivals = await Promise.all(students.map(async student => ({ student, row: await store.get('teacher-students', student) as {joinedAt?: unknown} | undefined })))
+      arrivals.sort((a, b) => (typeof a.row?.joinedAt === 'number' ? a.row.joinedAt : Infinity) - (typeof b.row?.joinedAt === 'number' ? b.row.joinedAt : Infinity))
+      const student = arrivals[0]?.student
+      const basics = student ? await store.get('teacher-student-basics', student) as {alias?: unknown} | undefined : undefined
+      if (active) setFirstStudent(student ? { student, alias: typeof basics?.alias === 'string' ? basics.alias : null } : null)
+    })().catch(() => {}) }
     check()
     window.addEventListener('aster:data-changed', check)
     const timer = setInterval(check, 5_000)
@@ -210,6 +221,8 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
   const nextFromVenue = async () => {
     const clean = normalizeStorefront({ ...draft, displayName: displayName.trim() })
     if (!clean || clean.name === '') { setError('先给馆起个名字。'); return }
+    if (!clean.displayName.trim()) { setError('先填学生称呼您的名字。'); return }
+    if (!clean.intro.trim()) { setError('先写一句介绍。'); return }
     setBusy(true); setError('')
     try {
       await saveStorefrontDraft(store, clean)
@@ -220,9 +233,10 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
 
   const openHall = async () => {
     const clean = normalizeStorefront({ ...draft, displayName: displayName.trim() })
-    if (!clean || clean.name === '' || clean.displayName === '') { setError('门面还没填完整，请返回上一步。'); return }
+    if (!clean || clean.name === '' || clean.displayName === '' || clean.intro.trim() === '') { setError('门面还没填完整，请返回上一步。'); return }
     setBusy(true); setError('')
     try {
+      if ((await groundworkStatus(store)).missing.length) { setError('请先逐项确认六项准备。'); return }
       await publishStorefront({ store, identity, storefront: clean })
       await saveStorefrontDraft(store, clean)
       await markHallOpened(store)
@@ -345,15 +359,15 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
         <div className="op-card op-open-card">
           {draft.intro && <p>{draft.intro}</p>}
           <ul className="op-checks">
-            <li>{hasModel ? '✓ 模型已接好' : '模型还没设，可以以后补'}</li>
+            <li>{hasModel ? '✓ 模型已接好' : '待确认使用的模型'}</li>
             <li>✓ 老师已登记</li>
             <li>✓ 门面已备好</li>
           </ul>
         </div>
-        <p className="nl-quiet op-open-note">下面的基础工作可以以后补；现在也能开馆、邀请学生。</p>
+        <p className="nl-quiet op-open-note">请依次看过并确认下面六项准备。</p>
       </section>
-      <HallGroundwork store={store} identity={identity} send={send} />
-      <footer className="op-foot ground-footer"><button type="button" className="nl-primary" disabled={busy} onClick={() => void openHall()}>开馆</button></footer>
+      <HallGroundwork store={store} identity={identity} send={send} onStatus={setGroundworkReady} />
+      <footer className="op-foot ground-footer"><button type="button" className="nl-primary" disabled={busy || !groundworkReady} onClick={() => void openHall()}>开馆</button></footer>
     </main>
   }
 
@@ -362,8 +376,8 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
     {errorLine}
     <section aria-label="邀请第一位学生">
       <p className="op-eyebrow">{draft.name || '我的馆'} · 已开馆</p>
-      <h1 className="op-title">请第一位学生进来</h1>
-      <p className="op-desc">把邀请发给他，或让他当面扫码。</p>
+      <h1 className="op-title">请第一位来面诊的学生当面扫码</h1>
+      <p className="op-desc">请学生当面扫码，也可以复制邀请链接。</p>
       <div className="op-card op-invite">
         <p className="op-invite-title">{displayName || draft.displayName || '老师'}老师的邀请</p>
         {qr ? <img className="op-qr" src={qr} width={240} height={240} alt="学生扫码即可加入" /> : expired ? <p className="op-qr-missing">邀请已过期</p> : <p className="nl-quiet">正在生成二维码…</p>}
@@ -379,11 +393,12 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
           {copied && <p role="status">{copied}</p>}
         </details>
       </div>
-      <div className="op-hint"><span className="op-hint-icon" aria-hidden="true">👥</span><span>学生自己接入模型、照镜子、问诊。<br />您在“今天”等他就好。</span></div>
+      <div className="op-hint"><span className="op-hint-icon" aria-hidden="true">👥</span><span>学生进馆后填好基础信息，您就可以开始面诊。</span></div>
     </section>
+    {firstStudent && <div role="status" className="op-card">{firstStudent.alias ? <><p>{firstStudent.alias}已进馆 · 可以开始面诊</p><button type="button" className="nl-primary" onClick={() => void finish(firstStudent.student)}>开始面诊</button></> : <p>一位学生已进馆，正在填基础信息</p>}</div>}
     <footer className="op-foot">
-      <button type="button" className="nl-primary" disabled={busy || expired || !invite} onClick={copy}>复制邀请，发给学生</button>
-      <button type="button" className="op-link-button" disabled={busy} onClick={() => void finish()}>先进去看看</button>
+      <button type="button" className={firstStudent?.alias ? 'op-link-button' : 'nl-primary'} disabled={busy || expired || !invite} onClick={copy}>复制邀请，发给学生</button>
+      <button type="button" className="op-link-button" disabled={busy} onClick={() => void finish()}>先不面诊，进工作台</button>
     </footer>
   </main>
 }

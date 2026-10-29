@@ -54,10 +54,11 @@ test('V2-15 全新部署：只看到引导，五步走完后第一位学生用 1
     await page.getByRole('button', { name: '就用这个名字', exact: true }).click()
     await expect(page.getByText('✓ 模型已接好', { exact: true })).toBeVisible()
     for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) {
+      if (label === '药材库') await page.getByLabel('不备药', { exact: true }).check()
       await page.getByRole('button', { name: '就这样，保存' + label, exact: true }).click()
     }
     await page.getByRole('button', { name: '开馆', exact: true }).click()
-    await expect(page.getByRole('heading', { name: '请第一位学生进来', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '请第一位来面诊的学生当面扫码', exact: true })).toBeVisible()
 
     await page.locator('details.op-link-details > summary').click()
     const link = page.getByLabel('邀请链接', { exact: true })
@@ -76,7 +77,12 @@ test('V2-15 全新部署：只看到引导，五步走完后第一位学生用 1
       await student.getByRole('button', { name: '开始使用', exact: true }).click()
       await connectModel(student)
       await fillJoinBasics(student)
-      // 学生连上社区后，老师端引导自动结束。
+      // 学生资料填齐后，老师可进入这位学生的面诊。
+      await expect(page.getByRole('button', { name: '开始面诊', exact: true })).toBeVisible({ timeout: 40000 })
+      await page.getByRole('button', { name: '开始面诊', exact: true }).click()
+      await expect(page.getByRole('heading', { name: '合成学生', exact: true })).toBeVisible()
+      await expect(page.getByRole('region', { name: '口述记录' })).toBeVisible()
+      await page.getByRole('button', { name: '返回', exact: true }).click()
       await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
 
       // 验收 3（后段）：开馆后的“我的馆”有馆卡片、邀请、门面、钱账和设置。
@@ -90,40 +96,25 @@ test('V2-15 全新部署：只看到引导，五步走完后第一位学生用 1
   } finally { await teacher.context.close() }
 })
 
-test('V2-35 六项准备全空：老师照常开馆邀请，学生仍须填写进馆基础信息', async ({ browser, request }) => {
+test('V2-38 新老师确认六项后才能开馆，未接个人模型也可确认社区模型', async ({ browser, request }) => {
   await reset(request)
-  const teacher = await freshPage(browser)
-  const page = teacher.page
+  const teacher = await freshPage(browser), page = teacher.page
   try {
     await page.getByRole('button', { name: '先跳过，以后接模型', exact: true }).click()
     await page.getByLabel('学生怎么称呼您', { exact: true }).fill('合成阿慈')
     await page.getByLabel('登记口令', { exact: true }).fill('SYNTHETIC_DEPLOYMENT_TOKEN')
     await page.getByRole('button', { name: '登记，下一步', exact: true }).click()
     await page.getByLabel('馆名', { exact: true }).fill('合成养生馆')
+    await page.getByLabel('一句介绍', { exact: true }).fill('合成介绍')
     await page.getByRole('button', { name: '就用这个名字', exact: true }).click()
+    await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeDisabled()
     for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) {
-      await expect(page.getByRole('button', { name: `${label} · 还没设，可以以后补`, exact: true })).toBeVisible()
+      if (label === '药材库') await page.getByLabel('不备药', { exact: true }).check()
+      await page.getByRole('button', { name: '就这样，保存' + label, exact: true }).click()
     }
+    await expect(page.getByRole('button', { name: '开馆', exact: true })).toBeEnabled()
     await page.getByRole('button', { name: '开馆', exact: true }).click()
-    await expect(page.getByRole('heading', { name: '请第一位学生进来', exact: true })).toBeVisible()
-    await page.locator('details.op-link-details > summary').click()
-    const invite = await page.getByLabel('邀请链接', { exact: true }).inputValue()
-    const studentContext = await browser.newContext({ viewport: { width: 375, height: 812 }, baseURL: runtime.baseURL })
-    await mockModel(studentContext)
-    try {
-      const student = await studentContext.newPage()
-      await student.goto(invite)
-      await student.getByRole('button', { name: '开始使用', exact: true }).click()
-      await connectModel(student)
-      await fillJoinBasics(student)
-      await expect(student.locator('[aria-label="老师邀约"]').getByRole('button', { name: /想预约/ })).toHaveCount(0)
-      await expect(student.getByRole('button', { name: '远程问诊', exact: true })).toBeVisible()
-      await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
-      await page.getByRole('button', { name: '我的馆', exact: true }).click()
-      for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) {
-        await expect(page.getByText(`${label} · 还没设，可以以后补`, { exact: true })).toBeVisible()
-      }
-    } finally { await studentContext.close() }
+    await expect(page.getByRole('heading', { name: '请第一位来面诊的学生当面扫码', exact: true })).toBeVisible()
   } finally { await teacher.context.close() }
 })
 
@@ -201,15 +192,15 @@ test('V2-15 老部署升级：已有学生/门面的老师直接进正常首页�
   } finally { await teacher.context.close() }
 })
 
-test('V2-13 建馆第 5 步“先进去看看”：不进邀请也能进工作台，管理里还能继续邀请', async ({ browser, request }) => {
+test('V2-13 建馆第 5 步“先不面诊，进工作台”：不进邀请也能进工作台，管理里还能继续邀请', async ({ browser, request }) => {
   await reset(request)
   const teacher = await freshPage(browser)
   const page = teacher.page
   try {
     await connectModel(page)
     await openCommunity(page)
-    await expect(page.getByRole('heading', { name: '请第一位学生进来', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: '先进去看看', exact: true }).click()
+    await expect(page.getByRole('heading', { name: '请第一位来面诊的学生当面扫码', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: '先不面诊，进工作台', exact: true }).click()
     await expect(page.getByRole('heading', { name: '今天', exact: true })).toBeVisible()
     // 以后还能在“我的馆 → 邀请学生”继续邀请。
     await page.getByRole('button', { name: '我的馆', exact: true }).click()

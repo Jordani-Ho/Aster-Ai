@@ -114,7 +114,7 @@ describe('V2-36 名单资格与提醒节奏', () => {
       expect(await receiveRosterJoin(store, teacher.publicKey, student.publicKey, fresh, 0)).toBe(false)
       expect(await receiveRosterJoin(store, teacher.publicKey, student.publicKey, fresh, leave + 2)).toBe(true)
       expect(await store.get('teacher-roster-leaves', student.publicKey)).toBeUndefined()
-      expect(await store.get('teacher-students', student.publicKey)).toEqual({ student: student.publicKey })
+      expect(await store.get('teacher-students', student.publicKey)).toEqual({ student: student.publicKey, joinedAt: leave + 2 })
     } finally { store.close() }
   })
 })

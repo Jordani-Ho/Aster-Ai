@@ -1,8 +1,6 @@
 import type { LocalStore, StoreValue } from '../store'
-import { loadPersonalModel } from '../llm/personal'
 import { loadTemplates } from '../templates'
 import { validRetentionDays } from '../records/retention'
-import { listHerbs } from '../herbs'
 import { validLeaveDays } from '../roster'
 
 export interface Period { start: string; end: string }
@@ -23,7 +21,7 @@ export interface Groundwork {
 export const GROUNDWORK_KEY = 'hall-groundwork'
 export const GROUNDWORK_ITEMS = { templates: '模板', schedule: '排班', invitation: '邀约方式', herbs: '药材库', retention: '保留期限', model: '模型' } as const
 export function defaultSchedule(): Schedule {
-  return { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai', duration: 30, capacity: 3,
+  return { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai', duration: 30, capacity: 1,
     week: Object.fromEntries(Array.from({ length: 7 }, (_, day) => [String(day), day === 0 || day === 6 ? [] : [{ start: '09:00', end: '12:00' }, { start: '14:00', end: '17:00' }]])), exceptions: [] }
 }
 export function validDate(value: unknown): value is string {
@@ -117,14 +115,13 @@ export async function hasAppointmentSchedule(store: Pick<LocalStore, 'get'>): Pr
   try { validateSchedule(saved.schedule); return true } catch { return false }
 }
 export function groundworkMissing(value: Groundwork): string[] {
-  return Object.entries(GROUNDWORK_ITEMS).filter(([key]) => !value.checked.includes(key) || key === 'herbs' && value.herbs === 'pending').map(([, label]) => label)
+  return Object.entries(GROUNDWORK_ITEMS).filter(([key]) => !value.checked.includes(key)).map(([, label]) => label)
 }
 /** 每次以已保存内容核对，不能仅凭勾选就邀请；不写入、不迁移旧部署。 */
 export async function groundworkStatus(store: LocalStore): Promise<{ value: Groundwork; missing: string[] }> {
   const value = await loadGroundwork(store)
-  const [templates, model, retention, herbs] = await Promise.all([loadTemplates(store), loadPersonalModel(store), store.get('settings', 'retention-days'), listHerbs(store)])
+  const [templates, retention] = await Promise.all([loadTemplates(store), store.get('settings', 'retention-days')])
   const checked = value.checked.filter(key => key !== 'templates' || ['inquiry', 'record', 'treatment', 'prescription'].every(type => templates.some(row => row.type === type && row.status === 'active')))
-    .filter(key => key !== 'model' || model !== null).filter(key => key !== 'retention' || validRetentionDays(retention))
-    .filter(key => key !== 'herbs' || value.herbs === 'none' || value.herbs === 'ready' && herbs.length > 0)
+    .filter(key => key !== 'retention' || validRetentionDays(retention))
   return { value, missing: groundworkMissing({ ...value, checked }) }
 }

@@ -63,7 +63,7 @@ try {
       ['open2', '先登记您这位老师', 'phone-teacher-opening-register'],
       ['open3', '给您的馆起个名', 'phone-teacher-opening-name'],
       ['open4', '您的馆准备好了', 'phone-teacher-opening-open'],
-      ['open5', '请第一位学生进来', 'phone-teacher-opening-invite'],
+      ['open5', '请第一位来面诊的学生当面扫码', 'phone-teacher-opening-invite'],
     ]
     for (const [scene, title, name] of scenes) {
       const { context, page, errors } = await open(scene)
@@ -79,7 +79,7 @@ try {
       await context.close()
     }
   }
-  // 验收 2：全新部署走完建馆五步（模型 → 登记 → 起馆名 → 开馆 → 邀请），先进去看看。
+  // 验收 2：全新部署走完建馆五步（模型 → 登记 → 起馆名 → 开馆 → 邀请），先不面诊，进工作台。
   {
     const { context, page, errors } = await open('opening')
     await expect(page.getByRole('heading', { name: '让它帮您打理馆', exact: true })).toBeVisible()
@@ -101,14 +101,15 @@ try {
     await page.getByRole('button', { name: '就用这个名字', exact: true }).click()
     await expect(page.getByText('✓ 模型已接好', { exact: true })).toBeVisible()
     for (const label of ['模板', '排班', '邀约方式', '药材库', '保留期限', '模型']) {
+      if (label === '药材库') await page.getByLabel('不备药', { exact: true }).check()
       await page.getByRole('button', { name: '就这样，保存' + label, exact: true }).click()
     }
     await page.getByRole('button', { name: '开馆', exact: true }).click()
-    await expect(page.getByRole('heading', { name: '请第一位学生进来', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '请第一位来面诊的学生当面扫码', exact: true })).toBeVisible()
     await page.locator('details.op-link-details > summary').click()
     const invite = await page.getByLabel('邀请链接', { exact: true }).inputValue()
     expect(invite).toContain('invite=')
-    await page.getByRole('button', { name: '先进去看看', exact: true }).click()
+    await page.getByRole('button', { name: '先不面诊，进工作台', exact: true }).click()
     await expect(page.getByRole('heading', { name: '已进入老师首页', exact: true })).toBeVisible()
     expect(errors).toEqual([])
     await context.close()

@@ -93,7 +93,7 @@ describe('老师智能体预约邀约', () => {
 
   it('review 只生成草稿；老师一键后发给容量上限加一位，过期后续给下一位', async () => {
     const teacher = createIdentity(), store = await openStore(teacher, { factory: new IDBFactory() })
-    const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'
+    const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'; schedule.capacity = 3
     await store.put('settings', 'role', { role: 'teacher' })
     await store.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: ['schedule'] } as unknown as StoreValue)
     const students = Array.from({ length: 5 }, (_, i) => ({ key: String.fromCharCode(97 + i).repeat(64), name: `合成学生${i + 1}` }))
@@ -116,7 +116,7 @@ describe('老师智能体预约邀约', () => {
 
   it('同一时段第四位接受后收到约满通知，并由同一活动给出下一个可约时段', async () => {
     const teacher = createIdentity(), teacherStore = await openStore(teacher, { factory: new IDBFactory() })
-    const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'
+    const schedule = defaultSchedule(); schedule.timezone = 'Asia/Shanghai'; schedule.capacity = 3
     await teacherStore.put('settings', 'role', { role: 'teacher' })
     await teacherStore.put('settings', 'hall-groundwork', { schedule, invitation: { mode: 'review', afterDays: 14 }, herbs: 'none', checked: ['schedule'] } as unknown as StoreValue)
     const campaignId = 'overflow-campaign'

@@ -364,7 +364,8 @@ test('V2-25b 学生主动预约经真实中继确认，排班取消后收到通�
       groundwork.schedule.week = Object.fromEntries(Array.from({ length: 7 }, (_, day) => [String(day), day === slot.getDay() ? [{ start: '09:00', end: '09:30' }] : []]))
       groundwork.schedule.exceptions = []
       await saveGroundwork(session.store, groundwork)
-      const profile = emptyProfile(); profile.city = { value: '杭州', source: 'teacher' }
+      // V2-38 起老师会收到学生的居住城市（进馆基础信息填的是北京市）；面诊只约同城，所以老师也设在北京市。
+      const profile = emptyProfile(); profile.city = { value: '北京市', source: 'teacher' }
       await saveProfile(session.store, profile)
       const date = `${slot.getFullYear()}-${String(slot.getMonth() + 1).padStart(2, '0')}-${String(slot.getDate()).padStart(2, '0')}`
       return { localTime: new Date(+slot - slot.getTimezoneOffset() * 60_000).toISOString().slice(0, 16), date, timezone: groundwork.schedule.timezone }
@@ -376,7 +377,7 @@ test('V2-25b 学生主动预约经真实中继确认，排班取消后收到通�
   await student.locator('[aria-label="老师邀约"]').getByRole('button', { name: '发给老师', exact: true }).click()
   const confirmed = student.locator('.nl-appointment').filter({ hasText: '已确认面诊' })
   await expect(confirmed).toBeVisible({ timeout: 30000 })
-  await expect(confirmed).toContainText('杭州')
+  await expect(confirmed).toContainText('北京市')
   await expect(confirmed).toContainText('时区 ' + preferred.timezone)
   const requestId = await student.evaluate(async () => {
     const storeModule = '/src/core/store/index.ts', { resumeStore } = await import(storeModule), session = await resumeStore()

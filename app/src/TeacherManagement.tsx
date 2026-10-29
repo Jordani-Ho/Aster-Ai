@@ -7,7 +7,7 @@ import type { LedgerView } from './core/ledger/sync'
 import { parseChainFields } from './core/ledger'
 import { formatMoney } from './core/ledger/money'
 import { InviteSettings } from './InviteSettings'
-import { HallGroundwork, GroundworkNotice } from './HallGroundwork'
+import { HallGroundwork } from './HallGroundwork'
 import { StorefrontSettings } from './StorefrontSettings'
 import { RetentionSettings } from './RetentionSettings'
 import { ReidentifyLinks, TeacherReidentifyInbox } from './ReidentifyPages'
@@ -146,7 +146,7 @@ export function TeacherManagement({ identity, store, llm, gateway, send, ledger,
       <span className="ts-badge ok">已开馆</span>
     </section>
     <button type="button" className="nl-primary hall-invite" onClick={() => setView('invite')}>＋ 邀请学生</button>
-    <GroundworkNotice store={store} onOpen={() => setView('groundwork')} />
+    <button type="button" className="nl-row hall-row" onClick={() => setView('groundwork')}>开馆准备</button>
     <button type="button" className="nl-row hall-row" onClick={() => setView('storefront')}>
       <span className="nl-row-main"><strong>门面</strong><span>馆名、颜色、介绍和话术</span></span>
       <span className="ts-chevron">›</span>

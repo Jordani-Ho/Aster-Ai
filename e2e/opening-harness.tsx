@@ -46,8 +46,9 @@ if (scene === 'manage') {
   function Harness() {
     const [modelConfig, setModelConfig] = useState<PersonalModel | null | undefined>(undefined)
     const [done, setDone] = useState(false)
+    const [selected, setSelected] = useState<string | undefined>()
     useEffect(() => { let active = true; void loadPersonalModel(session.store).then(value => { if (active) setModelConfig(value) }).catch(() => { if (active) setModelConfig(null) }); return () => { active = false } }, [])
-    if (done) return <main id="done"><h1>已进入老师首页</h1></main>
+    if (done) return <main id="done"><h1>已进入老师首页</h1><p>{selected ?? "未开始面诊"}</p></main>
     return <OpeningGuide
       identity={session.identity}
       store={session.store}
@@ -55,7 +56,7 @@ if (scene === 'manage') {
       modelGateway={null}
       modelConfig={modelConfig}
       onModelSaved={model => setModelConfig(model)}
-      onDone={() => setDone(true)}
+      onDone={student => { setSelected(student); setDone(true) }}
       setupToken={initialSetupToken}
     />
   }
@@ -70,6 +71,10 @@ Object.assign(window, {
     },
     addFirstStudent: async () => {
       await rememberTeacherStudent(session.store, 'a'.repeat(64))
+      window.dispatchEvent(new Event('aster:data-changed'))
+    },
+    finishBasics: async () => {
+      await session.store.put('teacher-student-basics', 'a'.repeat(64), { alias: '合成小明', gender:'other', age:30, bazi:null, city:'北京市', at:100 })
       window.dispatchEvent(new Event('aster:data-changed'))
     },
     expireInvite: async () => {

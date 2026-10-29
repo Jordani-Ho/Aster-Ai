@@ -10,7 +10,6 @@ import { TeacherManagement } from './TeacherManagement'
 import { TeacherStudentsPage } from './TeacherStudentsPage'
 import { VisitPage } from './VisitPage'
 import { RemoteReview } from './RemoteReview'
-import { HallGroundwork, GroundworkNotice } from './HallGroundwork'
 import { runDailyRosterLeaves } from './core/roster'
 import './newui.css'
 import './newui2.css'
@@ -22,6 +21,7 @@ type Flow = { kind: 'visit'; student?: string } | { kind: 'remote'; consult: Sto
 // V2-16 新外壳：老师端底部三个标签“今天 / 学生 / 我的馆”。
 // 旧的顶层导航（今天/面诊/远程/管理）整块删掉；面诊与远程核对都是全屏流程。
 export interface TeacherShellProps {
+  initialVisitStudent?: string
   identity: Identity
   store: LocalStore
   stack: Wiring | null
@@ -33,10 +33,9 @@ export interface TeacherShellProps {
   coreNotice?: string
 }
 
-export function TeacherShell({ identity, store, stack, llm, gateway, status, settings, coreNotice }: TeacherShellProps) {
+export function TeacherShell({ initialVisitStudent, identity, store, stack, llm, gateway, status, settings, coreNotice }: TeacherShellProps) {
   const [tab, setTab] = useState<Tab>('today')
-  const [flow, setFlow] = useState<Flow>(null)
-  const [groundwork, setGroundwork] = useState(false)
+  const [flow, setFlow] = useState<Flow>(initialVisitStudent ? { kind: 'visit', student: initialVisitStudent } : null)
   useEffect(() => {
     if (!stack?.send) return
     let active = true
@@ -59,7 +58,6 @@ export function TeacherShell({ identity, store, stack, llm, gateway, status, set
     window.addEventListener('focus', tick)
     return () => { active = false; clearInterval(timer); window.removeEventListener('focus', tick) }
   }, [store, identity, stack])
-  if (groundwork) return <div className="nl-shell"><div className="nl-page"><button type="button" className="nl-back" onClick={() => setGroundwork(false)}>返回今天</button><HallGroundwork store={store} identity={identity} send={stack?.send as SendEnvelope | undefined} onDone={() => setGroundwork(false)} /></div></div>
 
   if (flow?.kind === 'visit') return <VisitPage identity={identity} store={store} llm={llm} send={stack?.send as SendEnvelope | undefined} initialStudent={flow.student} onExit={() => setFlow(null)} />
   if (flow?.kind === 'remote') {
@@ -68,7 +66,6 @@ export function TeacherShell({ identity, store, stack, llm, gateway, status, set
   }
 
   return <div className="nl-shell">
-    {tab === 'today' && <div className="nl-page"><GroundworkNotice store={store} onOpen={() => setGroundwork(true)} /></div>}
     {tab === 'today' && <TeacherToday identity={identity} store={store} status={status} send={stack?.send as SendEnvelope | undefined}
       onStartVisit={() => setFlow({ kind: 'visit' })} onOpenRemote={consult => setFlow({ kind: 'remote', consult })} />}
     {tab === 'students' && <TeacherStudentsPage identity={identity} store={store} llm={llm} send={stack?.send as SendEnvelope | undefined} ledger={stack?.ledger ?? null} onVisit={student => setFlow({ kind: 'visit', student })} />}
