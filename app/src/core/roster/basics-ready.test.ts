@@ -64,7 +64,7 @@ it('五项经加密信封按身份送达，迟到的进馆消息可启用它', a
     const { createInbox } = await import('../inbox')
     const { makeInvite } = await import('../onboarding')
     await store.put('settings', 'role', { role: 'teacher' })
-    const inbox = createInbox({ identity: teacher, store })
+    const inbox = createInbox({ identity: teacher, store, inviteUrl:'https://synthetic.example/invite/redeem' })
     const payload = { alias:'合成小明', gender:'other', age:30, bazi:null, city:'北京市' }
     const now = Math.floor(Date.now()/1000)
     const packet = wrapMessage(student.privateKey, teacher.publicKey, { type:'student.basics-ready', version:1, payload }, now)

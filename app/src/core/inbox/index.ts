@@ -164,6 +164,7 @@ export interface InboxOptions {
   send?: SendEnvelope
   now?: () => Date
   appointments?: { receive(message: Message): Promise<void> }
+  inviteUrl?: string
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -933,7 +934,7 @@ export function createInbox(options: InboxOptions) {
       if (!message || !message.envelope || message.sender === identity.publicKey) return
       const { type, version, payload } = message.envelope
       if (version !== 1) return
-      if (type === 'roster.join' || type === 'roster.leave') { await receiveRosterMessage(store, identity, message); return }
+      if (type === 'roster.join' || type === 'roster.leave') { await receiveRosterMessage(store, identity, message, options.inviteUrl ?? ''); return }
       if (type === CONSULT_TYPES.package) {
         if (object(payload)) await receiveConsult(identity, store, message, payload)
         return
