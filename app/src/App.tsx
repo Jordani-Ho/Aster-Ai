@@ -352,7 +352,7 @@ export function App() {
       }
       const start = (who: Identity, scoped: LocalStore, report: (status: LinkStatus) => void) => {
         const stack = createWiring({
-          identity: who, store: scoped, relays,
+          identity: who, store: scoped, relays, inviteUrl: gateway ? gateway + '/invite/redeem' : '',
           onChange: () => window.dispatchEvent(new Event('aster:data-changed')),
           onStatus: status => { if (!cancelled) report(status as LinkStatus) },
           onError: () => { if (!cancelled) report('offline') },

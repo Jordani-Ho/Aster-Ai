@@ -17,6 +17,7 @@ export interface WiringOptions {
   identity: Identity
   store: LocalStore
   relays: string[]
+  inviteUrl?: string
   socket?: TransportOptions['socket']
   notifier?: (pubkey: string) => Promise<void>
   onStatus?: TransportOptions['onStatus']
@@ -35,7 +36,7 @@ export function createWiring(options: WiringOptions) {
   }
   const ledger = createLedgerSync({ identity, store, send, onChange: options.onChange, onError: options.onError })
   const appointments = createAppointmentInbox({ identity, store, send })
-  const inbox = createInbox({ identity, store, ledger, send, appointments })
+  const inbox = createInbox({ identity, store, ledger, send, appointments, inviteUrl: options.inviteUrl })
   transport = createTransport({
     privateKey: identity.privateKey,
     relays: options.relays,

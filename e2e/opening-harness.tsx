@@ -73,6 +73,14 @@ Object.assign(window, {
       await rememberTeacherStudent(session.store, 'a'.repeat(64))
       window.dispatchEvent(new Event('aster:data-changed'))
     },
+    addStudent: async (key: string) => {
+      await rememberTeacherStudent(session.store, key.repeat(64))
+      window.dispatchEvent(new Event('aster:data-changed'))
+    },
+    readyStudent: async (key: string, alias: string, at: number) => {
+      await session.store.put('teacher-student-basics', key.repeat(64), { alias, gender:'other', age:30, bazi:null, city:'北京市', at })
+      window.dispatchEvent(new Event('aster:data-changed'))
+    },
     finishBasics: async () => {
       await session.store.put('teacher-student-basics', 'a'.repeat(64), { alias: '合成小明', gender:'other', age:30, bazi:null, city:'北京市', at:100 })
       window.dispatchEvent(new Event('aster:data-changed'))

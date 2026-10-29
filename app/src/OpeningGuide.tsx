@@ -67,7 +67,7 @@ function clockLabel(at: number): string {
 export function OpeningGuide({ identity, store, gateway, send, modelGateway, modelConfig, onModelSaved, onDone, setupToken='', teacherRecommendation=null, onRegistrationComplete }: OpeningGuideProps) {
   const [loaded, setLoaded] = useState(false)
   const [groundworkReady, setGroundworkReady] = useState(false)
-  const [firstStudent, setFirstStudent] = useState<{ student: string; alias: string | null } | null>(null)
+  const [arrivals, setArrivals] = useState<{ waiting: boolean; ready: { student: string; alias: string; at: number }[] }>({ waiting: false, ready: [] })
   const [step, setStep] = useState<GuideStep>(1)
   // 本次引导里刚测通的模型；上层 modelConfig 可能还没刷新，第 2、4 步的提示以两者任一为准。
   const [modelSaved, setModelSaved] = useState(false)
@@ -160,14 +160,14 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
   }
   useEffect(() => {
     if (step !== 5) return
-    let active = true
-    const check = () => { void (async () => {
+    let active = true, sequence = 0
+    const check = () => { const current = ++sequence; void (async () => {
       const students = await teacherStudents(store)
-      const arrivals = await Promise.all(students.map(async student => ({ student, row: await store.get('teacher-students', student) as {joinedAt?: unknown} | undefined })))
-      arrivals.sort((a, b) => (typeof a.row?.joinedAt === 'number' ? a.row.joinedAt : Infinity) - (typeof b.row?.joinedAt === 'number' ? b.row.joinedAt : Infinity))
-      const student = arrivals[0]?.student
-      const basics = student ? await store.get('teacher-student-basics', student) as {alias?: unknown} | undefined : undefined
-      if (active) setFirstStudent(student ? { student, alias: typeof basics?.alias === 'string' ? basics.alias : null } : null)
+      const rows = await Promise.all(students.map(async student => ({ student, basics: await store.get('teacher-student-basics', student) as { alias?: unknown; at?: unknown } | undefined })))
+      const ready = rows.flatMap(({ student, basics }) => typeof basics?.alias === 'string' && basics.alias.trim() && typeof basics.at === 'number'
+        ? [{ student, alias: basics.alias, at: basics.at }] : [])
+      ready.sort((a, b) => b.at - a.at || a.student.localeCompare(b.student))
+      if (active && current === sequence) setArrivals({ waiting: rows.length > 0 && ready.length === 0, ready })
     })().catch(() => {}) }
     check()
     window.addEventListener('aster:data-changed', check)
@@ -395,9 +395,11 @@ export function OpeningGuide({ identity, store, gateway, send, modelGateway, mod
       </div>
       <div className="op-hint"><span className="op-hint-icon" aria-hidden="true">👥</span><span>学生进馆后填好基础信息，您就可以开始面诊。</span></div>
     </section>
-    {firstStudent && <div role="status" className="op-card">{firstStudent.alias ? <><p>{firstStudent.alias}已进馆 · 可以开始面诊</p><button type="button" className="nl-primary" onClick={() => void finish(firstStudent.student)}>开始面诊</button></> : <p>一位学生已进馆，正在填基础信息</p>}</div>}
+    {arrivals.waiting && <p role="status" className="op-card">一位学生已进馆，正在填基础信息</p>}
+    {arrivals.ready.length === 1 && <div role="status" className="op-card"><p>{arrivals.ready[0].alias}已进馆 · 可以开始面诊</p><button type="button" className="nl-primary" onClick={() => void finish(arrivals.ready[0].student)}>开始面诊</button></div>}
+    {arrivals.ready.length > 1 && <div className="op-card" aria-label="已填好基础信息的学生"><p>以下学生已进馆，请选择一位开始面诊。</p>{arrivals.ready.map((row, index) => <button type="button" key={row.student} className={index === 0 ? 'nl-primary' : 'op-link-button'} onClick={() => void finish(row.student)}>{row.alias}已进馆 · 开始面诊</button>)}</div>}
     <footer className="op-foot">
-      <button type="button" className={firstStudent?.alias ? 'op-link-button' : 'nl-primary'} disabled={busy || expired || !invite} onClick={copy}>复制邀请，发给学生</button>
+      <button type="button" className={arrivals.ready.length ? 'op-link-button' : 'nl-primary'} disabled={busy || expired || !invite} onClick={copy}>复制邀请，发给学生</button>
       <button type="button" className="op-link-button" disabled={busy} onClick={() => void finish()}>先不面诊，进工作台</button>
     </footer>
   </main>

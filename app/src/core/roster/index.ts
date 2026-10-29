@@ -7,7 +7,7 @@ import { createRunner } from '../agent/runner'
 import { defineTask } from '../agent/tasks'
 import { loadGroundwork, validDate } from '../hall/groundwork'
 import { localDay } from '../homework/schedule'
-import { validateInvite } from '../onboarding'
+import { validateInviteProof } from '../onboarding'
 import { removeTeacher, loadTeachers } from '../inbox'
 
 export const TEACHER_LEAVES = 'teacher-roster-leaves'
@@ -80,11 +80,10 @@ export async function runDailyRosterLeaves(store: LocalStore, identity: Identity
 }
 
 /** 新邀请由老师签名；仅接受请出后签发的另一张邀请，旧邀请重放不能恢复资格。 */
-export async function receiveRosterJoin(store: LocalStore, teacher: string, student: string, invite: unknown, at: number): Promise<boolean> {
+export async function receiveRosterJoin(store: LocalStore, teacher: string, student: string, invite: unknown, at: number, url: string): Promise<boolean> {
   if (!HEX64.test(student) || !object(invite) || !Number.isSafeInteger(at) || at <= 0) return false
   const event = invite as Event
-  const url = Array.isArray(event.tags) ? event.tags.find(tag => Array.isArray(tag) && tag[0] === 'u')?.[1] : undefined
-  if (typeof url !== 'string' || event.pubkey !== teacher || !validateInvite(event, url, Math.floor(Date.now() / 1000))) return false
+  if (!url || event.pubkey !== teacher || !validateInviteProof(event, url)) return false
   const leave = await store.get(TEACHER_LEAVES, student)
   if (validLeave(leave) && event.created_at <= Math.floor(Date.parse(leave.at) / 1000)) return false
   await store.delete(TEACHER_LEAVES, student)
@@ -116,10 +115,10 @@ export function sendPendingRosterJoin(store: LocalStore, send: (teacher: string,
   void next.then(cleanup, cleanup)
   return next
 }
-export async function receiveRosterMessage(store: LocalStore, identity: Identity, message: Message): Promise<void> {
+export async function receiveRosterMessage(store: LocalStore, identity: Identity, message: Message, inviteUrl: string): Promise<void> {
   if (message.envelope.version !== 1 || !object(message.envelope.payload)) return
   if (message.envelope.type === 'roster.join' && (await store.get('settings', 'role') as { role?: unknown } | undefined)?.role === 'teacher') {
-    await receiveRosterJoin(store, identity.publicKey, message.sender, message.envelope.payload.invite, message.at)
+    await receiveRosterJoin(store, identity.publicKey, message.sender, message.envelope.payload.invite, message.at, inviteUrl)
   }
   if (message.envelope.type === 'roster.leave' && (await store.get('settings', 'role') as { role?: unknown } | undefined)?.role === 'student') {
     await receiveRosterLeave(store, message.sender, message.at)
