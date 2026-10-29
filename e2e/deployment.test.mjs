@@ -418,3 +418,50 @@ test('V2-42 fresh-round：清场不删、生成新口令、名单只剩自测成
   assert.deepEqual(JSON.parse(await readFile(path.join(home,'data/gateway/members.json'),'utf8')),[self.pubkey])
  }finally{await rm(dir,{recursive:true,force:true})}
 })
+// V2-42 修复：老师浏览器步骤改用 -EncodedCommand（UTF-16LE），不再落 /tmp/*.ps1；
+// 中文路径与中文描述不会把 PowerShell 解析坏；失败时脚本非 0 退出，并保留“可以手动……”的提示。
+test('V2-42 fresh-round 老师浏览器：中文路径/描述走 -EncodedCommand，失败时非 0 退出',async()=>{
+ const dir=await workspace(),home=path.join(dir,'deploy/home'),bin=await fakeBin(dir)
+ try{
+  await writeFile(path.join(home,'.env'),ENV_TEXT)
+  bash(path.join(home,'setup.sh'),envFor(bin))
+  const self={secret:'1'.repeat(64),pubkey:'2'.repeat(64)}
+  await writeFile(path.join(home,'data/self-member.json'),JSON.stringify(self))
+  await writeFile(path.join(home,'data/gateway/members.json'),JSON.stringify([self.pubkey]))
+  const fakePwsh='#!/bin/sh\n'+
+    'log="$(dirname "$0")/powershell.log"\n'+
+    'case "$*" in\n'+
+    '  *GetFolderPath*LocalApplicationData*) printf \'%s\\n\' \'C:\\Users\\Synth\\AppData\\Local\' ;;\n'+
+    '  *GetFolderPath*Desktop*) printf \'%s\\n\' \'C:\\Users\\Synth\\Desktop\' ;;\n'+
+    '  *-EncodedCommand*)\n'+
+    '    printf \'%s\\n\' "$@" > "$log"\n'+
+    '    if [ "${POWERSHELL_FAKE_FAIL:-0}" = "1" ]; then exit 3; fi\n'+
+    '    exit 0 ;;\n'+
+    '  *) exit 0 ;;\n'+
+    'esac\n'
+  await writeFile(path.join(bin,'powershell.exe'),fakePwsh,{mode:0o755})
+  if(process.platform==='win32'){const result=spawnSync('wsl.exe',['-d','Ubuntu','--exec','chmod','+x',linux(path.join(bin,'powershell.exe'))]);assert.equal(result.status,0)}
+  const env={...envFor(bin)}
+  const out=bash(path.join(home,'fresh-round.sh'),env)
+  assert.match(out,/老师浏览器：新配置目录/)
+  assert.match(out,/桌面快捷方式已改成指向它/)
+  assert.ok(!out.includes('.ps1'))
+  // 抓发给 PowerShell 的 -EncodedCommand，解出 UTF-16LE 脚本：中文路径/描述完好、变量已改名。
+  const log=await readFile(path.join(bin,'powershell.log'),'utf8')
+  const lines=log.trim().split('\n')
+  const index=lines.indexOf('-EncodedCommand')
+  assert.ok(index>=0,'应该用 -EncodedCommand 传脚本')
+  const payload=Buffer.from(lines[index+1],'base64').toString('utf16le')
+  assert.ok(payload.includes('C:\\Users\\Synth\\AppData\\Local\\Aster-Test\\知衡内测-老师-'))
+  assert.ok(payload.includes('知衡内测：老师这台电脑的 Chrome'))
+  assert.match(payload,/\$chromeArgs/)
+  assert.ok(!/\$args\s*=/.test(payload),'不能再用 PowerShell 自带的 $args')
+  assert.ok(payload.includes('LOCALAPPDATA'),'Chrome 不在 Program Files 时要退回 LOCALAPPDATA')
+  // PowerShell 失败：非 0 退出，并保留手动提示。
+  const failed=bashRaw(path.join(home,'fresh-round.sh'),{...envFor(bin),POWERSHELL_FAKE_FAIL:'1'})
+  assert.notEqual(failed.status,0)
+  const text=(failed.stdout??'')+(failed.stderr??'')
+  assert.match(text,/可以手动新建 Chrome 配置目录再改桌面快捷方式/)
+  assert.match(text,/失败：老师浏览器没有配置成功/)
+ }finally{await rm(dir,{recursive:true,force:true})}
+})

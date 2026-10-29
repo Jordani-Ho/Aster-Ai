@@ -56,35 +56,45 @@ log "重新生成口令、重建环境（不碰 cloudflared，网址不变）…
 # 3) 老师浏览器：新建一个空的 Chrome 配置目录，把桌面快捷方式改成指向它，并打开老师登记扫码页。
 APP_URL="https://${APP_DOMAIN}/"
 QR_PAGE="$(pwd)/data/setup/teacher-setup.html"
+browser_failed=0
 setup_teacher_browser() {
-  local stamp win_profile desktop lnk ps qr_win
+  local stamp win_profile desktop lnk qr_win payload encoded
   stamp="$(date +%Y%m%d-%H%M)"
   win_profile="$(powershell.exe -NoProfile -Command "[Environment]::GetFolderPath('LocalApplicationData')" | tr -d '\r')\\Aster-Test\\知衡内测-老师-$stamp"
   desktop="$(powershell.exe -NoProfile -Command "[Environment]::GetFolderPath('Desktop')" | tr -d '\r')"
   lnk="$desktop\\知衡内测-老师Chrome.lnk"
   qr_win="$(wslpath -w "$QR_PAGE" 2>/dev/null || true)"
-  ps="/tmp/fresh-round-browser-$$.ps1"
-  cat > "$ps" <<PS
+  # 用 -EncodedCommand（UTF-16LE）传脚本：不再落 /tmp/*.ps1，
+  # 免得 Windows PowerShell 按 ANSI 读无 BOM 的 UTF-8 文件把中文路径和描述解析坏。
+  payload="$(cat <<PS
 \$ErrorActionPreference = 'Stop'
 \$profile = '$win_profile'
 New-Item -ItemType Directory -Force -Path \$profile | Out-Null
 \$lnk = '$lnk'
 \$chrome = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
-\$args = '--user-data-dir="' + \$profile + '" --no-first-run --no-default-browser-check --new-window "$qr_win"'
+if (-not (Test-Path \$chrome)) {
+  \$localChrome = Join-Path \$env:LOCALAPPDATA 'Google\Chrome\Application\chrome.exe'
+  if (Test-Path \$localChrome) { \$chrome = \$localChrome } else { throw '没找到 Chrome（Program Files 或 %LOCALAPPDATA%\Google\Chrome\Application\chrome.exe）' }
+}
+\$chromeArgs = '--user-data-dir="' + \$profile + '" --no-first-run --no-default-browser-check --new-window "$qr_win"'
 \$s = (New-Object -ComObject WScript.Shell).CreateShortcut(\$lnk)
 \$s.TargetPath = \$chrome
-\$s.Arguments = \$args
+\$s.Arguments = \$chromeArgs
 \$s.WorkingDirectory = 'C:\Users'
 \$s.Description = '知衡内测：老师这台电脑的 Chrome（每一轮一个新配置目录）'
 \$s.Save()
-Start-Process -FilePath \$chrome -ArgumentList \$args | Out-Null
+Start-Process -FilePath \$chrome -ArgumentList \$chromeArgs | Out-Null
+Write-Output ('profile=' + \$profile)
 PS
-  if ! powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$ps" 2>/dev/null || echo "$ps")"; then
-    log "提醒：老师浏览器没配置成功（看上面的 PowerShell 报错）。可以手动新建 Chrome 配置目录再改桌面快捷方式。"
-    rm -f "$ps"
-    return 0
+)"
+  if ! encoded="$(printf '%s' "$payload" | iconv -f UTF-8 -t UTF-16LE | base64 -w0)"; then
+    log "提醒：老师浏览器没配置成功（生成 -EncodedCommand 失败，缺 iconv 或 base64？）。可以手动新建 Chrome 配置目录再改桌面快捷方式。"
+    return 1
   fi
-  rm -f "$ps"
+  if ! powershell.exe -NoProfile -EncodedCommand "$encoded"; then
+    log "提醒：老师浏览器没配置成功（看上面的 PowerShell 报错）。可以手动新建 Chrome 配置目录再改桌面快捷方式。"
+    return 1
+  fi
   log "老师浏览器：新配置目录 $win_profile（旧的没有删）。"
   log "桌面快捷方式已改成指向它：$lnk"
   if [ -n "$qr_win" ]; then log "已用新配置打开老师登记扫码页：$qr_win"; else log "老师登记扫码页：$QR_PAGE"; fi
@@ -95,9 +105,10 @@ log ""
 if [ "${SKIP_BROWSER:-0}" = "1" ]; then
   log "提醒：SKIP_BROWSER=1，跳过老师浏览器配置（新配置目录与桌面快捷方式）。"
 elif command -v powershell.exe >/dev/null 2>&1; then
-  setup_teacher_browser
+  setup_teacher_browser || browser_failed=1
 else
-  log "提醒：没找到 powershell.exe，跳过老师浏览器配置。请在 Windows 上新建 Chrome 配置目录，再把桌面「知衡内测-老师Chrome」指向它。"
+  log "提醒：没找到 powershell.exe，老师浏览器没有配置。可以手动新建 Chrome 配置目录，再把桌面「知衡内测-老师Chrome」指向它。"
+  browser_failed=1
 fi
 
 # 4) 收尾提示。
@@ -110,3 +121,8 @@ log ""
 log "提醒：两台手机各点一次「设置 → 内测：清空这台设备 → 清空这台设备上的知衡」，回到第一次打开的样子。"
 log "提醒：核心成员随名单一起清掉了，这一轮要按《内测怎么开始》第六节第 14 项重新登记核心成员。"
 log "提醒：只有最新登记的那位算老师；之前那位老师发出去的进馆邀请会被拒。"
+
+if [ "$browser_failed" = "1" ]; then
+  printf '失败：老师浏览器没有配置成功，按上面的提示手动补一下；环境本身已经清场完成。\n' >&2
+  exit 1
+fi
