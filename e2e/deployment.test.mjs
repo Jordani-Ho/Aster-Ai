@@ -457,6 +457,19 @@ test('V2-42 fresh-round 老师浏览器：中文路径/描述走 -EncodedCommand
   assert.match(payload,/\$chromeArgs/)
   assert.ok(!/\$args\s*=/.test(payload),'不能再用 PowerShell 自带的 $args')
   assert.ok(payload.includes('LOCALAPPDATA'),'Chrome 不在 Program Files 时要退回 LOCALAPPDATA')
+  // 电脑当老师：这次新配置打开的必须是带这一轮一次性口令的登记链接（和二维码里同一个地址）；
+  // 桌面快捷方式指向首页（口令用掉后扫码页会删掉，快捷方式不能指着它）。
+  const token=(await readFile(path.join(home,'data/setup/teacher-setup-code.txt'),'utf8')).trim()
+  assert.ok(token.length>=40)
+  const setupUrl='https://app.example/#setup='+encodeURIComponent(token)
+  assert.ok(payload.includes("$openUrl = '"+setupUrl+"'"),'应该用新配置打开带口令的登记链接')
+  assert.ok(payload.includes("$appHome = 'https://app.example/'"),'桌面快捷方式指向首页')
+  assert.ok(payload.includes("$s.Arguments = $baseArgs + '\"' + $appHome + '\"'"),'快捷方式参数用首页')
+  // 口令只在 # 后进浏览器，终端输出里不能出现明文。
+  assert.ok(!out.includes(token),'终端不能打印口令明文')
+  assert.match(out,/第 2 步会自动填好/)
+  // 扫码页照旧生成，留给手机当老师的情况。
+  assert.ok((await readFile(path.join(home,'data/setup/teacher-setup.html'),'utf8')).includes('用老师的手机扫码登记'))
   // PowerShell 失败：非 0 退出，并保留手动提示。
   const failed=bashRaw(path.join(home,'fresh-round.sh'),{...envFor(bin),POWERSHELL_FAKE_FAIL:'1'})
   assert.notEqual(failed.status,0)
